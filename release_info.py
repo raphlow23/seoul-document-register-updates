@@ -1,4 +1,4 @@
-VERSION = "2.3.0"
+VERSION = "2.3.1"
 # Shared folder naming profiles, canonical paths and two-release retention.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
