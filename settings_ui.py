@@ -42,6 +42,7 @@ def open_settings(app):
     ttk.Button(advanced,text="이 PC 연결 해제",command=lambda:action("logout")).grid(row=7,column=1,sticky="w",padx=10,pady=12)
     ttk.Checkbutton(basic,text="실행할 때 새 버전 자동 다운로드 · 설치",variable=auto_update).grid(row=6,column=0,columnspan=3,sticky="w",pady=10)
     ttk.Label(basic,textvariable=app.update_status,foreground="#667085",wraplength=760).grid(row=7,column=0,columnspan=3,sticky="w")
+    ttk.Label(basic,text="저장 위치를 빈 폴더로 바꾸면 이전 이름 형식·내부 구성을 유지합니다.\n번호 형식은 1부터 시작하며, 날짜 형식은 날짜로 시작합니다.",wraplength=760).grid(row=8,column=0,columnspan=3,sticky="w",pady=10)
     def persist():
         from urllib.parse import urlparse
         values={k:v.get().strip() for k,v in fields.items()}
