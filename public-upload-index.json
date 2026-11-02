@@ -1,0 +1,257 @@
+[
+  {
+    "name": "latest.json",
+    "size": 646,
+    "sha256": "df99cda9f798e44b01d55367b51842d4f02a417037f5d188836e39aa1d077092",
+    "parts": [
+      {
+        "name": "part-v2-latest.json-000.bin",
+        "size": 646,
+        "sha256": "df99cda9f798e44b01d55367b51842d4f02a417037f5d188836e39aa1d077092"
+      }
+    ]
+  },
+  {
+    "name": "SeoulDocumentRegister-2.0.0.exe",
+    "size": 125033813,
+    "sha256": "759c78f10b2ac0dbe89ab9a8d5a99cfa165d6607f3c92cb180d129d548ecc5b6",
+    "parts": [
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-000.bin",
+        "size": 8388608,
+        "sha256": "3722c20d1ec692a83f4ef8aec4581af1939304cfb08aff28ccc184b506a0ae72"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-001.bin",
+        "size": 8388608,
+        "sha256": "13aa925a989e1343ea12fd462088795fd851ce0ad8de340d8d2f65133084e70f"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-002.bin",
+        "size": 8388608,
+        "sha256": "1368782401a455c5706cd0ac0781612bd8dc6520b0e4ac52b4dbd238c37448bc"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-003.bin",
+        "size": 8388608,
+        "sha256": "6024e971be1f7a60a46820b3125fc1d6ddf05d2889880b653b6258adcc4424de"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-004.bin",
+        "size": 8388608,
+        "sha256": "bcf15526a1a1c9c9c5b320f7e145b9be955a4882354eda5d95ea94032b785609"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-005.bin",
+        "size": 8388608,
+        "sha256": "2534261e5993f65d94be2137d769efbdf21fdf6812a50f93a465a3a3ac04f626"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-006.bin",
+        "size": 8388608,
+        "sha256": "437fb761402564417edd00170bf9cab2c87fe72b4443aa877e60f7b1fa6e9acd"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-007.bin",
+        "size": 8388608,
+        "sha256": "b2957088f72feca874d288df33a7ef623e9c4b4681b7f859ce0d07c4295168ea"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-008.bin",
+        "size": 8388608,
+        "sha256": "62af8a4921fd7b80b381a8aa5db9f9f3cf6c0f8a42f75724aa47ca0edfe82418"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-009.bin",
+        "size": 8388608,
+        "sha256": "e75bcabc4b2eeca09bb32131fd3fd96f37fba20d4aa76484408c9abf5c84f8d1"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-010.bin",
+        "size": 8388608,
+        "sha256": "0f25e84f322056d093dc7b8d1a99a74fd031f8b37fbefc0d534b820cf52e5390"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-011.bin",
+        "size": 8388608,
+        "sha256": "50eb8a6a72f4f0b6074d18758b7b438ca60ec5fbdfc3d8f99d3db4aba61d01f7"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-012.bin",
+        "size": 8388608,
+        "sha256": "cd6488107e07e98132d56016096ed9b1b12bd2e7425196e97c3ce7521c8040ef"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-013.bin",
+        "size": 8388608,
+        "sha256": "c1a72ff3abfb8a1b03ea55411ed3a3f96cab4421143493887d6251782ab4f08b"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-2.0.0.exe-014.bin",
+        "size": 7593301,
+        "sha256": "fca379e198d11ee64e89155976d3a31d743774ba67092745d9487022f554262e"
+      }
+    ]
+  },
+  {
+    "name": "SeoulDocumentRegister-Setup-2.0.0.zip",
+    "size": 168332904,
+    "sha256": "6219c9af54e21e394e663b76f698f24b2b5d63ebf961a0a9ad236deb2293803c",
+    "parts": [
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-000.bin",
+        "size": 8388608,
+        "sha256": "1852afd87a51b9bd963eed61e8d7a12ec3233d9e2d795ef53fa883b08db49a9e"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-001.bin",
+        "size": 8388608,
+        "sha256": "7952f677afd553b238ffb077240373057878f1a07a6b4c80ad4c8861313ca0e8"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-002.bin",
+        "size": 8388608,
+        "sha256": "99037bfe09c12eb2c799e22bb3216aed69b29fe7765be28e6a68cd2ab1fc08ad"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-003.bin",
+        "size": 8388608,
+        "sha256": "2b0308661f5f823e0220e686f337d09981d65656ed2a6e15542d5c23caa9bd25"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-004.bin",
+        "size": 8388608,
+        "sha256": "0b869044d05dba81a7d3423e2a132d009005a49c4724bb877d83cb155e29da5a"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-005.bin",
+        "size": 8388608,
+        "sha256": "6e723fee2940f99f9f13c85807dfda23f603c36d1d6b820f3652baaffc00b76f"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-006.bin",
+        "size": 8388608,
+        "sha256": "9fd1a1835cdaf2f0e14893af561824e906673bdb6f98f1059c8bbf99fa797bfe"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-007.bin",
+        "size": 8388608,
+        "sha256": "a3e837034de697240e6695af6f85d6c68bed2d0afa9d26307cff2aeae1bc7410"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-008.bin",
+        "size": 8388608,
+        "sha256": "56376f1d333c457b5fb943034e950a2d27f5f2a5481b54f95bc5cf727cf46c88"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-009.bin",
+        "size": 8388608,
+        "sha256": "45fad92bf2ee33dd83430d5fe805e4bb647891a6f628d843bfb49b39da2ac533"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-010.bin",
+        "size": 8388608,
+        "sha256": "cb3e4e18827a60ccb2b3a9d47a3182d45067c8f1113cd184a2510a85cb75d21f"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-011.bin",
+        "size": 8388608,
+        "sha256": "12332a6402699eda7e1f2a64d52780df0f706fe77f68a75f814faa2306b9ee17"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-012.bin",
+        "size": 8388608,
+        "sha256": "71578e1ba7c75172c926c3b3c9631a108ad4c030b2dfb533b140b22a6e561a5b"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-013.bin",
+        "size": 8388608,
+        "sha256": "722101b2555b91139537b71fdb48fe07c491e0d64cff327a12db92b41d403268"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-014.bin",
+        "size": 8388608,
+        "sha256": "ec7ae8fa53ea82c4ff2e5c13876e0e0c38dd3036a753526b465d625a726c5c7a"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-015.bin",
+        "size": 8388608,
+        "sha256": "51446efa3803e39da3034eb34097f4cb86e1b9e80d1c8f8a37317461526f7633"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-016.bin",
+        "size": 8388608,
+        "sha256": "0e69a3240797ec601dcb2a46b99b1826c014ff67d2f4fc74b62847a1df62ab7e"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-017.bin",
+        "size": 8388608,
+        "sha256": "cb5620222bd1f02fc26e0794443d62172e56a4ff5cae7193e2b66295e931c065"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-018.bin",
+        "size": 8388608,
+        "sha256": "876228b764b1063d5067456d2766df6b0f0274b97c553170b0c9e910f9a83155"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-019.bin",
+        "size": 8388608,
+        "sha256": "162cb7dfbbc056bf224ba6fd3d264d2ee8ccf0292c22abbe5730f699188da59b"
+      },
+      {
+        "name": "part-v2-SeoulDocumentRegister-Setup-2.0.0.zip-020.bin",
+        "size": 560744,
+        "sha256": "08f5544fa6a11e62dd41d998c2d5ffc0344d751103ef0e1f57590b42abdba029"
+      }
+    ]
+  },
+  {
+    "name": "SpacingModel-0.20.0.zip",
+    "size": 34816003,
+    "sha256": "f1cc042d0ea315d34170049ee770eacaf13c0f3e7c1b6117a38c9fbc51bfb4ce",
+    "parts": [
+      {
+        "name": "part-v2-SpacingModel-0.20.0.zip-000.bin",
+        "size": 8388608,
+        "sha256": "a4e4970452c682dcf9f8e82e7b816d16ae4b0f54bd900d9d071f9893f969ba12"
+      },
+      {
+        "name": "part-v2-SpacingModel-0.20.0.zip-001.bin",
+        "size": 8388608,
+        "sha256": "81cdcd9daaf90922312dd1a065ca05594a629acdbc8f3da0a24be444d2b5832a"
+      },
+      {
+        "name": "part-v2-SpacingModel-0.20.0.zip-002.bin",
+        "size": 8388608,
+        "sha256": "def5fb9fd08d50ffcb8bb8e6a8396041aa90726efc5b5742cd7c9ac350a23902"
+      },
+      {
+        "name": "part-v2-SpacingModel-0.20.0.zip-003.bin",
+        "size": 8388608,
+        "sha256": "b462519936ab6a70eee68f7ee5e1b89e969944a6c4b0230ef1908ec779ef3bb3"
+      },
+      {
+        "name": "part-v2-SpacingModel-0.20.0.zip-004.bin",
+        "size": 1261571,
+        "sha256": "981d8939d167ff9a75e829c498fb28302b44fb01881a6de65baec95cde29e998"
+      }
+    ]
+  },
+  {
+    "name": "ThirdPartyNotices.zip",
+    "size": 9448892,
+    "sha256": "38090b2d81f53dc3bd782d52e3da694f5cbce39b7f4bd854ee6fe67e4fbb4ceb",
+    "parts": [
+      {
+        "name": "part-v2-ThirdPartyNotices.zip-000.bin",
+        "size": 8388608,
+        "sha256": "39abe5213f9db149c50bf4afd1ab90f308265febb142736930c97ae106f15bcf"
+      },
+      {
+        "name": "part-v2-ThirdPartyNotices.zip-001.bin",
+        "size": 1060284,
+        "sha256": "674dc688a36faff63ea15764e8b9ee86db7bdffcc40e5978887ae871fe094872"
+      }
+    ]
+  }
+]
