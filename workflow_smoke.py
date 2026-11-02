@@ -69,7 +69,7 @@ def run():
                 out["stamp"].update(complete=True,sheet_attempted=True)
             job.update(state="완료",reason="fixture registered");db.put(job);return job
         try:
-            with patch("app.messagebox.showerror",side_effect=lambda *a,**kw:errors.append(a)),patch("app.process",side_effect=process):
+            with patch("app.messagebox.showerror",side_effect=lambda *a,**kw:errors.append(a)),patch("app.process",side_effect=process),patch("hwp_documents.check_template"),patch.object(flow,"export_registered") as open_hwp:
                 idle();app.tree.selection_set([h0,h1])
                 flow.start_receipt();title=app.title_dialog
                 assert flow.step==2 and title.embedded
@@ -94,6 +94,19 @@ def run():
                 wait(lambda:flow.step==4);idle()
                 assert writes==["receipt"] and app.jobs[h0]["number"]=="581"
                 assert not app.tree.exists(h0) and flow.history_tree.exists(h0)
+                import hwp_documents as docs
+                extra={**docs.style("1"),"id":"user_fixture","label":"사용 중 추가한 양식","file":"missing-preview.hwp","blank_body":True}
+                with patch.object(docs,"catalog",return_value=[*docs.catalog(),extra]):
+                    flow.start_outgoing(app.jobs[h0]);root.update_idletasks()
+                    def find_picker(widget):
+                        if isinstance(widget,ttk.Treeview):return widget
+                        for child in widget.winfo_children():
+                            result=find_picker(child)
+                            if result is not None:return result
+                    picker=find_picker(flow.pages["outgoing_types"])
+                    assert picker.exists("user_fixture")
+                    picker.selection_set("user_fixture");picker.event_generate("<<TreeviewSelect>>")
+                    root.update();assert flow.style_choice.get()=="user_fixture"
                 flow.start_outgoing(app.jobs[h0]);assert flow.step==2
                 flow.outgoing_form(app.jobs[h0],"5");editor=app.outgoing_editor
                 check_actions()
@@ -105,7 +118,14 @@ def run():
                 # Navigation retains in-progress edits; it never clears registration history.
                 flow.history_home();flow.outgoing_form(app.jobs[h0])
                 editor=app.outgoing_editor;assert editor.vars["title"].get()=="수정한 발신 제목"
+                with patch("hwp_documents.check_template",side_effect=ValueError("fixture: missing form")):
+                    editor.register()
+                assert errors and writes==["receipt"] and flow.pending_register is None
+                errors.clear()
                 editor.register();wait(lambda:flow.section=="outgoing" and flow.step==4);idle()
+                wait(lambda:open_hwp.called)
+                opened=open_hwp.call_args.args[0]
+                assert opened["outgoing"]["number"]=="12" and opened["outgoing"]["stamp"]["complete"]
                 assert writes==["receipt","outgoing"],writes
                 assert app.jobs[h0]["outgoing"]["stamp"]["complete"]
                 assert "012." in __import__("hwp_documents").filename(__import__("hwp_documents").style("5"),app.jobs[h0]["outgoing"])
@@ -119,6 +139,8 @@ def run():
                 open_settings(app)
                 for child in root.winfo_children():
                     if isinstance(child,tk.Toplevel):child.destroy()
+                from template_manager import open_add_template
+                dialog=open_add_template(app);root.update_idletasks();dialog.destroy()
         finally:
             app.commands.put(("quit",None));app.worker.join(timeout=5)
             root.destroy()
