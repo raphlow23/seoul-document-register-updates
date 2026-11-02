@@ -15,6 +15,7 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
+_release_id = None
 
 
 def digest(path):
@@ -23,18 +24,24 @@ def digest(path):
 
 
 def headers():
-    return {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"}
+    return {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json", "Cache-Control":"no-cache"}
 
 
 def info(create=False):
-    response=requests.get(f"{API}/releases",params={"per_page":100},headers=headers(),timeout=30)
-    response.raise_for_status()
-    result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
+    global _release_id
+    if _release_id is not None:
+        response=requests.get(f"{API}/releases/{_release_id}",headers=headers(),timeout=30)
+        response.raise_for_status();result=response.json()
+    else:
+        response=requests.get(f"{API}/releases",params={"per_page":100},headers=headers(),timeout=30)
+        response.raise_for_status()
+        result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
         response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 브라우저 로그인 수정","draft":True,"prerelease":False,"body":"브라우저 로그인을 일반 창의 직접 로그인과 시트 연결로 분리했습니다. 로그인 창에서 시트를 확인하고 그 창을 모두 닫은 뒤 ‘연결 확인’을 누르세요. 기존 v2.0은 실행 시 자동 업데이트됩니다. 설치 ZIP은 아래 Assets의 SeoulDocumentRegister-Setup-"+VERSION+".zip입니다. 기존 설정과 등록 이력은 보존합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
+    _release_id=result["id"]
     return result
 
 
