@@ -160,7 +160,18 @@ class WorkflowShell:
         ttk.Label(page,text=job["title"],wraplength=1000).pack(anchor="w",pady=12)
         ttk.Label(page,text="이미 저장된 위치·제목·등록 표시를 기준으로 확인하고 재시도합니다.").pack(anchor="w")
         ttk.Button(page,text="저장 결과 확인",command=self.app.preview).pack(anchor="w",pady=12)
+        if not job.get("files_started") and not job.get("sheet_attempted"):
+            ttk.Button(page,text="저장 위치 다시 선택",command=self.route_step).pack(anchor="w",pady=8)
         ttk.Button(page,text="접수 재시도",command=lambda:self.app.send("process",[job])).pack(anchor="e",pady=12)
+
+    def recover(self):
+        """A failed worker request must leave a usable screen, even if its panel already closed."""
+        self.pending_register=None
+        if self.section=="receipt" and self.current:
+            if self.step==3 and getattr(self.app,"route_dialog",None) is None:
+                self.resume_receipt(self.app.jobs[self.current])
+            elif self.step==2 and getattr(self.app,"title_dialog",None) is None:
+                self.current=None;self.show("queue","receipt",1)
 
     def title_step(self,jobs=None):
         if not self.available():return
