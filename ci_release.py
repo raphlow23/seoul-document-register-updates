@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 사용자 HWP 양식 추가","draft":True,"prerelease":False,"body":"설정 또는 발신 양식 선택 화면의 ‘양식 추가’에서 원본 HWP를 등록할 수 있습니다. 양식 이름·종류·저장 위치·번호/날짜 위치를 확인하고 이 PC에 보관합니다. 발신대장·직인날인대장에서 실제 번호를 받은 뒤 번호와 당일 날짜를 넣은 사본을 한글로 엽니다. 본문은 자동 작성하지 않으며 OCR 또는 한글에서 복사한 문구를 직접 붙여넣어 저장합니다. 기존 설정·양식·등록 이력은 보존합니다. 개인 양식은 공개 배포 파일에 포함하지 않습니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 기존 폴더 형식으로 수신·발신 저장","draft":True,"prerelease":False,"body":"수신·발신 저장 위치의 기존 폴더 이름을 읽어 순번·날짜·기관 표시 형식을 제안합니다. 폴더 제목은 대장 제목과 별도로 수정할 수 있습니다. 시청/중앙/기초 공문·센터발송·회신 내부폴더를 선택하고 HWP 저장 위치도 정합니다. 새 저장 위치가 비어 있으면 이전 형식과 내부 구성을 유지하며 폴더 순번만 1부터 시작합니다. 날짜 형식에는 번호를 붙이지 않습니다. 수신번호와 발신번호는 완료 화면에 표시하고, 발신번호는 HWP 파일명과 하단에 유지합니다. 새 버전 정상 배포 후 GitHub 릴리스는 최신 버전과 직전 버전만 남기고 이전 릴리스·첨부 파일을 자동 정리합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library"],check=True,timeout=60)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention"],check=True,timeout=60)
     startup=out/"browser-startup.json"
     subprocess.run([str(exe),"--test-browser-startup",str(startup)],check=True,timeout=90)
     print("Frozen browser startup check:",startup.read_text())
@@ -140,6 +140,10 @@ def finalize():
     response=requests.patch(f"{API}/releases/{release['id']}",headers=headers(),json={"draft":False,"make_latest":"true"},timeout=30)
     response.raise_for_status();assert not response.json()["draft"]
     print("Published verified installer and signed online update.")
+    from release_retention import prune
+    published=requests.get(f"{API}/releases/{release['id']}",headers=headers(),timeout=30)
+    published.raise_for_status()
+    print("Release retention:",json.dumps(prune(API,headers(),published.json()),ensure_ascii=True))
 
 
 if __name__=="__main__":
