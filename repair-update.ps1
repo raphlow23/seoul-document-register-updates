@@ -19,6 +19,7 @@ $expectedHash = '7465175f86910f5a9c3a50a4801d84fb2c8362f6ced07019b139f2c27f9c246
 $fileName = 'SeoulDocumentRegister-2.0.1.exe'
 $baseUrl = 'https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.0.1'
 $dataPath = [IO.Path]::GetFullPath($DataRoot)
+if ((Split-Path -Leaf $dataPath) -ne 'SeoulDocumentRegister') { throw 'Invalid application data directory.' }
 $target = [IO.Path]::GetFullPath((Join-Path $dataPath 'Program\SeoulDocumentRegister.exe'))
 if (-not $target.StartsWith(($dataPath.TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) { throw 'Invalid installation path.' }
 if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
@@ -61,7 +62,13 @@ if ((Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant(
 # It does not replace account settings, HWP forms, or registration history.
 $setupRoot = Join-Path $dataPath ('updates\recovery-settings-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $setupRoot -Force | Out-Null
-$setup = Start-Process -FilePath $target -ArgumentList @('--prepare-install', ('"' + $setupRoot + '"')) -WindowStyle Hidden -Wait -PassThru
+$previousAppData = $env:LOCALAPPDATA
+try {
+    $env:LOCALAPPDATA = Split-Path -Parent $dataPath
+    $setup = Start-Process -FilePath $target -ArgumentList @('--prepare-install', ('"' + $setupRoot + '"')) -WindowStyle Hidden -Wait -PassThru
+} finally {
+    $env:LOCALAPPDATA = $previousAppData
+}
 if ($setup.ExitCode -ne 0) { throw '프로그램 교체는 끝났으나 자동 업데이트 연결 설정을 확인하지 못했습니다.' }
 Write-Host '복구 완료: v2.0.1. 앞으로 실행할 때 새 버전을 자동으로 확인합니다.' -ForegroundColor Green
 if (-not $NoLaunch) { Start-Process -FilePath $target -WorkingDirectory (Split-Path -Parent $target) -WindowStyle Hidden }
