@@ -41,11 +41,17 @@ def run():
                 time.sleep(.015)
         def idle():wait(lambda:not app.busy and not app.worker.working.is_set() and app.commands.empty())
         def check_actions():
-            root.deiconify();root.geometry("1060x780");root.update_idletasks()
+            root.deiconify();root.geometry("1000x660");root.update_idletasks()
             def walk(widget):
                 for child in widget.winfo_children():
                     if isinstance(child,ttk.Button) and child.winfo_ismapped():
-                        assert child.winfo_rooty()+child.winfo_height()<=root.winfo_rooty()+root.winfo_height(),child.cget("text")
+                        ancestor=child.master;scrollable=False
+                        while ancestor is not root:
+                            scrollable=scrollable or isinstance(ancestor,tk.Canvas)
+                            ancestor=ancestor.master
+                        if not scrollable:
+                            assert child.winfo_rooty()+child.winfo_height()<=root.winfo_rooty()+root.winfo_height(),child.cget("text")
+                            assert child.winfo_rootx()+child.winfo_width()<=root.winfo_rootx()+root.winfo_width(),child.cget("text")
                     walk(child)
             walk(flow.content)
             root.withdraw()
