@@ -128,7 +128,7 @@ def describe_folder(root, relative):
 
 
 def describe_directory(directory):
-    directory=Path(directory)
+    directory=Path(directory).resolve()
     if not directory.is_absolute() or not directory.is_dir():raise ValueError("기존 폴더를 읽을 저장 위치를 선택하세요.")
     names = sorted((p.name for p in directory.iterdir() if p.is_dir() and not p.name.startswith(".")), reverse=True)
     examples = names[:100]
