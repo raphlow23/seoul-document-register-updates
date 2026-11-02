@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 단계별 수신·발신 화면","draft":True,"prerelease":False,"body":"수신 접수 / 발신 작성 / 처리 이력으로 화면을 나눴습니다. 수신은 첨부 선택 → 제목 확인 → 저장 위치 → 접수번호 확인 순서로 진행합니다. 발신은 수신 이력 → 6종 양식 → 정보 확인 → 발신·직인대장 등록 → HWP 저장·편집 순서입니다. 설정·Google 연결은 설정 화면으로 모았습니다. 기존 v2.0.x는 실행 시 자동 업데이트됩니다. 설치 ZIP은 아래 Assets의 SeoulDocumentRegister-Setup-"+VERSION+".zip입니다. 기존 설정·양식·등록 이력을 보존합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 사용자 HWP 양식 추가","draft":True,"prerelease":False,"body":"설정 또는 발신 양식 선택 화면의 ‘양식 추가’에서 원본 HWP를 등록할 수 있습니다. 양식 이름·종류·저장 위치·번호/날짜 위치를 확인하고 이 PC에 보관합니다. 발신대장·직인날인대장에서 실제 번호를 받은 뒤 번호와 당일 날짜를 넣은 사본을 한글로 엽니다. 본문은 자동 작성하지 않으며 OCR 또는 한글에서 복사한 문구를 직접 붙여넣어 저장합니다. 기존 설정·양식·등록 이력은 보존합니다. 개인 양식은 공개 배포 파일에 포함하지 않습니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs"],check=True,timeout=60)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library"],check=True,timeout=60)
     startup=out/"browser-startup.json"
     subprocess.run([str(exe),"--test-browser-startup",str(startup)],check=True,timeout=90)
     print("Frozen browser startup check:",startup.read_text())
