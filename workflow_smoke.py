@@ -122,6 +122,23 @@ def run():
                     editor.register()
                 assert errors and writes==["receipt"] and flow.pending_register is None
                 errors.clear()
+                casebase=shared/"발신 기존 폴더";casebase.mkdir();(casebase/"012. 이전 제목").mkdir()
+                editor.vars["save_folder"].set(str(casebase));editor.configure_folders()
+                wait(lambda:getattr(app,"outgoing_folder_dialog",None) is not None and app.outgoing_folder_dialog.record is not None);idle()
+                case=app.outgoing_folder_dialog
+                assert "013." in case.preview.get("1.0","end")
+                case.children["outgoing"].set(False);case.children["incoming"].set(True);case.children["reply"].set(True)
+                case.save_in.set("reply");case.redraw()
+                assert "2.중앙회신" in case.preview.get("1.0","end")
+                case.apply();editor.save();idle()
+                assert "outgoing:5" in app.config["folder_profiles"]
+                emptybase=shared/"변경한 빈 저장 위치";emptybase.mkdir()
+                editor.vars["save_folder"].set(str(emptybase));editor.configure_folders()
+                wait(lambda:getattr(app,"outgoing_folder_dialog",None) is not None and app.outgoing_folder_dialog.record is not None);idle()
+                case=app.outgoing_folder_dialog
+                assert "001." in case.preview.get("1.0","end")
+                assert case.children["reply"].get() and not case.children["outgoing"].get()
+                case.apply()
                 editor.register();wait(lambda:flow.section=="outgoing" and flow.step==4);idle()
                 wait(lambda:open_hwp.called)
                 opened=open_hwp.call_args.args[0]
