@@ -189,7 +189,7 @@ class Worker(threading.Thread):
                         if data.get("agency") and data["source"]["mode"] in ("header", "project", "header_address", "filename"):
                             self.config.setdefault("title_preferences", {})[data["agency"]] = data["source"]["mode"]
                         self.emit("title_applied", {"hash": primary["hash"], "preferences": self.config.get("title_preferences", {})})
-                        if self.config.get("auto") and primary.get("routing") and primary.get("category") in CATEGORIES and primary.get("recipient"):
+                        if not self.config.get("_guided_ui") and self.config.get("auto") and primary.get("routing") and primary.get("category") in CATEGORIES and primary.get("recipient"):
                             self.execute(primary)
                     elif cmd == "route_tree":
                         from folder_naming import route_tree
@@ -389,9 +389,9 @@ class App:
         self.startup_copying = False
         root.bind_all("<KeyPress>", self.activity, add="+")
         root.bind_all("<ButtonPress>", self.activity, add="+")
-        root.title(f"서울센터 공문 수신등록 v{VERSION}")
-        root.geometry("1080x850")
-        root.minsize(900, 730)
+        root.title(f"서울센터 공문 업무 v{VERSION}")
+        root.geometry("1180x900")
+        root.minsize(1060, 780)
         root.configure(bg="#f3f5f8")
         style = ttk.Style(root)
         style.theme_use("clam")
@@ -401,67 +401,9 @@ class App:
         style.configure("TLabel", font=("맑은 고딕", 10))
         outer = ttk.Frame(root, padding=20)
         outer.pack(fill="both", expand=True)
-        ttk.Label(outer, text="공문 저장부터 수신등록까지", font=("맑은 고딕", 20, "bold")).pack(anchor="w")
-        ttk.Label(outer, text="첨부파일을 다운로드하세요. 등록번호를 확인하고 인쇄물에 직접 적으시면 됩니다.").pack(anchor="w", pady=(5, 14))
-        toolbar = ttk.Frame(outer)
-        toolbar.pack(fill="x")
-        for text, command in [("파일 추가", self.add_files), ("설정", self.settings), ("연결 확인", lambda: self.send("test", None)),
-                              ("구글 시트 열기", self.open_sheet), ("업데이트 확인", lambda: self.check_update(manual=True))]:
-            ttk.Button(toolbar, text=text, command=command).pack(side="left", padx=(0, 6))
-        self.watching = tk.BooleanVar(value=False)
-        ttk.Checkbutton(toolbar, text="다운로드 감시", variable=self.watching, command=self.toggle_watch).pack(side="right")
-        authbar = ttk.Frame(outer)
-        authbar.pack(fill="x", pady=(8, 0))
-        ttk.Button(authbar, text="시트 로그인 (브라우저)", command=lambda:self.send("browser_login",None)).pack(side="left")
-        ttk.Button(authbar, text="API 로그인 (선택)", command=self.google_sign_in).pack(side="left",padx=4)
-        ttk.Button(authbar, text="이 PC 연결 해제", command=lambda: self.send("google_logout", None)).pack(side="left", padx=6)
-        self.auth_status = tk.StringVar(value="브라우저 로그인 방식 · API 설정 불필요" if self.config.get("auth_mode")=="browser" else "본인 Google 계정 연결됨" if google_login.has_login(self.config) else "Google 연결 방식을 설정하세요.")
-        ttk.Label(authbar, textvariable=self.auth_status).pack(side="left", padx=8)
-        self.status = tk.StringVar(value="처음에는 설정에서 담당자를 지정하고 Google 로그인을 연결해 주세요.")
-        ttk.Label(outer, textvariable=self.status, foreground="#1c5295", wraplength=1000).pack(fill="x", pady=12)
-        self.update_status = tk.StringVar(value=f"v{VERSION} · 자동 업데이트 확인 대기")
-        ttk.Label(outer, textvariable=self.update_status, foreground="#667085").pack(anchor="w", pady=(0, 8))
-        table = ttk.Frame(outer)
-        table.pack(fill="both", expand=True)
-        cols = ("state", "category", "title", "number")
-        self.tree = ttk.Treeview(table, columns=cols, show="headings", selectmode="extended", height=10)
-        for c, label, width in [("state", "처리 상태", 155), ("category", "분류", 160), ("title", "공문 제목 / 파일명", 430), ("number", "수신 / 발신 번호", 190)]:
-            self.tree.heading(c, text=label)
-            self.tree.column(c, width=width, minwidth=65, stretch=c == "title")
-        scroll = ttk.Scrollbar(table, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=scroll.set)
-        self.tree.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
-        self.tree.bind("<<TreeviewSelect>>", self.select)
-        form = ttk.LabelFrame(outer, text="선택한 공문 확인", padding=12)
-        form.pack(fill="x", pady=(14, 8))
-        self.fields = {k: tk.StringVar() for k in ("title", "category", "recipient", "date", "issuer", "receipt_type")}
-        ttk.Label(form, text="제목").grid(row=0, column=0, sticky="w", padx=(0, 10))
-        ttk.Entry(form, textvariable=self.fields["title"]).grid(row=0, column=1, columnspan=5, sticky="ew", pady=4)
-        ttk.Label(form, text="분류").grid(row=1, column=0, sticky="w")
-        from folder_naming import AGENCIES
-        ttk.Combobox(form, textvariable=self.fields["category"], values=list(AGENCIES), state="readonly", width=32).grid(row=1, column=1, sticky="ew")
-        ttk.Label(form, text="수신자").grid(row=1, column=2, padx=(12, 5))
-        ttk.Entry(form, textvariable=self.fields["recipient"], width=12).grid(row=1, column=3)
-        ttk.Label(form, text="접수일").grid(row=1, column=4, padx=(12, 5))
-        ttk.Entry(form, textvariable=self.fields["date"], width=13).grid(row=1, column=5)
-        ttk.Label(form, text="발신처").grid(row=2,column=0,sticky="w",pady=5)
-        ttk.Entry(form,textvariable=self.fields["issuer"]).grid(row=2,column=1,sticky="ew")
-        ttk.Label(form,text="수신대장").grid(row=2,column=2,sticky="e",padx=5)
-        from core import RECEIPT_TABS
-        ttk.Combobox(form,textvariable=self.fields["receipt_type"],values=list(RECEIPT_TABS),state="readonly").grid(row=2,column=3,columnspan=3,sticky="ew")
-        self.outgoing_enabled=tk.BooleanVar(value=False)
-        ttk.Checkbutton(form,text="발신도 함께 등록 (직인날인대장 포함)",variable=self.outgoing_enabled,command=self.toggle_outgoing).grid(row=3,column=0,columnspan=3,sticky="w",pady=5)
-        ttk.Button(form,text="발신 정보·공문 작성 / OCR 복사",command=self.edit_outgoing).grid(row=3,column=3,columnspan=3,sticky="e")
-        form.columnconfigure(1, weight=1)
-        self.detail = tk.StringVar(value="공문을 선택하면 본문과 저장 결과를 확인할 수 있습니다.")
-        ttk.Label(form, textvariable=self.detail, wraplength=960).grid(row=4, column=0, columnspan=6, sticky="w", pady=8)
-        actions = ttk.Frame(outer)
-        actions.pack(fill="x")
-        for text, fn in [("첨부에서 제목 고르기", self.choose_title), ("저장 위치 선택", self.choose_routes),
-                         ("선택 공문 저장·등록", self.register), ("수정 저장", self.save_edit), ("본문 / 저장 결과", self.preview), ("목록 삭제", self.ignore)]:
-            ttk.Button(actions, text=text, command=fn).pack(side="left", padx=(0, 6))
-        ttk.Label(outer, text="목록 삭제는 원본 파일·등록 이력을 보존합니다 · 다운로드에서 삭제·이동된 파일은 목록에서 자동 제외 · 다시 표시는 ‘파일 추가’", foreground="#667085").pack(anchor="w", pady=(10, 0))
+        from workflow_ui import WorkflowShell
+        self.workflow = WorkflowShell(self, outer)
+        self.config["_guided_ui"] = True
         for job in self.jobs.values():
             self.render(job)
         self.worker = Worker(self.commands, self.events, self.config, self.data / "history.sqlite")
@@ -474,21 +416,7 @@ class App:
     def render(self, job):
         key = job["hash"]
         self.jobs[key] = job
-        hidden = job.get("list_hidden") or job["state"] in ("제외", "묶음에 포함", "묶음 처리 완료") or missing_download_source(job,self.config.get("downloads"))
-        if hidden:
-            if self.tree.exists(key):
-                self.tree.delete(key)
-            return
-        numbers=job.get("number","")
-        if job.get("outgoing",{}).get("enabled"):
-            numbers=f"수신{numbers or '대기'} / 발신{job['outgoing'].get('number') or '대기'}"
-        vals = (job["state"], job["category"] or "확인 필요", job["title"], numbers)
-        if self.tree.exists(key):
-            self.tree.item(key, values=vals)
-        else:
-            self.tree.insert("", 0, iid=key, values=vals)
-        if key in self.tree.selection() and (self.busy or job.get("files_started")):
-            self.select()
+        self.workflow.update_job(job)
 
     def send(self, cmd, data):
         if getattr(self, "closing", False) or self.updating:
@@ -514,6 +442,7 @@ class App:
                 elif kind == "idle":
                     self.busy = False
                 elif kind == "error":
+                    self.workflow.pending_register=None
                     self.status.set(data)
                     messagebox.showerror("확인이 필요합니다", data)
                 elif kind == "notice":
@@ -522,12 +451,13 @@ class App:
                     out=data.get("outgoing",{})
                     detail=f"수신 {data['number']}"+(f" · 발신 {out.get('number','')} · 직인대장 등록 완료" if out.get("enabled") else " · 저장·수신등록 완료")
                     self.status.set(detail+" · "+data["title"])
+                    self.workflow.completed(data)
                     self.root.bell()
                 elif kind == "outgoing_saved":
                     self.config["document_template"]=data["template"]
                     self.persist_config()
-                    self.tree.selection_set(data["hash"]);self.select()
-                    self.status.set("발신 설정·초안을 저장했습니다. 저장·접수등록을 누르면 선택한 대장과 직인날인대장에 함께 등록합니다.")
+                    self.workflow.outgoing_saved(data["hash"])
+                    self.status.set("발신 작성 정보를 저장했습니다." if not self.busy else "발신대장과 직인날인대장에 등록하는 중…")
                 elif kind == "draft_source_result":
                     editor=getattr(self,"outgoing_editor",None)
                     if editor is not None:editor.deliver(data)
@@ -576,12 +506,9 @@ class App:
                 elif kind == "title_applied":
                     self.config["title_preferences"] = data["preferences"]
                     self.persist_config()
-                    self.tree.selection_set(data["hash"])
-                    self.tree.see(data["hash"])
-                    self.select()
+                    self.workflow.focus(data["hash"])
                     self.status.set("선택한 제목을 적용했습니다. 분류·수신자·접수일을 확인한 뒤 저장·등록하세요.")
-                    if not self.jobs[data["hash"]].get("routing"):
-                        self.root.after(350,self.choose_routes)
+                    self.root.after(350,self.workflow.route_step)
                 elif kind == "route_result":
                     dialog = getattr(self,"route_dialog",None)
                     if dialog is not None: dialog.deliver(data)
@@ -589,14 +516,13 @@ class App:
                     self.config["route_templates"] = data["templates"]
                     if data.get("document_template"):self.config["document_template"]=data["document_template"]
                     self.persist_config()
-                    self.tree.selection_set(data["hash"])
-                    self.select()
+                    self.workflow.focus(data["hash"])
         except queue.Empty:
             pass
         self.root.after(200, self.poll)
 
     def selected(self):
-        return [self.jobs[k].copy() for k in self.tree.selection()]
+        return self.workflow.selected_jobs()
 
     def persist_config(self):
         tmp = self.data / "config.tmp"
@@ -863,7 +789,7 @@ class App:
         jobs = self.selected()
         edited = len(jobs) == 1 and any(v.get().strip() != str(jobs[0].get(k, "")) for k, v in self.fields.items())
         dialogs = any(isinstance(w, tk.Toplevel) and w.winfo_exists() for w in self.root.winfo_children())
-        if (self.busy or self.worker.working.is_set() or not self.commands.empty() or edited or dialogs
+        if (self.busy or self.worker.working.is_set() or not self.commands.empty() or edited or dialogs or getattr(getattr(self,"workflow",None),"draft_active",False)
                 or (not getattr(self, "startup_gate", False) and time.monotonic() - self.last_activity < 60)):
             self.root.after(5000, self.apply_when_idle)
             return
@@ -892,60 +818,8 @@ class App:
     def settings(self):
         if self.busy or self.worker.working.is_set() or self.updating or self.startup_gate:
             return messagebox.showinfo("처리 중", "진행 중인 작업이 끝난 뒤 설정해 주세요.")
-        win = tk.Toplevel(self.root)
-        win.title("업무용 PC 최초 설정")
-        win.geometry("850x680")
-        win.transient(self.root)
-        win.grab_set()
-        body = ttk.Frame(win, padding=20)
-        body.pack(fill="both", expand=True)
-        mode = tk.StringVar(value="브라우저 로그인 (API 설정 없음)" if self.config.get("auth_mode")=="browser" else "본인 Google 계정 로그인" if self.config.get("auth_mode") == "oauth" else "기존 서비스 계정")
-        auth_files = {"브라우저 로그인 (API 설정 없음)":"","본인 Google 계정 로그인": self.config.get("oauth_client_path", ""), "기존 서비스 계정": self.config.get("key_path", "")}
-        values = {k: tk.StringVar(value=str(self.config.get(k, ""))) for k in ("downloads", "root", "recipient", "spreadsheet_id", "tab", "update_url")}
-        values["auth_file"] = tk.StringVar(value=auth_files[mode.get()])
-        for i, (key, label) in enumerate([("downloads", "다운로드 폴더"), ("root", "공유 실적 폴더"), ("recipient", "기본 수신자(담당자)"), ("auth_file", "Google 로그인 설정(JSON)"), ("spreadsheet_id", "구글 시트 ID"), ("tab", "접수대장 탭"), ("update_url", "온라인 업데이트 주소")]):
-            ttk.Label(body, text=label).grid(row=i, column=0, sticky="w", pady=8)
-            ttk.Entry(body, textvariable=values[key], width=65).grid(row=i, column=1, sticky="ew", padx=10)
-            if key in ("downloads", "root", "auth_file", "update_folder"):
-                def choose(k=key):
-                    path = filedialog.askopenfilename(filetypes=[("Google 인증 설정", "*.json")]) if k == "auth_file" else filedialog.askdirectory()
-                    if path:
-                        values[k].set(path)
-                ttk.Button(body, text="선택", command=choose).grid(row=i, column=2)
-        auto = tk.BooleanVar(value=bool(self.config.get("auto")))
-        ttk.Label(body, text="Google 연결 방식").grid(row=7, column=0, sticky="w")
-        auth_select = ttk.Combobox(body, textvariable=mode, values=list(auth_files), state="readonly")
-        auth_select.grid(row=7, column=1, sticky="ew", padx=10)
-        last_mode = [mode.get()]
-        def mode_changed(_):
-            auth_files[last_mode[0]] = values["auth_file"].get()
-            values["auth_file"].set(auth_files[mode.get()])
-            last_mode[0] = mode.get()
-        auth_select.bind("<<ComboboxSelected>>", mode_changed)
-        ttk.Checkbutton(body, text="제목 선택 후 분류·담당자가 확인된 공문은 자동 저장·등록", variable=auto).grid(row=8, column=0, columnspan=3, sticky="w", pady=(14, 5))
-        ttk.Label(body, text="스캔 PDF는 PC 내 한국어 OCR로 읽습니다. 인식이 불확실한 문서는 확인 목록에 남깁니다.", wraplength=760).grid(row=9, column=0, columnspan=3, sticky="w")
-        ttk.Label(body, text="‘시트 로그인’은 제어 기능 없는 일반 Edge/Chrome 창을 엽니다. 직접 로그인해 시트를 확인하고\n그 창을 모두 닫은 뒤 ‘연결 확인’을 누르세요. Cloud 프로젝트·JSON은 API 방식에서만 필요합니다.", wraplength=760).grid(row=10, column=0, columnspan=3, sticky="w", pady=12)
-        auto_update = tk.BooleanVar(value=self.config.get("auto_update", True))
-        ttk.Checkbutton(body, text="실행 시 새 버전 먼저 자동 설치 (설정과 접수 이력 유지)", variable=auto_update).grid(row=11, column=0, columnspan=3, sticky="w")
-        ttk.Label(body, text="실행할 때 GitHub에서 최신 버전을 확인하고 내려받아 자동 설치합니다.\n업무용 PC의 GitHub 로그인·공유폴더 게시가 필요하지 않습니다.", wraplength=760).grid(row=12, column=0, columnspan=3, sticky="w", pady=8)
-        def save():
-            config = {**self.config, **{k: v.get().strip() for k, v in values.items() if k != "auth_file"}, "auto": auto.get(), "auto_update": auto_update.get()}
-            config["auth_mode"] = "browser" if mode.get()=="브라우저 로그인 (API 설정 없음)" else "oauth" if mode.get() == "본인 Google 계정 로그인" else "service"
-            config["oauth_client_path" if config["auth_mode"] == "oauth" else "key_path"] = values["auth_file"].get().strip()
-            if auto.get() and not config["recipient"]:
-                return messagebox.showerror("설정", "자동 처리를 켜려면 기본 수신자를 지정해 주세요.", parent=win)
-            self.config = config
-            self.update_ready = None
-            self.persist_config()
-            self.commands.put(("config", config))
-            self.watching.set(False)
-            self.status.set("설정을 저장했습니다. ‘연결 확인’ 후 다운로드 감시를 켜 주세요.")
-            win.destroy()
-            self.root.after(1000, self.scheduled_update_after_settings)
-        from outgoing_editor import folder_settings_dialog
-        ttk.Button(body, text="발신 6종 양식별 기본 저장 위치", command=lambda:folder_settings_dialog(self,win)).grid(row=13,column=0,columnspan=2,sticky="w")
-        ttk.Button(body, text="설정 저장", command=save).grid(row=14, column=1, sticky="e", pady=12)
-        body.columnconfigure(1, weight=1)
+        from settings_ui import open_settings
+        open_settings(self)
 
     def close(self):
         if self.busy or self.worker.working.is_set() or self.worker.commands.qsize():
@@ -970,6 +844,10 @@ class App:
 
 
 def main():
+    if len(sys.argv)==2 and sys.argv[1]=="--test-workflow":
+        from workflow_smoke import run
+        run()
+        return
     if len(sys.argv)==3 and sys.argv[1]=="--test-browser-startup":
         from browser_launch_check import check
         Path(sys.argv[2]).write_text(json.dumps(check()),encoding="utf-8")
