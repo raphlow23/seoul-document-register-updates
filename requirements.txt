@@ -1,0 +1,14 @@
+pypdf>=6.0,<7
+olefile==0.47
+google-auth>=2.40,<3
+google-auth-oauthlib>=1.2,<2
+pypdfium2>=4.30,<6
+Pillow>=11,<13
+lxml>=6,<7
+requests>=2.32,<3
+cryptography>=46,<52
+pyinstaller>=6.0,<7
+pywin32>=308; sys_platform == 'win32'
+websocket-client>=1.9,<2
+kiwipiepy==0.20.4
+kiwipiepy-model==0.20.0
