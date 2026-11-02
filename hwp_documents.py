@@ -36,6 +36,8 @@ def style(style_id):
 def template_body(style_id):
     from core import extract
     item=style(style_id)
+    # User-supplied blank forms intentionally contain no example body to extract or generate.
+    if item.get("blank_body"):return ""
     if not (template_root()/item["file"]).is_file():return ""
     text=extract(template_root()/item["file"])
     start=text.find(item["body_start"])
@@ -78,6 +80,56 @@ def filename(item, out, today=None):
     if re.search(r'[<>:"/\\|?*\x00-\x1f]', suffix):
         raise ValueError("파일명 뒤 표시에 사용할 수 없는 문자가 있습니다.")
     return f"{item['prefix']}{sequence(out):03d}.{item['spacing']}{today:%y.%m.%d}. {title}{suffix}.hwp"
+
+
+def template_preview(style_id):
+    """Read the HWP's own thumbnail locally; never render a substitute form."""
+    import olefile
+    from PIL import Image
+    source=template_root()/style(style_id)["file"]
+    if not source.is_file():return None
+    try:
+        with olefile.OleFileIO(source) as ole:
+            if not ole.exists("PrvImage"):return None
+            raw=ole.openstream("PrvImage").read(8*1024*1024+1)
+        if len(raw)>8*1024*1024:return None
+        with Image.open(io.BytesIO(raw)) as image:
+            if image.width*image.height>16_000_000:return None
+            return image.copy()
+    except (OSError,ValueError,Image.DecompressionBombError):return None
+
+
+def check_template(style_id):
+    """Refuse a new ledger entry when its selected original form is unavailable."""
+    item=style(style_id)
+    source=template_root()/item["file"]
+    if not source.is_file():raise ValueError("선택한 원본 HWP 양식이 없습니다. 양식을 먼저 설치해 주세요.")
+    import olefile
+    if not olefile.isOleFile(source):raise ValueError("선택한 HWP 양식 파일을 확인하지 못했습니다.")
+    from core import extract
+    text=_compact(extract(source))
+    anchors=[*item.get("title_fragments",[]),item.get("old_number",""),item.get("old_date",""),item.get("receiver",""),item.get("old_sender","")]
+    for anchor in anchors:
+        if anchor and text.count(_compact(anchor))!=1:raise ValueError("원본 양식의 자동 입력 위치를 다시 확인하세요: "+anchor)
+    return source
+
+
+def native_values(item,out,today=None):
+    """Use the ledger number in both the filename and the form's printed metadata."""
+    today=today or date.today()
+    seq=sequence(out)
+    values={k:str(out.get(k,"")).strip() for k in ("title","receiver","sender","body")}
+    fields={"year":today.year,"year2":today.year%100,"month":today.month,"day":today.day,"number":seq}
+    pattern=item.get("date_pattern")
+    if pattern:display=pattern.format(**fields)
+    elif item.get("blank_body"):display=f"({today.year%100:02d}. {today.month}. {today.day})"
+    else:display=f"({today:%Y. %m. %d.})"
+    fields["date"]=display
+    number_pattern=item.get("number_pattern")
+    values["number_date"]=(number_pattern.format(**fields) if number_pattern else
+        f"서울센터 {today.year}-{seq:03d}" if item["family"]=="공문" or item.get("blank_body") else f"{today.year}-{seq:03d} {display}")
+    values["display_date"]=display
+    return values
 
 
 def _compact(text):
@@ -210,6 +262,7 @@ def replace_native_fields(hwp,item,values):
     pairs=[*zip(item["title_fragments"],titles),
            (item["receiver"],values["receiver"]),(item["old_number"],values["number_date"]),
            (item["old_sender"],values["sender"])]
+    if item.get("metadata_only"):pairs=[pair for pair in pairs if pair[0]]
     if item["old_date"]:pairs.append((item["old_date"],values["display_date"]))
     # Refuse ambiguous source anchors rather than accidentally editing a body reference.
     for old,new in pairs:
@@ -240,7 +293,7 @@ def export_hwp(item, out, output, factory=None):
     """A private Hancom automation instance; original template and existing files are never overwritten."""
     today = date.today()
     seq = sequence(out)
-    for key in ("title", "receiver", "sender", "body"):
+    for key in ("title", "receiver", "sender"):
         if not out.get(key, "").strip(): raise ValueError("공문 저장에 필요한 항목을 입력해 주세요: " + {"title":"제목","receiver":"수신 기관","sender":"담당자","body":"본문"}[key])
     if out.get("ledger_type") != item["family"]:
         raise ValueError("선택한 HWP 양식과 발신대장 유형이 다릅니다.")
@@ -248,13 +301,11 @@ def export_hwp(item, out, output, factory=None):
     if output.name != filename(item, out, today):
         raise ValueError("파일명은 발신번호·현재 날짜·HWP 제목에 따라 자동 생성됩니다. 제목 또는 번호를 수정해 주세요.")
     if output.exists(): raise FileExistsError("같은 이름의 공문이 이미 있습니다. 덮어쓰지 않았습니다.")
-    values = {k:out[k].strip() for k in ("title", "receiver", "sender", "body")}
+    values = native_values(item,out,today)
     # Native HWP always keeps the source body, including its paragraph-level formatting.
     # An edited plain-text draft remains available to paste into the existing HWP paragraphs.
     expected_body=template_body(item["id"])
     out["hwp_body_paste_needed"]=values["body"]!=expected_body
-    values["display_date"] = f"({today:%Y. %m. %d.})"
-    values["number_date"] = (f"서울센터 {today.year}-{seq:03d}" if item["family"] == "공문" else f"{today.year}-{seq:03d} {values['display_date']}")
     coinit = False
     hwp = None
     try:
@@ -278,9 +329,12 @@ def export_hwp(item, out, output, factory=None):
                 raise RuntimeError("한글에서 HWP 저장을 완료하지 못했습니다.")
             from core import extract
             text = extract(native)
-            if _compact(values["title"]) not in _compact(text) or _compact(expected_body) not in _compact(text):
+            check_title=not item.get("metadata_only") or bool(item.get("title_fragments"))
+            if (check_title and _compact(values["title"]) not in _compact(text)) or _compact(expected_body) not in _compact(text):
                 raise RuntimeError("저장된 HWP의 제목·본문 검증에 실패했습니다. 공유폴더에는 저장하지 않았습니다.")
             for field in ("receiver","sender","number_date"):
+                anchor={"receiver":"receiver","sender":"old_sender","number_date":"old_number"}[field]
+                if item.get("metadata_only") and not item.get(anchor):continue
                 if _compact(values[field]) not in _compact(text):raise RuntimeError("저장된 HWP의 수신처·담당자·시행번호 확인에 실패했습니다.")
             if item["old_date"] and _compact(values["display_date"]) not in _compact(text):raise RuntimeError("저장된 HWP 시행일 확인에 실패했습니다.")
             from hwp_fidelity import verify
