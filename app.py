@@ -49,8 +49,15 @@ class Worker(threading.Thread):
                         self.store.db.close()
                         return
                     if cmd == "config":
-                        self.config = data.copy()
-                        self.watch = False
+                        from copy import deepcopy
+                        from folder_naming import preserve_changed_profiles
+                        previous_downloads=self.config.get("downloads")
+                        updated=deepcopy(data)
+                        preferences=preserve_changed_profiles(self.config,updated)
+                        self.config = updated
+                        if preferences:self.emit("folder_preferences",preferences)
+                        if self.watch and previous_downloads!=updated.get("downloads"):
+                            self.seen=self.files();self.pending={}
                     elif cmd == "watch":
                         self.watch = bool(data)
                         self.seen = self.files() if self.watch else {}
