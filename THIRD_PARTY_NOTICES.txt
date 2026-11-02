@@ -1,0 +1,49 @@
+SeoulDocumentRegister uses the following open-source components.
+Installed distribution metadata and license texts are included under licenses/.
+
+Python 3.12 / Tcl-Tk: PSF license and Tcl/Tk BSD-style licenses.
+https://docs.python.org/3/license.html
+https://www.tcl.tk/software/tcltk/license.html
+
+OCR: Tesseract 5.5.1 (Apache-2.0), leptonica (BSD-2-Clause),
+tessdata_best Korean/English and OSD models (Apache-2.0).
+Native runtime dependencies, exact versions and model hashes are recorded in
+licenses/ocr-runtime/BUILDINFO.json; licenses and conda build recipes are included.
+The LGPL libiconv corresponding source archive and recipe are included there.
+Application sources and build instructions are in source/ and may be rebuilt
+with replaced dynamic libraries. No restriction on debugging modifications to
+these open-source components is imposed by this distribution.
+PDFium / pypdfium2: BSD-3-Clause / Apache-2.0 OR BSD-3-Clause, including
+the third-party notices shipped by pypdfium2.
+Pillow: HPND / MIT-CMU, https://github.com/python-pillow/Pillow
+google-auth-oauthlib: Apache-2.0, https://github.com/googleapis/google-auth-library-python-oauthlib
+requests-oauthlib: ISC, https://github.com/requests/requests-oauthlib
+oauthlib: BSD-3-Clause, https://github.com/oauthlib/oauthlib
+lxml: BSD-3-Clause, with bundled libxml2/libxslt notices included.
+https://lxml.de/copyright.html
+
+pypdf: BSD-3-Clause, https://github.com/py-pdf/pypdf
+olefile: BSD-2-Clause, https://github.com/decalage2/olefile
+google-auth: Apache-2.0, https://github.com/googleapis/google-auth-library-python
+requests: Apache-2.0, https://github.com/psf/requests
+cryptography: Apache-2.0 OR BSD-3-Clause, https://github.com/pyca/cryptography
+cffi: MIT, https://github.com/python-cffi/cffi
+pyasn1 / pyasn1-modules: BSD-2-Clause, https://github.com/pyasn1/pyasn1
+certifi: MPL-2.0, https://github.com/certifi/python-certifi
+charset-normalizer: MIT, https://github.com/jawah/charset_normalizer
+idna: BSD-3-Clause, https://github.com/kjd/idna
+urllib3: MIT, https://github.com/urllib3/urllib3
+setuptools and bundled dependencies: MIT and individual bundled licenses.
+https://github.com/pypa/setuptools
+packaging: Apache-2.0 OR BSD-2-Clause, https://github.com/pypa/packaging
+typing_extensions: PSF-2.0, https://github.com/python/typing_extensions
+wheel (when present): MIT, https://github.com/pypa/wheel
+pywin32: PSF and individual bundled licenses, https://github.com/mhammond/pywin32
+websocket-client: Apache-2.0, https://github.com/websocket-client/websocket-client
+kiwipiepy 0.20.4 / kiwipiepy-model 0.20.0: LGPL-3.0, https://github.com/bab2min/kiwipiepy
+The model files are provided in the signed SpacingModel component. Corresponding native source is included under licenses.
+NumPy: BSD-3-Clause and bundled dependencies, https://numpy.org
+tqdm: MPL-2.0 and MIT, https://github.com/tqdm/tqdm
+colorama: BSD-3-Clause, https://github.com/tartley/colorama
+PyInstaller bootloader: GPL-2.0-or-later with bootloader exception.
+https://pyinstaller.org/en/stable/license.html
