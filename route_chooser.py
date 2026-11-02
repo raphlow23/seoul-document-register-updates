@@ -3,7 +3,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
 import uuid
-from folder_naming import AGENCIES, TEMPLATES, agency_for, folder_name, sequence_from_names,child_folders,CHILD_KINDS
+from folder_naming import AGENCIES, TEMPLATES, agency_for, folder_name, sequence_from_names,child_folders,CHILD_KINDS,preferred_template
 
 
 class RouteChooser:
@@ -60,8 +60,12 @@ class RouteChooser:
         left, right = ttk.Frame(panes), ttk.Frame(panes, padding=(14,0,0,0))
         panes.add(left, weight=2)
         panes.add(right, weight=3)
+        self.folder_title=tk.StringVar(value=job.get("routing",{}).get("folder_title") or job["title"])
+        ttk.Label(right,text="폴더에 사용할 제목 (대장 제목은 유지)").pack(anchor="w")
+        ttk.Entry(right,textvariable=self.folder_title).pack(fill="x",pady=(3,8))
+        self.folder_title.trace_add("write",lambda *_:self.redraw_preview())
         ttk.Label(left, text="저장 위치 — 여러 곳 선택 가능", font=("맑은 고딕",11,"bold")).pack(anchor="w", pady=(0,6))
-        self.children={key:tk.BooleanVar(value=key in job.get("routing",{}).get("children",[] if job.get("files_started") else CHILD_KINDS)) for key in CHILD_KINDS}
+        self.children={key:tk.BooleanVar(value=key in job.get("routing",{}).get("children",[] if job.get("files_started") else app.config.get("folder_children",{}).get(self.agency.get(),app.config.get("folder_defaults",{}).get("children",CHILD_KINDS)))) for key in CHILD_KINDS}
         childbar=ttk.Frame(outer) if self.embedded else left
         if self.embedded:
             childbar.pack(fill="x",before=panes,pady=(6,0))
@@ -79,16 +83,16 @@ class RouteChooser:
         self.examples = tk.Listbox(right, height=3 if self.embedded else 6, font=("맑은 고딕",10))
         self.examples.pack(fill="x", pady=7)
         self.examples.bind("<<ListboxSelect>>", self.select_example)
-        ttk.Label(right, text="새 폴더 이름 형식 — 기존 예시를 클릭하면 인식한 형식을 사용합니다.", wraplength=580).pack(anchor="w")
+        ttk.Label(right, text="이름 형식 — 기존 예시를 클릭해 변경", wraplength=500).pack(anchor="w")
         self.template = tk.StringVar()
         self.template_box = ttk.Combobox(right, textvariable=self.template, values=TEMPLATES)
         self.template_box.pack(fill="x", pady=7)
         self.template.trace_add("write", self.changed)
         buttons = ttk.Frame(right)
-        buttons.pack(fill="x")
+        if not self.embedded:buttons.pack(fill="x")
         for label, template in (("날짜 + 제목",TEMPLATES[0]),("폴더순번 + 제목",TEMPLATES[4]),("제목만",TEMPLATES[-1])):
             ttk.Button(buttons, text=label, command=lambda t=template:self.template.set(t)).pack(side="left", padx=(0,5))
-        ttk.Label(right, text="{title}=선택한 제목 · {date}=접수일 · {number:03d}=이 폴더의 다음 순번\n폴더 순번은 구글 시트 D열 접수번호와 별개입니다.", wraplength=580).pack(anchor="w", pady=8)
+        if not self.embedded:ttk.Label(right, text="{title}=선택한 제목 · {date}=접수일 · {number:03d}=이 폴더의 다음 순번\n폴더 순번은 구글 시트 D열 접수번호와 별개입니다.", wraplength=580).pack(anchor="w", pady=8)
         ttk.Label(right, text="선택한 모든 위치의 생성 예정 이름", font=("맑은 고딕",11,"bold")).pack(anchor="w", pady=(8,3))
         self.preview = tk.Text(right, height=9, wrap="word", font=("맑은 고딕",10), padx=8,pady=8)
         self.preview.pack(fill="both", expand=True)
@@ -107,6 +111,10 @@ class RouteChooser:
 
     def load(self):
         if not self.agency.get(): return
+        if not self.job.get("routing"):
+            saved=self.app.config.get("folder_children",{}).get(self.agency.get())
+            if saved is not None:
+                for key,var in self.children.items():var.set(key in saved)
         self.request = uuid.uuid4().hex
         self.records, self.selected, self.templates, self.current = {}, set(), {}, None
         for node in self.tree.get_children(): self.tree.delete(node)
@@ -121,7 +129,7 @@ class RouteChooser:
             key = record["relative"]
             self.records[key] = record
             self.tree.insert(record.get("parent", ""), "end", iid=key, text="☐ " + Path(key).name, open=True)
-            self.templates[key] = old.get(key) or self.app.config.get("route_templates",{}).get(key) or (record["styles"][0]["template"] if record["styles"] else "")
+            self.templates[key] = old.get(key) or preferred_template(record,self.app.config,"incoming:"+key)
             if key in old:
                 self.selected.add(key)
                 self.tree.item(key, text="☑ " + Path(key).name)
@@ -166,7 +174,7 @@ class RouteChooser:
             try:
                 old = next((t for t in self.job.get("routing",{}).get("targets",[]) if t["relative"]==relative),{})
                 ordinal = old.get("folder_number") or sequence_from_names(self.records[relative]["names"],self.templates.get(relative,""))
-                name = folder_name(self.templates.get(relative,""),self.job["title"],self.job["date"],ordinal)
+                name = folder_name(self.templates.get(relative,""),self.folder_title.get(),self.job["date"],ordinal)
             except (ValueError,TypeError,KeyError) as error:
                 name = "이름 형식을 선택해 주세요: " + str(error)
             lines.append(relative+"\n  └ "+name)
@@ -183,7 +191,8 @@ class RouteChooser:
             return messagebox.showinfo("저장 위치", "저장할 곳을 한 곳 이상 체크해 주세요.",parent=self.win)
         targets = [{"relative":p,"template":self.templates[p]} for p in sorted(self.selected)]
         try:
-            for target in targets: folder_name(target["template"],self.job["title"],self.job["date"],sequence_from_names(self.records[target["relative"]]["names"],target["template"]))
+            if not self.folder_title.get().strip():raise ValueError("폴더에 사용할 제목을 입력하세요.")
+            for target in targets: folder_name(target["template"],self.folder_title.get(),self.job["date"],sequence_from_names(self.records[target["relative"]]["names"],target["template"]))
             if self.receipt_type.get() not in ("공문","업무연락","처리지침"):raise ValueError("수신 등록대장을 선택해 주세요.")
             self.outgoing["enabled"]=self.outgoing_enabled.get()
             if execute and self.outgoing["enabled"]:
@@ -193,7 +202,7 @@ class RouteChooser:
         except (ValueError,TypeError,KeyError) as error:
             return messagebox.showerror("폴더 이름 확인",str(error),parent=self.win)
         self.app.busy = True
-        self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"children":[k for k,v in self.children.items() if v.get()]},
+        self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"folder_title":self.folder_title.get().strip() if self.folder_title.get().strip()!=self.job["title"] else "","children":[k for k,v in self.children.items() if v.get()]},
                                              "fields":{**{k:self.job.get(k,"") for k in ("title","date","recipient","issuer")},"receipt_type":self.receipt_type.get()},
                                              "outgoing":self.outgoing,"execute":execute}))
         self.close()
