@@ -1,4 +1,4 @@
-VERSION = "2.0.1"
+VERSION = "2.0.2"
 # Manual browser sign-in and list-only removal; signed runtime release.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
