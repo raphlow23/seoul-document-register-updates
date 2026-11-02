@@ -79,6 +79,7 @@ def build():
     subprocess.run(["git","config","user.email","41898282+github-actions[bot]@users.noreply.github.com"],check=True)
     subprocess.run(["git","add","build-result.json"],check=True)
     subprocess.run(["git","commit","-m","Record verified Windows build payload hashes"],check=True)
+    subprocess.run(["git","pull","--rebase","origin","main"],check=True)
     subprocess.run(["git","push"],check=True)
     print("Build complete. Awaiting local Ed25519 signature before publication.")
 
