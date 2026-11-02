@@ -47,6 +47,48 @@ class FolderWorkflowTests(unittest.TestCase):
         self.assertEqual(naming.folder_name(inherited,"새 공문","2026-11-03",naming.sequence_from_names(record["names"],inherited)),"001. 26.11.03. 새 공문")
         self.assertEqual(config["folder_children"]["서울시청 공문"],["incoming","reply"])
 
+    def test_settings_change_captures_old_outgoing_format_before_first_program_save(self):
+        (self.base/"025. 26.11.02. 지난 시행문").mkdir()
+        new=self.root/"changed";new.mkdir()
+        previous={"root":str(self.root),"outgoing_folders":{"6":str(self.base)}}
+        updated={"root":str(self.root),"outgoing_folders":{"6":str(new)}}
+        with patch("hwp_documents.catalog",return_value=[{"id":"6","folder":"unused","family":"공문"}]):
+            prefs=naming.preserve_changed_profiles(previous,updated)
+        self.assertIsNotNone(prefs)
+        template=naming.preferred_template(naming.describe_directory(new),updated,"outgoing:6")
+        self.assertEqual(naming.folder_name(template,"새 제목","2026-11-03",1),"001. 26.11.03. 새 제목")
+        self.assertNotIn("folder_profiles",previous)
+
+    def test_settings_root_change_captures_old_receipt_date_format(self):
+        city=self.root/"0.시청공문";city.mkdir();(city/"26.11.02. 지난 공문").mkdir()
+        new=self.root/"new-root";new.mkdir();(new/"0.시청공문").mkdir()
+        updated={"root":str(new)}
+        with patch("hwp_documents.catalog",return_value=[]):naming.preserve_changed_profiles({"root":str(self.root)},updated)
+        template=naming.preferred_template(naming.describe_directory(new/"0.시청공문"),updated,"incoming:0.시청공문")
+        self.assertEqual(naming.folder_name(template,"새 제목","2026-11-03"),"26.11.03. 새 제목")
+
+    def test_settings_path_change_does_not_drop_existing_manual_profile(self):
+        old=self.root/"unavailable"
+        previous={"root":str(self.root),"outgoing_folders":{"6":str(old)},"folder_profiles":{"outgoing:6":{"template":"[{number:03d}] {title}","path":str(old)}}}
+        updated=deepcopy(previous);updated["outgoing_folders"]["6"]=str(self.base)
+        with patch("hwp_documents.catalog",return_value=[{"id":"6","folder":"unused","family":"공문"}]):naming.preserve_changed_profiles(previous,updated)
+        template=naming.preferred_template(naming.describe_directory(self.base),updated,"outgoing:6")
+        self.assertEqual(naming.folder_name(template,"새 제목","2026-11-03",1),"[001] 새 제목")
+
+    def test_worker_settings_change_preserves_watch_and_captures_old_format(self):
+        from app import Worker
+        city=self.root/"0.시청공문";city.mkdir();(city/"004. 지난 제목").mkdir()
+        downloads=self.root/"Downloads";downloads.mkdir()
+        new=self.root/"new";new.mkdir()
+        commands,events=queue.Queue(),queue.Queue()
+        config={"root":str(self.root),"downloads":str(downloads)}
+        worker=Worker(commands,events,config,self.root/"history.sqlite")
+        with patch("hwp_documents.catalog",return_value=[]):
+            commands.put(("watch",True));commands.put(("config",{**config,"root":str(new)}));commands.put(("quit",None))
+            worker.start();worker.join(timeout=8)
+        self.assertFalse(worker.is_alive());self.assertTrue(worker.watch)
+        self.assertIn("incoming:0.시청공문",worker.config["folder_profiles"])
+
     def test_date_only_style_stays_date_only_in_empty_location(self):
         config={};naming.remember_profile(config,"incoming:0.시청공문",self.base,"{yy:02d}.{month:02d}.{day:02d}. {title}","서울시청 공문",[])
         template=naming.preferred_template(naming.describe_directory(self.base),config,"incoming:0.시청공문")
