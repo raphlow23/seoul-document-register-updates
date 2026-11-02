@@ -442,7 +442,7 @@ class App:
                 elif kind == "idle":
                     self.busy = False
                 elif kind == "error":
-                    self.workflow.pending_register=None
+                    self.workflow.recover()
                     self.status.set(data)
                     messagebox.showerror("확인이 필요합니다", data)
                 elif kind == "notice":
