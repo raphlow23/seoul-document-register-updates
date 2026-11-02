@@ -104,6 +104,11 @@ class Worker(threading.Thread):
                         BrowserUI(config).open_login()
                         self.config=config
                         self.emit("google_login_success",{"config":config,"message":"일반 브라우저에서 직접 로그인해 시트가 보이는지 확인하세요. 그 브라우저 창을 모두 닫은 뒤 프로그램의 ‘연결 확인’을 눌러 주세요. Cloud/API 설정은 필요하지 않습니다."})
+                    elif cmd == "browser_open":
+                        from browser_sheets import BrowserUI
+                        ui=BrowserUI(self.config)
+                        if ui.available()[0] is not None:ui.connect().close()
+                        else:ui.open_login()
                     elif cmd == "google_logout":
                         if self.config.get("auth_mode")=="browser":
                             self.emit("status","전용 시트 브라우저의 Google 계정 메뉴에서 로그아웃해 주세요. 브라우저 로그인 상태는 Google이 관리합니다.")
@@ -784,7 +789,7 @@ class App:
             self.send("add", paths)
 
     def open_sheet(self):
-        if self.config.get("auth_mode")=="browser":return self.send("browser_login",None)
+        if self.config.get("auth_mode")=="browser":return self.send("browser_open",None)
         webbrowser.open("https://docs.google.com/spreadsheets/d/" + self.config["spreadsheet_id"] + "/edit")
 
     def start_watch(self):
@@ -1026,6 +1031,9 @@ def main():
     try:
         root = tk.Tk()
         if "--self-test" in sys.argv:
+            import ssl
+            import certifi
+            ssl.create_default_context(cafile=certifi.where())
             import tempfile
             import olefile
             from pypdf import PdfReader
