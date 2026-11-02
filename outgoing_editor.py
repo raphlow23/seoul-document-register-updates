@@ -14,7 +14,15 @@ FAMILY_LABELS={"시행문(공문)":"공문","업무연락 발신":"업무연락"
 
 def folder_settings_dialog(app,parent,on_save=None):
     win=tk.Toplevel(parent);win.title("발신 양식별 기본 저장 위치");win.transient(parent);win.grab_set()
-    box=ttk.Frame(win,padding=14);box.pack(fill="both",expand=True)
+    win.geometry(f"900x{min(620,win.winfo_screenheight()-100)}")
+    footer=ttk.Frame(win,padding=12);footer.pack(side="bottom",fill="x")
+    area=ttk.Frame(win);area.pack(fill="both",expand=True)
+    canvas=tk.Canvas(area,highlightthickness=0);scroll=ttk.Scrollbar(area,command=canvas.yview)
+    canvas.configure(yscrollcommand=scroll.set);canvas.pack(side="left",fill="both",expand=True);scroll.pack(side="right",fill="y")
+    box=ttk.Frame(canvas,padding=14);window=canvas.create_window(0,0,anchor="nw",window=box)
+    box.bind("<Configure>",lambda e:canvas.configure(scrollregion=canvas.bbox("all")))
+    canvas.bind("<Configure>",lambda e:canvas.itemconfigure(window,width=e.width))
+    box.columnconfigure(1,weight=1)
     fields={}
     for row,item in enumerate(hwp_docs.catalog()):
         fields[item["id"]]=tk.StringVar(value=hwp_docs.destination(app.config,item))
@@ -33,7 +41,7 @@ def folder_settings_dialog(app,parent,on_save=None):
         if on_save:on_save()
         close()
     win.protocol("WM_DELETE_WINDOW",close)
-    ttk.Button(box,text="기본 설정 저장",command=save).grid(row=6,column=1,sticky="e",pady=12)
+    ttk.Button(footer,text="기본 설정 저장",command=save).pack(side="right")
 
 
 class OutgoingEditor:
@@ -245,8 +253,8 @@ class OutgoingEditor:
         self.vars["filename_suffix"].set(item["suffix"])
         if not self.out.get("sheet_attempted"):
             self.family.set(next(k for k,v in FAMILY_LABELS.items() if v==item["family"]))
-        if not self.vars["receiver"].get() or (_ is not None and self.vars["receiver"].get() in [x["receiver"] for x in self.styles]):
-            self.vars["receiver"].set(item["receiver"])
+        if not self.vars["receiver"].get() or (_ is not None and self.vars["receiver"].get() in [x.get("default_receiver",x["receiver"]) for x in self.styles]):
+            self.vars["receiver"].set(item.get("default_receiver",item["receiver"]))
         if item["family"]!="공문" and self.vars["method"].get()=="문서24":self.vars["method"].set("Email")
         cached=self.bodies_by_style.get(item["id"])
         if cached:
