@@ -283,6 +283,7 @@ class WorkflowShell:
         self.clear_editor();page=self.empty("outgoing_result");self.show("outgoing_result","outgoing",4)
         self.drafts.pop(job["hash"],None)
         out=job.get("outgoing",{});heading(page,"발신대장 · 직인날인대장 등록 완료",out.get("title",job["title"]))
+        ttk.Label(page,text="발신번호",font=("맑은 고딕",12,"bold"),foreground="#667085").pack(anchor="w")
         ttk.Label(page,text=out.get("document_number") or out.get("number", ""),font=("맑은 고딕",30,"bold"),foreground="#1c5295").pack(anchor="w",pady=18)
         ttk.Label(page,text="직인 분류: "+out.get("ledger_type","공문")+" ○  ·  신청부서: "+out.get("stamp",{}).get("department","편의증진부")).pack(anchor="w")
         try:name=hwp_docs.filename(hwp_docs.style(out["template_id"]),out)
@@ -348,6 +349,10 @@ class SimpleOutgoing(OutgoingEditor):
         self.embedded=True;self.on_save=self.on_close=None
         self.owner,self.request=uuid.uuid4().hex,"";self.loading=False
         self.out=defaults(job,app.config);self.out["enabled"]=True
+        from copy import deepcopy
+        self.folder_plan=deepcopy(self.out.get("folder_plan"))
+        self.folder_mode=self.out.get("folder_mode","")
+        self.changing_folder=False
         self.win=ttk.Frame(parent,padding=12);self.win.pack(fill="both",expand=True)
         actions=ttk.Frame(self.win);actions.pack(side="bottom",fill="x",pady=10)
         viewport=ttk.Frame(self.win);viewport.pack(fill="both",expand=True)
@@ -388,6 +393,16 @@ class SimpleOutgoing(OutgoingEditor):
         route=ttk.Frame(panel);route.pack(fill="x")
         ttk.Entry(route,textvariable=self.vars["save_folder"]).pack(side="left",fill="x",expand=True)
         ttk.Button(route,text="변경",command=self.choose_destination).pack(side="right",padx=6)
+        folderbar=ttk.Frame(panel);folderbar.pack(fill="x",pady=6)
+        ttk.Button(folderbar,text="폴더 이름 형식 · 내부 구성",command=self.configure_folders).pack(side="left")
+        self.folder_summary=tk.StringVar(value="기존 폴더 형식을 읽어 새 공문폴더와 내부폴더를 만들 수 있습니다.")
+        ttk.Label(folderbar,textvariable=self.folder_summary,wraplength=650).pack(side="left",padx=10)
+        def changed_folder(*_):
+            if self.changing_folder:return
+            if self.folder_plan and not self.folder_plan.get("folder_name"):
+                self.folder_plan=None;self.folder_mode=""
+                self.folder_summary.set("저장 위치가 변경되었습니다. 기존 폴더 형식을 다시 확인합니다.")
+        self.vars["save_folder"].trace_add("write",changed_folder)
         detail=ttk.Frame(self.win)
         def toggle_details():
             win=tk.Toplevel(self.app.root);win.title("직인 신청정보 · 발신 방법");win.transient(self.app.root);win.grab_set()
@@ -439,10 +454,43 @@ class SimpleOutgoing(OutgoingEditor):
             if not Path(out.get("save_folder","")).is_absolute():raise ValueError("HWP를 저장할 공유폴더를 선택하세요.")
             hwp_docs.check_template(out["template_id"])
         except (ValueError,OSError) as error:return messagebox.showerror("발신 정보 확인",str(error),parent=self.app.root)
+        if not self.folder_plan and self.folder_mode!="direct":return self.configure_folders(resume=True)
+        if self.folder_plan:
+            try:
+                from outgoing_folders import validate as validate_folder
+                validate_folder(out["folder_plan"],out)
+            except ValueError as error:return messagebox.showerror("폴더 구성 확인",str(error),parent=self.app.root)
         self.app.workflow.pending_register=self.job["hash"]
         self.app.workflow.pending_open=self.job["hash"]
         self.out["open_hwp_after_registration"]=True
         self.save()
+
+    def current(self):
+        out=super().current()
+        if self.folder_plan:
+            from copy import deepcopy
+            plan=deepcopy(self.folder_plan)
+            if not plan.get("folder_name"):
+                plan["date"]=out["date"]
+                if plan.get("title_same"):plan["folder_title"]=out["title"]
+            out["folder_plan"]=plan;out["folder_mode"]="case"
+        else:
+            out["folder_plan"]=None;out["folder_mode"]=self.folder_mode
+        return out
+
+    def configure_folders(self,resume=False):
+        if not self.app.workflow.available() or getattr(self.app,"outgoing_folder_dialog",None) is not None:return
+        from outgoing_folder_chooser import OutgoingFolderChooser
+        def applied(plan):
+            self.folder_plan=plan;self.folder_mode="case" if plan else "direct"
+            if plan:
+                self.changing_folder=True
+                self.vars["save_folder"].set(plan.get("save_path") or plan["base"])
+                self.changing_folder=False
+                self.folder_summary.set("공문폴더와 내부폴더 구성을 선택했습니다. 저장 시 최종 순번을 확정합니다.")
+            else:self.folder_summary.set("공문폴더를 만들지 않고 HWP만 선택한 위치에 저장합니다.")
+            if resume:self.app.root.after(100,self.register)
+        OutgoingFolderChooser(self.app,self.job,self.current(),applied)
 
     def prepare_excerpt(self):
         if not self.app.workflow.available():return
