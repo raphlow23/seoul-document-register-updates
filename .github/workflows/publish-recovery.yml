@@ -1,4 +1,4 @@
-name: Publish validated update recovery
+name: Publish tested update recovery
 on:
   workflow_dispatch:
   push:
