@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 브라우저 로그인 수정","draft":True,"prerelease":False,"body":"브라우저 로그인을 일반 창의 직접 로그인과 시트 연결로 분리했습니다. 로그인 창에서 시트를 확인하고 그 창을 모두 닫은 뒤 ‘연결 확인’을 누르세요. 기존 v2.0은 실행 시 자동 업데이트됩니다. 설치 ZIP은 아래 Assets의 SeoulDocumentRegister-Setup-"+VERSION+".zip입니다. 기존 설정과 등록 이력은 보존합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 시트 탭 연결 수정","draft":True,"prerelease":False,"body":"대장 탭이 표시될 때까지 기다리고 정확한 이름과 현재 선택 상태를 확인합니다. 탭 이동을 실제 마우스 입력으로 바꿨습니다. 기존 v2.0은 실행 시 자동 업데이트됩니다. 설치 ZIP은 아래 Assets의 SeoulDocumentRegister-Setup-"+VERSION+".zip입니다. 기존 설정과 등록 이력은 보존합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -65,7 +65,7 @@ def build():
     seed=out/"empty-seed.json";seed.write_text('{"root":"","spreadsheet_id":""}')
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility"],check=True,timeout=60)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs"],check=True,timeout=60)
     startup=out/"browser-startup.json"
     subprocess.run([str(exe),"--test-browser-startup",str(startup)],check=True,timeout=90)
     print("Frozen browser startup check:",startup.read_text())
