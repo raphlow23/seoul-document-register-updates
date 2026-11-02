@@ -7,7 +7,7 @@ import uuid
 
 
 class TitleChooser:
-    def __init__(self, app, jobs):
+    def __init__(self, app, jobs, parent=None):
         self.app, self.jobs = app, jobs
         self.owner = uuid.uuid4().hex
         self.request = ""
@@ -24,13 +24,17 @@ class TitleChooser:
         self.mode = "manual"
         self.agency = ""
         self.loaded = False
-        self.win = tk.Toplevel(app.root)
-        self.win.title("첨부파일에서 수신접수 제목 고르기")
-        self.win.geometry(f"{min(1320, self.win.winfo_screenwidth()-60)}x{min(900, self.win.winfo_screenheight()-100)}")
-        self.win.minsize(950, 650)
-        self.win.transient(app.root)
-        self.win.grab_set()
-        self.win.protocol("WM_DELETE_WINDOW", self.close)
+        self.embedded = parent is not None
+        self.win = ttk.Frame(parent) if self.embedded else tk.Toplevel(app.root)
+        if self.embedded:
+            self.win.pack(fill="both", expand=True)
+        else:
+            self.win.title("첨부파일에서 수신접수 제목 고르기")
+            self.win.geometry(f"{min(1320, self.win.winfo_screenwidth()-60)}x{min(900, self.win.winfo_screenheight()-100)}")
+            self.win.minsize(950, 650)
+            self.win.transient(app.root)
+            self.win.grab_set()
+            self.win.protocol("WM_DELETE_WINDOW", self.close)
         outer = ttk.Frame(self.win, padding=14)
         outer.pack(fill="both", expand=True)
         ttk.Label(outer, text="제목을 가져올 첨부파일을 고르세요", font=("맑은 고딕", 16, "bold")).pack(anchor="w")
@@ -93,8 +97,14 @@ class TitleChooser:
         footer.pack(fill="x")
         self.status = tk.StringVar(value="첨부파일의 OCR 본문과 미리보기를 준비합니다.")
         ttk.Label(footer, textvariable=self.status, wraplength=900).pack(side="left", fill="x", expand=True)
-        self.apply_button = ttk.Button(footer, text="이 제목 사용", command=self.apply, state="disabled")
+        if self.embedded:
+            ttk.Button(footer, text="이전: 첨부파일", command=app.workflow.receipt_home).pack(side="left", padx=6)
+        self.apply_button = ttk.Button(footer, text="다음: 저장 위치" if self.embedded else "이 제목 사용", command=self.apply, state="disabled")
         self.apply_button.pack(side="right")
+        if self.embedded:
+            footer.pack_configure(side="bottom",before=panes,pady=(6,0))
+            for widget in footer.winfo_children():
+                if isinstance(widget,ttk.Label):widget.configure(wraplength=430)
         self.initial_after = self.win.after(100, self.load)
 
     def selected_file(self):
@@ -232,6 +242,8 @@ class TitleChooser:
             return messagebox.showinfo("제목 확인", "사용할 제목을 입력하거나 후보를 선택해 주세요.", parent=self.win)
         if len(title) > 500:
             return messagebox.showinfo("제목 확인", "제목을 500자 이내로 줄여 주세요.", parent=self.win)
+        if self.embedded:
+            self.primary.update({k:v.get().strip() for k,v in self.app.fields.items() if k!="title"})
         self.app.busy = True
         self.app.commands.put(("title_apply", {"jobs": [j["hash"] for j in self.jobs], "primary": self.primary["hash"],
                                               "title": title, "source": {"file_hash": self.selected_file()["hash"], "page": self.page+1, "mode": self.mode},
