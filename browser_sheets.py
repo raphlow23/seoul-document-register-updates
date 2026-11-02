@@ -111,15 +111,27 @@ class BrowserUI:
         raise ValueError("시트 편집 화면을 확인하지 못했습니다. 로그인이 필요하면 이 전용 브라우저 창을 모두 닫고 ‘시트 로그인’을 누르세요. 일반 브라우저에서 직접 로그인하고 시트 표시 확인 후 창을 닫은 다음 ‘연결 확인’을 누르세요.")
 
     def tab(self,name):
+        from browser_tabs import probe
         self.ready()
-        ok=self.evaluate("""(()=>{const n=[...document.querySelectorAll('.docs-sheet-tab-name')].find(x=>x.textContent.trim()==="""+json.dumps(name)+""");if(!n)return false;(n.closest('.docs-sheet-tab')||n).click();return true})()""")
-        if not ok:raise ValueError("브라우저에서 대장 탭을 찾지 못했습니다: "+name)
-        deadline=time.monotonic()+5
+        deadline=time.monotonic()+25
+        clicked=False;names=[]
         while time.monotonic()<deadline:
-            selected=self.evaluate("document.querySelector('.docs-sheet-active-tab .docs-sheet-tab-name')?.textContent.trim()")
-            if selected==name:return
-            time.sleep(.1)
-        raise ValueError("선택한 대장 탭을 확인하지 못했습니다. 시트 화면을 확인해 주세요.")
+            state=self.evaluate(probe(name)) or {}
+            names=state.get("names",names)
+            if state.get("matches",0)>1:
+                raise ValueError("같은 이름으로 보이는 시트 탭이 여러 개입니다. 시트에서 탭 이름을 확인해 주세요: "+name)
+            if state.get("active"):return
+            if state.get("matches")==1 and not clicked:
+                state=self.evaluate(probe(name,scroll=True)) or {}
+                if state.get("visible"):
+                    point={"x":state["x"],"y":state["y"]}
+                    self.call("Input.dispatchMouseEvent",{"type":"mouseMoved",**point})
+                    self.call("Input.dispatchMouseEvent",{"type":"mousePressed","button":"left","buttons":1,"clickCount":1,**point})
+                    self.call("Input.dispatchMouseEvent",{"type":"mouseReleased","button":"left","buttons":0,"clickCount":1,**point})
+                    clicked=True
+            time.sleep(.2)
+        actual=" / ".join(names) if names else "탭 목록이 아직 표시되지 않았습니다"
+        raise ValueError("시트 탭을 확인하지 못했습니다: "+name+"\n현재 화면의 탭: "+actual+"\n시트 로딩이 끝난 뒤 ‘연결 확인’을 다시 눌러 주세요. 설정의 구글 시트 ID도 확인해 주세요.")
 
     def select(self,range_):
         ok=self.evaluate("""(()=>{let x=document.querySelector('#t-name-box');if(!x)return false;x.focus();x.value="""+json.dumps(range_)+""";x.dispatchEvent(new Event('input',{bubbles:true}));return true})()""")
