@@ -1,4 +1,5 @@
 VERSION = "2.0.1"
+# Manual browser sign-in and list-only removal; signed runtime release.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
 UPDATE_REPOSITORY = "raphlow23/seoul-document-register-updates"
