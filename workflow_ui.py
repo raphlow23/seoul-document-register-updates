@@ -29,7 +29,8 @@ def table(parent, columns, extended=False):
 class WorkflowShell:
     def __init__(self, app, outer):
         self.app=app;self.section="receipt";self.step=1;self.current=None
-        self.pending_register=None;self.draft_active=False;self.drafts={}
+        self.pending_register=None;self.pending_open=None;self.draft_active=False;self.drafts={}
+        self.excerpt_request=None
         self.continue_outgoing=tk.BooleanVar(value=False)
         header=ttk.Frame(outer);header.pack(fill="x")
         ttk.Label(header,text="서울센터 공문 업무",font=("맑은 고딕",22,"bold")).pack(side="left")
@@ -169,6 +170,7 @@ class WorkflowShell:
     def recover(self):
         """A failed worker request must leave a usable screen, even if its panel already closed."""
         self.pending_register=None
+        self.pending_open=None
         if self.section=="receipt" and self.current:
             if self.step==3 and getattr(self.app,"route_dialog",None) is None:
                 self.resume_receipt(self.app.jobs[self.current])
@@ -221,16 +223,41 @@ class WorkflowShell:
         self.clear_editor();self.focus(job["hash"])
         if job.get("outgoing",{}).get("sheet_attempted"):return self.outgoing_form(job)
         page=self.empty("outgoing_types");self.show("outgoing_types","outgoing",2)
-        heading(page,"어떤 공문을 작성하시나요?",job["title"])
+        heading(page,"사용할 HWP 양식을 고르세요",job["title"])
         self.style_choice=tk.StringVar(value=job.get("outgoing",{}).get("template_id") or hwp_docs.suggested_style(job)["id"])
         bar=ttk.Frame(page);bar.pack(fill="x",pady=16)
         bar.pack_configure(side="bottom")
-        choices=ttk.Frame(page);choices.pack(fill="both",expand=True)
-        for i,item in enumerate(hwp_docs.catalog()):
-            line=ttk.Frame(choices,padding=10);line.grid(row=i//2,column=i%2,sticky="nsew",padx=4,pady=4)
-            ttk.Radiobutton(line,text=item["label"],value=item["id"],variable=self.style_choice).pack(anchor="w")
-            ttk.Label(line,text=item["family"]+" · "+item["folder"],foreground="#667085").pack(anchor="w",pady=(7,0))
-        choices.columnconfigure((0,1),weight=1)
+        choices=ttk.PanedWindow(page,orient="horizontal");choices.pack(fill="both",expand=True)
+        left,right=ttk.Frame(choices),ttk.Frame(choices,padding=12)
+        choices.add(left,weight=2);choices.add(right,weight=1)
+        picker=table(left,[("title","양식 이름",390),("family","종류",95)])
+        preview=ttk.Label(right,text="양식을 선택하면 원본 미리보기를 표시합니다.",anchor="center",wraplength=280)
+        preview.pack(fill="both",expand=True)
+        detail=tk.StringVar();ttk.Label(right,textvariable=detail,wraplength=300).pack(fill="x",pady=8)
+        def selected(_=None):
+            keys=picker.selection()
+            if not keys:return
+            self.style_choice.set(keys[0]);item=hwp_docs.style(keys[0])
+            from PIL import Image,ImageTk
+            image=hwp_docs.template_preview(keys[0])
+            if image is None:
+                self.template_photo=None;preview.configure(image="",text="이 양식에는 미리보기 이미지가 없습니다.\n선택 후 번호를 받은 사본을 한글에서 엽니다.")
+            else:
+                image.thumbnail((300,300),Image.Resampling.LANCZOS)
+                self.template_photo=ImageTk.PhotoImage(image,master=page);image.close()
+                preview.configure(image=self.template_photo,text="")
+            detail.set(item["label"]+"\n"+item["family"]+" · "+item["folder"])
+        picker.bind("<<TreeviewSelect>>",selected)
+        def reload(item=None):
+            for key in picker.get_children():picker.delete(key)
+            for entry in hwp_docs.catalog():picker.insert("","end",iid=entry["id"],values=(entry["label"],entry["family"]))
+            key=item["id"] if item else self.style_choice.get()
+            if picker.exists(key):picker.selection_set(key);picker.see(key);selected()
+        def add():
+            from template_manager import open_add_template
+            open_add_template(self.app,on_added=reload)
+        reload()
+        ttk.Button(bar,text="양식 추가",command=add).pack(side="left",padx=8)
         ttk.Button(bar,text="이전: 수신 문서",command=self.outgoing_home).pack(side="left")
         ttk.Button(bar,text="다음: 발신 정보",command=lambda:self.outgoing_form(self.app.jobs[self.current],self.style_choice.get())).pack(side="right")
 
@@ -254,6 +281,7 @@ class WorkflowShell:
 
     def outgoing_result(self,job):
         self.clear_editor();page=self.empty("outgoing_result");self.show("outgoing_result","outgoing",4)
+        self.drafts.pop(job["hash"],None)
         out=job.get("outgoing",{});heading(page,"발신대장 · 직인날인대장 등록 완료",out.get("title",job["title"]))
         ttk.Label(page,text=out.get("document_number") or out.get("number", ""),font=("맑은 고딕",30,"bold"),foreground="#1c5295").pack(anchor="w",pady=18)
         ttk.Label(page,text="직인 분류: "+out.get("ledger_type","공문")+" ○  ·  신청부서: "+out.get("stamp",{}).get("department","편의증진부")).pack(anchor="w")
@@ -262,17 +290,54 @@ class WorkflowShell:
         ttk.Label(page,text="HWP 저장 예정\n"+str(Path(out.get("save_folder", ""))/name),wraplength=1000).pack(anchor="w",pady=22)
         ttk.Label(page,text="한글을 열어 원본 양식의 기존 문단에서 수정하세요. Ctrl 스타일·들여쓰기·본문 서식을 유지합니다.",wraplength=1000).pack(anchor="w")
         ttk.Button(page,text="HWP 저장하고 한글 열기",command=lambda:self.export_registered(job)).pack(anchor="w",pady=16)
+        sourcebar=ttk.Frame(page);sourcebar.pack(fill="x",pady=8)
+        source=ttk.Combobox(sourcebar,values=[f"{i+1}. {Path(f['path']).name}" for i,f in enumerate(job["files"])],state="readonly")
+        source.pack(side="left",fill="x",expand=True)
+        main_hash=job.get("title_source",{}).get("file_hash",job["hash"])
+        source.current(next((i for i,f in enumerate(job["files"]) if f["hash"]==main_hash),0))
+        ttk.Button(sourcebar,text="OCR 본문 정리 · 복사",command=lambda:self.request_excerpt(job,job["files"][max(0,source.current())])).pack(side="right",padx=8)
         ttk.Button(page,text="발신 정보 · 저장 위치 확인",command=lambda:self.outgoing_form(self.app.jobs[job["hash"]])).pack(anchor="w",pady=6)
         ttk.Button(page,text="다른 문서 작성",command=self.outgoing_home).pack(anchor="e",side="bottom",pady=12)
+        if self.pending_open==job["hash"]:
+            self.pending_open=None
+            def open_when_ready():
+                if self.current!=job["hash"] or self.section!="outgoing" or self.step!=4:return
+                if not self.available():return self.app.root.after(200,open_when_ready)
+                self.export_registered(self.app.jobs[job["hash"]])
+            self.app.root.after(200,open_when_ready)
+
+    def request_excerpt(self,job,file):
+        owner,request=uuid.uuid4().hex,uuid.uuid4().hex
+        if self.app.send("draft_source",{"owner":owner,"request":request,"file":file}):
+            self.excerpt_request=(owner,request,job["hash"])
+
+    def deliver_excerpt(self,data):
+        expected=self.excerpt_request
+        if not expected or (data.get("owner"),data.get("request"))!=expected[:2]:return
+        self.excerpt_request=None
+        if self.current!=expected[2] or self.section!="outgoing":return
+        from ocr_text_editor import OcrTextEditor
+        OcrTextEditor(self.app,data["text"],parent=self.app.root)
 
     def export_registered(self,job):
         # Use the ledger-authoritative saved metadata, never a suggested or sample number.
         out=job["outgoing"]
+        existing=out.get("hwp_path","")
+        if existing and str(out.get("hwp_saved_number",""))==str(out.get("number","")) and Path(existing).suffix.lower()==".hwp" and Path(existing).is_file():
+            import os
+            try:os.startfile(existing)
+            except OSError as error:messagebox.showerror("한글 열기",str(error))
+            return
         try:
             name=hwp_docs.filename(hwp_docs.style(out["template_id"]),out)
             folder=Path(out.get("save_folder",""))
             if not folder.is_absolute():raise ValueError("발신 정보에서 저장 폴더를 선택하세요.")
         except (ValueError,KeyError,StopIteration) as error:return messagebox.showerror("HWP 저장 확인",str(error))
+        if (folder/name).is_file():
+            import os
+            try:os.startfile(str(folder/name))
+            except OSError as error:messagebox.showerror("한글 열기",str(error))
+            return
         self.app.send("draft_export",{"hash":job["hash"],"outgoing":out,"path":str(folder/name),"copy_only":False,"native_hwp":True})
 
 
@@ -354,7 +419,7 @@ class SimpleOutgoing(OutgoingEditor):
         if not self.out.get("sheet_attempted"):ttk.Button(actions,text="이전: 양식 선택",command=lambda:app.workflow.start_outgoing(job)).pack(side="left")
         ttk.Button(actions,text="작성 정보 저장",command=self.save).pack(side="left",padx=8)
         done=self.out.get("complete") and self.out.get("stamp",{}).get("complete")
-        ttk.Button(actions,text="HWP 저장하고 한글 열기" if done else "발신대장 · 직인날인대장 등록",command=(lambda:self.export(False)) if done else self.register).pack(side="right")
+        ttk.Button(actions,text="작성한 HWP 열기" if done else "발신번호 받고 한글로 열기",command=(lambda:app.workflow.export_registered(app.jobs[job["hash"]])) if done else self.register).pack(side="right")
         self.vars["title"].trace_add("write",self.title_changed)
         old_sender=[self.vars["sender"].get()]
         def sender_changed(*_):
@@ -372,8 +437,11 @@ class SimpleOutgoing(OutgoingEditor):
         try:
             validate({**self.job,"outgoing":out},self.app.config)
             if not Path(out.get("save_folder","")).is_absolute():raise ValueError("HWP를 저장할 공유폴더를 선택하세요.")
-        except ValueError as error:return messagebox.showerror("발신 정보 확인",str(error),parent=self.app.root)
+            hwp_docs.check_template(out["template_id"])
+        except (ValueError,OSError) as error:return messagebox.showerror("발신 정보 확인",str(error),parent=self.app.root)
         self.app.workflow.pending_register=self.job["hash"]
+        self.app.workflow.pending_open=self.job["hash"]
+        self.out["open_hwp_after_registration"]=True
         self.save()
 
     def prepare_excerpt(self):
@@ -400,8 +468,11 @@ class SimpleOutgoing(OutgoingEditor):
             date.fromisoformat(out["date"]);date.fromisoformat(out["stamp"]["date"])
         except ValueError:
             self.app.workflow.pending_register=None
+            self.app.workflow.pending_open=None
             return messagebox.showerror("날짜 확인","날짜를 YYYY-MM-DD 형식으로 입력하세요.")
-        if not self.app.send("outgoing_save",{"hash":self.job["hash"],"outgoing":out}):self.app.workflow.pending_register=None
+        if not self.app.send("outgoing_save",{"hash":self.job["hash"],"outgoing":out}):
+            self.app.workflow.pending_register=None
+            self.app.workflow.pending_open=None
 
     def close(self,saved=False):
         self.win.destroy();self.app.outgoing_editor=None
