@@ -15,7 +15,6 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_ID = 431139315
 
 
 def digest(path):
@@ -27,19 +26,25 @@ def headers():
     return {"Authorization": "Bearer " + os.environ["GH_TOKEN"], "Accept": "application/vnd.github+json"}
 
 
-def info():
-    response=requests.get(f"{API}/releases/{RELEASE_ID}",headers=headers(),timeout=30)
-    response.raise_for_status(); result=response.json()
+def info(create=False):
+    response=requests.get(f"{API}/releases",params={"per_page":100},headers=headers(),timeout=30)
+    response.raise_for_status()
+    result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
+    if result is None and create:
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 브라우저 로그인 수정","draft":True,"prerelease":False,"body":"브라우저 로그인을 일반 창의 직접 로그인과 시트 연결로 분리했습니다. 로그인 창에서 시트를 확인하고 그 창을 모두 닫은 뒤 ‘연결 확인’을 누르세요. 기존 v2.0은 실행 시 자동 업데이트됩니다. 설치 ZIP은 아래 Assets의 SeoulDocumentRegister-Setup-"+VERSION+".zip입니다. 기존 설정과 등록 이력은 보존합니다."},timeout=30)
+        response.raise_for_status();result=response.json()
+    if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
     return result
 
 
 def upload(path):
-    for asset in info()["assets"]:
+    release=info();release_id=release["id"]
+    for asset in release["assets"]:
         if asset["name"]==path.name:
             response=requests.delete(asset["url"],headers=headers(),timeout=30);response.raise_for_status()
     with path.open("rb") as stream:
-        response=requests.post(f"https://uploads.github.com/repos/{UPDATE_REPOSITORY}/releases/{RELEASE_ID}/assets",params={"name":path.name},headers={**headers(),"Content-Type":"application/octet-stream","Content-Length":str(path.stat().st_size)},data=stream,timeout=(30,300))
+        response=requests.post(f"https://uploads.github.com/repos/{UPDATE_REPOSITORY}/releases/{release_id}/assets",params={"name":path.name},headers={**headers(),"Content-Type":"application/octet-stream","Content-Length":str(path.stat().st_size)},data=stream,timeout=(30,300))
     response.raise_for_status(); asset=response.json()
     assert asset["state"]=="uploaded" and asset["size"]==path.stat().st_size
     assert asset["digest"]=="sha256:"+digest(path)
@@ -53,6 +58,10 @@ def build():
     seed=out/"empty-seed.json";seed.write_text('{"root":"","spreadsheet_id":""}')
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility"],check=True,timeout=60)
+    startup=out/"browser-startup.json"
+    subprocess.run([str(exe),"--test-browser-startup",str(startup)],check=True,timeout=90)
+    print("Frozen browser startup check:",startup.read_text())
     model=out/"SpacingModel-0.20.0.zip";component(model)
     licenses=out/"licenses";licenses.mkdir(exist_ok=True)
     for dist in metadata.distributions():
@@ -72,6 +81,7 @@ def build():
         for file in licenses.rglob("*"):
             if file.is_file():z.write(file,str(Path("licenses")/file.relative_to(licenses)))
     manifest={"product":PRODUCT,"version":VERSION,"filename":exe.name,"size":exe.stat().st_size,"sha256":digest(exe),"download_base":f"https://github.com/{UPDATE_REPOSITORY}/releases/download/v{VERSION}","components":{"spacing_model":{"filename":model.name,"size":model.stat().st_size,"sha256":digest(model)}}}
+    info(create=True)
     for path in (exe,model,notices):upload(path)
     result={"manifest":manifest,"assets":[{"name":p.name,"size":p.stat().st_size,"sha256":digest(p)} for p in (exe,model,notices)]}
     path=ROOT/"build-result.json";path.write_text(json.dumps(result,indent=2),encoding="utf-8")
@@ -119,7 +129,7 @@ def finalize():
     expected.update({archive.name:digest(archive),"latest.json":digest(ROOT/"latest.json")})
     actual={a["name"]:a for a in info()["assets"]}
     for name,sha in expected.items():assert actual[name]["state"]=="uploaded" and actual[name]["digest"]=="sha256:"+sha
-    response=requests.patch(f"{API}/releases/{RELEASE_ID}",headers=headers(),json={"draft":False,"make_latest":"true"},timeout=30)
+    response=requests.patch(f"{API}/releases/{release['id']}",headers=headers(),json={"draft":False,"make_latest":"true"},timeout=30)
     response.raise_for_status();assert not response.json()["draft"]
     print("Published verified installer and signed online update.")
 
