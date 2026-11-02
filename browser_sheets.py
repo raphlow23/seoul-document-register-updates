@@ -15,7 +15,9 @@ import subprocess
 import time
 import uuid
 from urllib.parse import unquote
-from urllib.request import urlopen
+from urllib.request import build_opener,ProxyHandler
+from urllib.parse import urlsplit
+from browser_process import launch as launch_browser
 
 
 class BrowserUI:
@@ -28,33 +30,51 @@ class BrowserUI:
         if not re.fullmatch(r"[A-Za-z0-9_-]+",self.sid):raise ValueError("구글 시트 ID를 확인해 주세요.")
         self.ws=None;self.seq=0
 
+    def executable(self):
+        bins=[Path(os.environ.get(key,"C:/"))/rel for key in ("PROGRAMFILES(X86)","PROGRAMFILES","LOCALAPPDATA") for rel in ("Microsoft/Edge/Application/msedge.exe","Google/Chrome/Application/chrome.exe")]
+        exe=next((p for p in bins if p.is_file()),None)
+        if not exe:raise ValueError("브라우저 연결에는 Microsoft Edge 또는 Google Chrome이 필요합니다.")
+        return exe
+
+    def available(self):
+        try:
+            port=int((self.profile/"DevToolsActivePort").read_text().splitlines()[0])
+            if not 1<=port<=65535:return None,[]
+            with build_opener(ProxyHandler({})).open(f"http://127.0.0.1:{port}/json/list",timeout=1) as response:
+                targets=json.load(response)
+            if not isinstance(targets,list):return None,[]
+            return port,targets
+        except (OSError,ValueError,IndexError):return None,[]
+
+    def open_login(self):
+        if self.available()[0] is not None:
+            raise ValueError("열린 ‘전용 시트 브라우저’ 창을 먼저 모두 닫은 뒤 ‘시트 로그인’을 다시 눌러 주세요. 로그인은 일반 브라우저 모드에서 직접 진행합니다.")
+        return launch_browser([str(self.executable()),f"--user-data-dir={self.profile}","--no-first-run","--no-default-browser-check",f"https://docs.google.com/spreadsheets/d/{self.sid}/edit"],self.data/"browser-launch.log")
+
     def connect(self):
         import websocket
-        portfile=self.profile/"DevToolsActivePort"
-        port=None
-        def available():
-            try:
-                p=int(portfile.read_text().splitlines()[0])
-                with urlopen(f"http://127.0.0.1:{p}/json/list",timeout=1) as r:return p,json.load(r)
-            except (OSError,ValueError,IndexError):return None,[]
-        port,targets=available()
+        port,targets=self.available()
         if port is None:
-            bins=[Path(os.environ.get(key,"C:/"))/rel for key in ("PROGRAMFILES(X86)","PROGRAMFILES","LOCALAPPDATA") for rel in ("Microsoft/Edge/Application/msedge.exe","Google/Chrome/Application/chrome.exe")]
-            exe=next((p for p in bins if p.is_file()),None)
-            if not exe:raise ValueError("브라우저 연결에는 Microsoft Edge 또는 Google Chrome이 필요합니다.")
-            subprocess.Popen([str(exe),"--remote-debugging-port=0","--remote-debugging-address=127.0.0.1",f"--user-data-dir={self.profile}","--no-first-run","--no-default-browser-check",f"https://docs.google.com/spreadsheets/d/{self.sid}/edit"],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=subprocess.CREATE_NO_WINDOW)
-            deadline=time.monotonic()+18
+            process=launch_browser([str(self.executable()),"--remote-debugging-port=0","--remote-debugging-address=127.0.0.1",f"--user-data-dir={self.profile}","--no-first-run","--no-default-browser-check",f"https://docs.google.com/spreadsheets/d/{self.sid}/edit"],self.data/"browser-launch.log")
+            deadline=time.monotonic()+40
             while time.monotonic()<deadline:
-                port,targets=available()
+                port,targets=self.available()
                 if port:break
+                if process.poll() not in (None,0):break
                 time.sleep(.2)
-            if port is None:raise ValueError("전용 시트 브라우저를 열지 못했습니다. 브라우저를 닫고 다시 연결해 주세요.")
+            if port is None:raise ValueError("시트 브라우저 연결을 확인하지 못했습니다. 로그인한 전용 브라우저 창을 모두 닫고 ‘연결 확인’을 다시 눌러 주세요. 계속 실패하면 PC의 Edge/Chrome 실행 정책을 확인해야 합니다. 실행 기록: "+str(self.data/"browser-launch.log"))
         target=next((t for t in targets if t.get("type")=="page" and f"/spreadsheets/d/{self.sid}/" in t.get("url","")),None)
         if target is None:
-            # Keep a manual Google sign-in tab intact. The user completes login in this window.
+            # Inspect the existing page before attempting any navigation.
             target=next((t for t in targets if t.get("type")=="page"),None)
             if target is None:raise ValueError("열린 시트 브라우저 탭을 찾지 못했습니다.")
-        self.ws=websocket.create_connection(target["webSocketDebuggerUrl"],timeout=15,suppress_origin=True)
+        endpoint=target["webSocketDebuggerUrl"]
+        address=urlsplit(endpoint)
+        if address.scheme!="ws" or address.hostname not in ("127.0.0.1","localhost") or address.port!=port:
+            raise ValueError("이 PC의 시트 브라우저 연결 주소가 올바르지 않습니다.")
+        if urlsplit(target.get("url","")).hostname=="accounts.google.com":
+            raise ValueError("Google 로그인이 필요합니다. 전용 시트 브라우저 창을 모두 닫고 ‘시트 로그인’을 누르세요. 일반 브라우저에서 로그인과 시트 표시를 확인한 뒤 그 창을 닫고 ‘연결 확인’을 눌러 주세요.")
+        self.ws=websocket.create_connection(endpoint,timeout=15,suppress_origin=True,http_no_proxy=["127.0.0.1","localhost"])
         self.call("Page.bringToFront")
         if f"/spreadsheets/d/{self.sid}/" not in target.get("url",""):
             self.call("Page.navigate",{"url":f"https://docs.google.com/spreadsheets/d/{self.sid}/edit"})
@@ -88,7 +108,7 @@ class BrowserUI:
         while time.monotonic()<deadline:
             if self.evaluate("!!document.querySelector('#t-name-box')"):return
             time.sleep(.25)
-        raise ValueError("열린 브라우저에서 시트 편집 권한이 있는 Google 계정으로 로그인한 뒤 ‘연결 확인’을 다시 눌러 주세요. Cloud/API 설정은 필요하지 않습니다.")
+        raise ValueError("시트 편집 화면을 확인하지 못했습니다. 로그인이 필요하면 이 전용 브라우저 창을 모두 닫고 ‘시트 로그인’을 누르세요. 일반 브라우저에서 직접 로그인하고 시트 표시 확인 후 창을 닫은 다음 ‘연결 확인’을 누르세요.")
 
     def tab(self,name):
         self.ready()
