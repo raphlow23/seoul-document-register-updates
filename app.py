@@ -16,6 +16,7 @@ import google_login
 from core import CATEGORIES, EXTENSIONS, ROOT, SHEET_ID, TAB, Sheets, Store, ingest, process
 from release_info import VERSION,UPDATE_BASE_URL
 from updater import check_and_stage, launch_helper, helper_main
+from queue_visibility import missing_download_source
 
 DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "SeoulDocumentRegister"
 
@@ -31,6 +32,7 @@ class Worker(threading.Thread):
         super().__init__(daemon=True)
         self.commands, self.events, self.config, self.dbpath = commands, events, config.copy(), dbpath
         self.watch, self.seen, self.pending = False, {}, {}
+        self.source_visibility={};self.last_list_sync=0
         self.working = threading.Event()
 
     def emit(self, kind, data):
@@ -88,6 +90,8 @@ class Worker(threading.Thread):
                             self.add(path)
                     elif cmd == "save":
                         self.store.put(data)
+                    elif cmd == "hide_list":
+                        self.hide_list(data)
                     elif cmd == "google_login":
                         config = {**self.config, **data, "auth_mode": "oauth"}
                         self.emit("status", "브라우저의 Google 로그인 창에서 편집 권한이 있는 계정을 선택해 주세요.")
@@ -97,9 +101,9 @@ class Worker(threading.Thread):
                     elif cmd == "browser_login":
                         from browser_sheets import BrowserUI
                         config={**self.config,"auth_mode":"browser"}
-                        ui=BrowserUI(config).connect();ui.close()
+                        BrowserUI(config).open_login()
                         self.config=config
-                        self.emit("google_login_success",{"config":config,"message":"열린 전용 브라우저에서 Google 로그인 후 ‘연결 확인’을 눌러 주세요. Cloud/API 설정은 필요하지 않습니다."})
+                        self.emit("google_login_success",{"config":config,"message":"일반 브라우저에서 직접 로그인해 시트가 보이는지 확인하세요. 그 브라우저 창을 모두 닫은 뒤 프로그램의 ‘연결 확인’을 눌러 주세요. Cloud/API 설정은 필요하지 않습니다."})
                     elif cmd == "google_logout":
                         if self.config.get("auth_mode")=="browser":
                             self.emit("status","전용 시트 브라우저의 Google 계정 메뉴에서 로그아웃해 주세요. 브라우저 로그인 상태는 Google이 관리합니다.")
@@ -251,6 +255,9 @@ class Worker(threading.Thread):
                     self.emit("idle", None)
             except queue.Empty:
                 pass
+            if time.monotonic()-self.last_list_sync>=2:
+                self.last_list_sync=time.monotonic()
+                self.sync_sources()
             if self.watch:
                 self.working.set()
                 try:
@@ -260,6 +267,21 @@ class Worker(threading.Thread):
                     self.emit("error", f"다운로드 감시 중단: {e}")
                 finally:
                     self.working.clear()
+
+    def hide_list(self,keys):
+        for key in keys:
+            job=self.store.get(key)
+            if job:
+                job["list_hidden"]=True
+                self.store.put(job);self.emit("job",job)
+        self.emit("status",f"{len(keys)}개 항목을 목록에서 삭제했습니다. 원본 파일과 등록 이력은 그대로 보관합니다.")
+
+    def sync_sources(self):
+        for job in self.store.all():
+            hidden=missing_download_source(job,self.config.get("downloads"))
+            previous=self.source_visibility.get(job["hash"],False)
+            self.source_visibility[job["hash"]]=hidden
+            if hidden!=previous:self.emit("job",job)
 
     def files(self):
         folder = Path(self.config["downloads"])
@@ -306,8 +328,9 @@ class Worker(threading.Thread):
             if Path(path).suffix.lower()!=".zip":raise
             self.emit("error",Path(path).name+": "+str(error))
             return
-        if not new and job["state"] == "제외":
-            job["state"] = "확인 필요"
+        if not new and (job["state"] == "제외" or job.get("list_hidden")):
+            if job["state"] == "제외":job["state"] = "확인 필요"
+            job.pop("list_hidden",None)
             self.store.put(job)
         if new:
             job["recipient"] = self.config.get("recipient", "")
@@ -431,9 +454,9 @@ class App:
         actions = ttk.Frame(outer)
         actions.pack(fill="x")
         for text, fn in [("첨부에서 제목 고르기", self.choose_title), ("저장 위치 선택", self.choose_routes),
-                         ("선택 공문 저장·등록", self.register), ("수정 저장", self.save_edit), ("본문 / 저장 결과", self.preview), ("목록에서 제외", self.ignore)]:
+                         ("선택 공문 저장·등록", self.register), ("수정 저장", self.save_edit), ("본문 / 저장 결과", self.preview), ("목록 삭제", self.ignore)]:
             ttk.Button(actions, text=text, command=fn).pack(side="left", padx=(0, 6))
-        ttk.Label(outer, text="원본은 그대로 유지합니다 · 지침과 불명확한 파일은 확인 후 등록 · 감시 시작 전 파일은 ‘파일 추가’로 선택", foreground="#667085").pack(anchor="w", pady=(10, 0))
+        ttk.Label(outer, text="목록 삭제는 원본 파일·등록 이력을 보존합니다 · 다운로드에서 삭제·이동된 파일은 목록에서 자동 제외 · 다시 표시는 ‘파일 추가’", foreground="#667085").pack(anchor="w", pady=(10, 0))
         for job in self.jobs.values():
             self.render(job)
         self.worker = Worker(self.commands, self.events, self.config, self.data / "history.sqlite")
@@ -446,7 +469,7 @@ class App:
     def render(self, job):
         key = job["hash"]
         self.jobs[key] = job
-        hidden = job["state"] in ("제외", "묶음에 포함", "묶음 처리 완료")
+        hidden = job.get("list_hidden") or job["state"] in ("제외", "묶음에 포함", "묶음 처리 완료") or missing_download_source(job,self.config.get("downloads"))
         if hidden:
             if self.tree.exists(key):
                 self.tree.delete(key)
@@ -515,7 +538,7 @@ class App:
                 elif kind == "google_login_success":
                     self.config.update(data["config"])
                     self.persist_config()
-                    self.auth_status.set("전용 브라우저 열림 · 로그인 후 연결 확인" if self.config.get("auth_mode")=="browser" else "본인 Google 계정 연결됨")
+                    self.auth_status.set("직접 로그인 → 시트 표시 확인 → 창 닫기 → 연결 확인" if self.config.get("auth_mode")=="browser" else "본인 Google 계정 연결됨")
                     self.status.set(data["message"])
                 elif kind == "google_logout_success":
                     self.auth_status.set("이 PC의 Google 연결을 해제했습니다.")
@@ -753,12 +776,7 @@ class App:
         jobs = self.selected()
         if not jobs:
             return
-        if len(jobs) != 1 or jobs[0].get("sheet_attempted") or jobs[0]["state"] == "완료":
-            return messagebox.showinfo("목록 제외", "등록 시도 전인 공문 한 개를 선택해 주세요.")
-        job = jobs[0]
-        job["state"] = "제외"
-        if self.send("save", job):
-            self.render(job)
+        self.send("hide_list",[job["hash"] for job in jobs])
 
     def add_files(self):
         paths = filedialog.askopenfilenames(title="공문 첨부파일 선택", filetypes=[("공문 및 압축파일", "*.pdf *.hwp *.hwpx *.zip"), ("모든 파일", "*.*")])
@@ -901,7 +919,7 @@ class App:
         auth_select.bind("<<ComboboxSelected>>", mode_changed)
         ttk.Checkbutton(body, text="제목 선택 후 분류·담당자가 확인된 공문은 자동 저장·등록", variable=auto).grid(row=8, column=0, columnspan=3, sticky="w", pady=(14, 5))
         ttk.Label(body, text="스캔 PDF는 PC 내 한국어 OCR로 읽습니다. 인식이 불확실한 문서는 확인 목록에 남깁니다.", wraplength=760).grid(row=9, column=0, columnspan=3, sticky="w")
-        ttk.Label(body, text="브라우저 방식은 전용 Edge/Chrome 창에서 로그인하면 됩니다. Cloud 프로젝트·JSON 불필요.\nAPI 방식을 선택한 경우에만 OAuth/서비스 계정 JSON을 지정합니다.", wraplength=760).grid(row=10, column=0, columnspan=3, sticky="w", pady=12)
+        ttk.Label(body, text="‘시트 로그인’은 제어 기능 없는 일반 Edge/Chrome 창을 엽니다. 직접 로그인해 시트를 확인하고\n그 창을 모두 닫은 뒤 ‘연결 확인’을 누르세요. Cloud 프로젝트·JSON은 API 방식에서만 필요합니다.", wraplength=760).grid(row=10, column=0, columnspan=3, sticky="w", pady=12)
         auto_update = tk.BooleanVar(value=self.config.get("auto_update", True))
         ttk.Checkbutton(body, text="실행 시 새 버전 먼저 자동 설치 (설정과 접수 이력 유지)", variable=auto_update).grid(row=11, column=0, columnspan=3, sticky="w")
         ttk.Label(body, text="실행할 때 GitHub에서 최신 버전을 확인하고 내려받아 자동 설치합니다.\n업무용 PC의 GitHub 로그인·공유폴더 게시가 필요하지 않습니다.", wraplength=760).grid(row=12, column=0, columnspan=3, sticky="w", pady=8)
@@ -947,6 +965,10 @@ class App:
 
 
 def main():
+    if len(sys.argv)==3 and sys.argv[1]=="--test-browser-startup":
+        from browser_launch_check import check
+        Path(sys.argv[2]).write_text(json.dumps(check()),encoding="utf-8")
+        return
     if len(sys.argv)==5 and sys.argv[1]=="--test-online-update":
         from updater import check_and_stage,file_hash
         update=check_and_stage(sys.argv[2],sys.argv[3],current="0.0.0")
