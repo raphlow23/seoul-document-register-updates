@@ -156,6 +156,48 @@ def remember_profile(config,slot,path,template,agency,children,save_in="outgoing
     return {key:config[key] for key in ("folder_profiles","folder_defaults","folder_children")}
 
 
+def preserve_changed_profiles(previous,updated):
+    """Read the old locations before a settings change replaces their paths, even on first use."""
+    changed=False
+    def capture(slot,path,agency,save_in):
+        nonlocal changed
+        try:
+            path=Path(path)
+            if not path.is_absolute() or not path.is_dir():return
+            record=describe_directory(path)
+            old=previous.get("folder_profiles",{}).get(slot,{})
+            if not record["names"] and not old.get("template"):return
+            template=preferred_template(record,previous,slot)
+            children=old.get("children",previous.get("folder_children",{}).get(agency,previous.get("folder_defaults",{}).get("children",CHILD_KINDS)))
+            profile={"path":record["path"],"template":template,"agency":agency,"children":list(children),"save_in":old.get("save_in",save_in)}
+            updated.setdefault("folder_profiles",{})[slot]=profile
+            updated.setdefault("folder_defaults",profile.copy())
+            updated.setdefault("folder_children",{}).setdefault(agency,list(children))
+            changed=True
+        except OSError:
+            # Keep any already saved profile when the old share is unavailable.
+            return
+    if previous.get("root") and previous.get("root")!=updated.get("root"):
+        root=Path(previous["root"])
+        for agency,paths in AGENCIES.items():
+            for relative in paths:
+                capture("incoming:"+relative,root/relative,agency,"incoming")
+                if relative.startswith("5."):
+                    try:
+                        for child in (root/relative).iterdir():
+                            if child.is_dir() and re.match(r"^[01][. ]",child.name) and ("지침" in child.name or "업무연락" in child.name):capture("incoming:"+str(Path(relative)/child.name),child,agency,"incoming")
+                    except OSError:pass
+    if previous.get("root")!=updated.get("root") or previous.get("outgoing_folders",{})!=updated.get("outgoing_folders",{}):
+        from hwp_documents import catalog,destination as hwp_destination
+        for item in catalog():
+            old_path=hwp_destination(previous,item);new_path=hwp_destination(updated,item)
+            if old_path==new_path:continue
+            slot="outgoing:"+item["id"]
+            agency=previous.get("folder_profiles",{}).get(slot,{}).get("agency") or ("중앙센터 공문" if item["id"]=="2" else "서울시청 공문" if item["id"] in ("3","6") else "기초센터 공문")
+            capture(slot,old_path,agency,"outgoing")
+    return {key:updated[key] for key in ("folder_profiles","folder_defaults","folder_children")} if changed else None
+
+
 def read_sequence(name, template):
     pattern, found = [], False
     for literal, field, spec, conversion in string.Formatter().parse(template):
