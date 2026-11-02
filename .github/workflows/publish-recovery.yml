@@ -1,0 +1,26 @@
+name: Publish one-time update recovery
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-recovery.yml']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package recovery files
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+          with zipfile.ZipFile('SeoulDocumentRegister-Update-Repair-2.0.1.zip','w',zipfile.ZIP_DEFLATED) as z:
+              for name in ('repair-update.cmd','repair-update.ps1','repair-readme.txt'):
+                  z.write(name,name)
+          PY
+      - name: Publish recovery ZIP
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v2.0.1 SeoulDocumentRegister-Update-Repair-2.0.1.zip --clobber --repo raphlow23/seoul-document-register-updates
