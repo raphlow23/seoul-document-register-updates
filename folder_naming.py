@@ -12,6 +12,7 @@ AGENCIES = {
 }
 TEMPLATES = ("{date}_{title}", "{ymd}_{title}", "{dotdate} {title}", "{year}-{number:03d} {title}", "{number:03d}. {title}", "{title}")
 CHILD_KINDS=("incoming","outgoing","reply")
+AGENCY_SUFFIX=re.compile(r"(\s*\((?:[^()\r\n]*(?:센터|시청|중앙|기초|서울시)[^()\r\n]*(?:발송|제출|회신|협의|접수)|시청|중앙|센터|기초센터|25개구)\))$")
 
 
 def child_folders(agency,selected):
@@ -38,6 +39,10 @@ def safe_component(text):
 
 def folder_name(template, title, day, number=None):
     day = date.fromisoformat(day)
+    suffix=AGENCY_SUFFIX.search(template)
+    if suffix:
+        tag=suffix[0].strip()
+        if title.rstrip().endswith(tag):title=title.rstrip()[:-len(tag)].rstrip()
     values = {"title": title, "date": day.isoformat(), "ymd": day.strftime("%Y%m%d"), "dotdate": day.strftime("%Y.%m.%d"),
               "year": day.year, "yy":day.year%100, "month": day.month, "day": day.day, "number": int(number) if number is not None else None}
     result, titles = [], 0
@@ -56,6 +61,25 @@ def folder_name(template, title, day, number=None):
 
 def infer_template(name):
     # Preserve separators and number padding. Unsupported prefixes require explicit choice.
+    suffix=AGENCY_SUFFIX.search(name)
+    if suffix:
+        body=name[:suffix.start()]
+        if body:
+            literal=suffix[0].replace("{","{{").replace("}","}}")
+            return (infer_template(body) or "{title}")+literal
+    enclosed=re.match(r"^(\[|\()(\d{1,5})(\]|\))([ ._-]*)(.+)$",name)
+    if enclosed and (enclosed[1],enclosed[3]) in (("[","]"),("(",")")):
+        rest=infer_template(enclosed[5]) or "{title}"
+        if "{number" not in rest:return enclosed[1]+"{number:0"+str(len(enclosed[2]))+"d}"+enclosed[3]+enclosed[4]+rest
+    named=re.match(r"^((?:시행문|공문|업무연락|처리지침|협의|회신|접수)\s*(?:제\s*)?)(\d{1,5})([ ._-]+)(.+)$",name)
+    if named:
+        rest=infer_template(named[4]) or "{title}"
+        if "{number" not in rest:return named[1]+"{number:0"+str(len(named[2]))+"d}"+named[3]+rest
+    spaced=re.match(r"^((?:20)?\d{2})([.-]\s*)(\d{1,2})([.-]\s*)(\d{1,2})([ ._-]+)(.+)$",name)
+    if spaced and spaced[2].strip()==spaced[4].strip() and (" " in spaced[2] or " " in spaced[4]):
+        try:date(int(spaced[1]) if len(spaced[1])==4 else 2000+int(spaced[1]),int(spaced[3]),int(spaced[5]))
+        except ValueError:return None
+        return ("{year}" if len(spaced[1])==4 else "{yy:02d}")+spaced[2]+("{month:02d}" if len(spaced[3])==2 else "{month}")+spaced[4]+("{day:02d}" if len(spaced[5])==2 else "{day}")+spaced[6]+(infer_template(spaced[7]) or "{title}")
     patterns = [
         (r"^((?:20)?\d{2})([-.])(\d{1,2})\2(\d{1,2})([ ._\-)]+)(.+)$", "date"),
         (r"^(20\d{6})([ ._\-)]+)(.+)$", "ymd"),
@@ -100,6 +124,12 @@ def destination(root, relative):
 
 def describe_folder(root, relative):
     directory = destination(root, relative)
+    return {**describe_directory(directory),"relative":relative}
+
+
+def describe_directory(directory):
+    directory=Path(directory)
+    if not directory.is_absolute() or not directory.is_dir():raise ValueError("기존 폴더를 읽을 저장 위치를 선택하세요.")
     names = sorted((p.name for p in directory.iterdir() if p.is_dir() and not p.name.startswith(".")), reverse=True)
     examples = names[:100]
     styles = {}
@@ -107,7 +137,23 @@ def describe_folder(root, relative):
         template = infer_template(example)
         if template: styles.setdefault(template, []).append(example)
     ordered = sorted(styles, key=lambda t: len(styles[t]), reverse=True)
-    return {"relative": relative, "examples": examples[:8], "names":names,"next_number":sequence_from_names(names), "styles": [{"template": t, "samples": styles[t][:3]} for t in ordered]}
+    return {"path":str(directory), "examples": examples[:8], "names":names,"next_number":sequence_from_names(names), "styles": [{"template": t, "samples": styles[t][:3]} for t in ordered]}
+
+
+def preferred_template(record,config,slot):
+    saved=config.get("folder_profiles",{}).get(slot,{})
+    if record["names"]:
+        if saved.get("path")==record["path"] and saved.get("template"):return saved["template"]
+        if record["styles"]:return record["styles"][0]["template"]
+    return saved.get("template") or config.get("route_templates",{}).get(slot.removeprefix("incoming:")) or config.get("folder_defaults",{}).get("template") or "{title}"
+
+
+def remember_profile(config,slot,path,template,agency,children,save_in="outgoing"):
+    profile={"path":str(Path(path).resolve()),"template":template,"agency":agency,"children":list(children),"save_in":save_in}
+    config.setdefault("folder_profiles",{})[slot]=profile
+    config["folder_defaults"]=profile.copy()
+    config.setdefault("folder_children",{})[agency]=list(children)
+    return {key:config[key] for key in ("folder_profiles","folder_defaults","folder_children")}
 
 
 def read_sequence(name, template):
@@ -146,7 +192,7 @@ def plan_folders(job, root):
     for target in job["routing"]["targets"]:
         if target.get("folder_number") is None and any(f=="number" for _,f,_,_ in string.Formatter().parse(target["template"])):
             target["folder_number"] = next_sequence(destination(root,target["relative"]),target["template"])
-        target["folder_name"] = folder_name(target["template"],job["title"],job["date"],target.get("folder_number"))
+        target["folder_name"] = folder_name(target["template"],target.get("folder_title") or job["routing"].get("folder_title") or job["title"],job["date"],target.get("folder_number"))
 
 
 def route_tree(root, agency):
@@ -178,7 +224,7 @@ def preflight(job, root):
         if not any(relative == p or PureWindowsPath(relative).is_relative_to(PureWindowsPath(p)) for p in AGENCIES[agency]):
             raise ValueError("선택한 공문 종류에 포함된 저장 폴더를 선택해 주세요.")
         destination(root, relative)
-        folder_name(target["template"], job["title"], job["date"], target.get("folder_number"))
+        folder_name(target["template"], target.get("folder_title") or routing.get("folder_title") or job["title"], job["date"], target.get("folder_number"))
     from core import digest
     for file in job["files"]:
         if not Path(file["path"]).is_file() or digest(file["path"]) != file["hash"]:
