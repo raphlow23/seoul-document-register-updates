@@ -23,10 +23,11 @@ class RouteChooser:
             self.win.transient(app.root)
             self.win.grab_set()
             self.win.protocol("WM_DELETE_WINDOW", self.close)
-        outer = ttk.Frame(self.win, padding=18)
+        outer = ttk.Frame(self.win, padding=10 if self.embedded else 18)
         outer.pack(fill="both", expand=True)
         ttk.Label(outer, text="공문 종류를 고르고 저장할 곳을 모두 체크하세요", font=("맑은 고딕", 16, "bold")).pack(anchor="w")
-        ttk.Label(outer, text=job["title"], wraplength=1050).pack(anchor="w", pady=(5, 12))
+        title=job["title"] if not self.embedded else job["title"][:75]+("…" if len(job["title"])>75 else "")
+        ttk.Label(outer, text=title, wraplength=950).pack(anchor="w", pady=(5, 8))
         self.agency = tk.StringVar(value=job.get("routing",{}).get("agency") or agency_for(job.get("category", "")))
         kind = ttk.Frame(outer)
         kind.pack(fill="x")
@@ -61,14 +62,21 @@ class RouteChooser:
         panes.add(right, weight=3)
         ttk.Label(left, text="저장 위치 — 여러 곳 선택 가능", font=("맑은 고딕",11,"bold")).pack(anchor="w", pady=(0,6))
         self.children={key:tk.BooleanVar(value=key in job.get("routing",{}).get("children",[] if job.get("files_started") else CHILD_KINDS)) for key in CHILD_KINDS}
+        childbar=ttk.Frame(outer) if self.embedded else left
+        if self.embedded:
+            childbar.pack(fill="x",before=panes,pady=(6,0))
+            ttk.Label(childbar,text="만들 내부폴더:").pack(side="left",padx=(0,10))
         for key,label in zip(CHILD_KINDS,("공문 (기관별 기초공문/중앙공문/시청공문)","센터발송","회신 (기관별 기초회신/중앙회신/시청회신)")):
-            ttk.Checkbutton(left,text=label,variable=self.children[key],command=self.redraw_preview).pack(anchor="w")
-        self.tree = ttk.Treeview(left, show="tree", selectmode="browse", height=12)
-        self.tree.pack(fill="both", expand=True)
+            text={"incoming":"기관별 공문","outgoing":"센터발송","reply":"기관별 회신"}[key] if self.embedded else label
+            ttk.Checkbutton(childbar,text=text,variable=self.children[key],command=self.redraw_preview).pack(side="left" if self.embedded else "top",anchor="w",padx=(0,10))
+        area=ttk.Frame(left);area.pack(fill="both",expand=True)
+        self.tree = ttk.Treeview(area, show="tree", selectmode="browse", height=12)
+        scroll=ttk.Scrollbar(area,command=self.tree.yview);self.tree.configure(yscrollcommand=scroll.set)
+        self.tree.pack(side="left",fill="both", expand=True);scroll.pack(side="right",fill="y")
         self.tree.bind("<ButtonRelease-1>", self.click)
-        ttk.Label(left, text="체크된 각 위치 안에 새 공문 폴더를 만듭니다.\n원본 첨부파일은 다운로드 폴더에 남습니다.", wraplength=380).pack(anchor="w", pady=8)
+        if not self.embedded:ttk.Label(left, text="체크된 각 위치 안에 새 공문 폴더를 만듭니다.\n원본 첨부파일은 다운로드 폴더에 남습니다.", wraplength=380).pack(anchor="w", pady=8)
         ttk.Label(right, text="기존 폴더 이름 예시", font=("맑은 고딕",11,"bold")).pack(anchor="w")
-        self.examples = tk.Listbox(right, height=6, font=("맑은 고딕",10))
+        self.examples = tk.Listbox(right, height=3 if self.embedded else 6, font=("맑은 고딕",10))
         self.examples.pack(fill="x", pady=7)
         self.examples.bind("<<ListboxSelect>>", self.select_example)
         ttk.Label(right, text="새 폴더 이름 형식 — 기존 예시를 클릭하면 인식한 형식을 사용합니다.", wraplength=580).pack(anchor="w")
@@ -94,6 +102,7 @@ class RouteChooser:
         else:
             ttk.Button(footer, text="선택만 적용", command=lambda:self.apply(False)).pack(side="right")
         ttk.Button(footer, text="저장하고 수신 접수", command=lambda:self.apply(True)).pack(side="right", padx=8)
+        if self.embedded:footer.pack_configure(side="bottom",before=panes,pady=(6,0))
         self.initial_after = self.win.after(100, self.load) if self.agency.get() else None
 
     def load(self):
