@@ -1,4 +1,4 @@
-name: Publish one-time update recovery
+name: Publish validated update recovery
 on:
   workflow_dispatch:
   push:
