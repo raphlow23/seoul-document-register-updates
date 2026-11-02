@@ -51,6 +51,9 @@ def merge_edit(job,edited):
     edited={**edited}
     for key in ("id","row","number","document_number","tab","sheet_attempted","complete"):
         if key in old:edited[key]=old[key]
+    if old.get("complete"):
+        for key in ("hwp_path","hwp_saved_number"):
+            if key in old:edited[key]=old[key]
     edited["stamp"]={**edited.get("stamp",{})}
     for key in ("row","number","sheet_attempted","complete"):
         if key in old.get("stamp",{}):edited["stamp"][key]=old["stamp"][key]
