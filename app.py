@@ -149,11 +149,14 @@ class Worker(threading.Thread):
                         if data.get("native_hwp"):
                             from hwp_documents import export_hwp,style
                             export_hwp(style(out["template_id"]),out,data["path"])
+                            out["hwp_path"]=data["path"]
+                            out["hwp_saved_number"]=str(out.get("number") or out.get("file_number",""))
                         elif data["copy_only"]:
                             template_copy(out["template_path"],data["path"])
                         else:
                             fill_hwpx(out["template_path"],data["path"],field_values(job,out))
                         self.store.put(job)
+                        self.emit("job",job)
                         self.emit("draft_exported",{"path":data["path"],"copy_only":data["copy_only"],"open_after":data.get("native_hwp",False),"body_paste_needed":out.get("hwp_body_paste_needed",False) if data.get("native_hwp") else False})
                     elif cmd == "title_prepare":
                         from title_tools import suggestions, agency_key, pdf_preview
@@ -350,6 +353,9 @@ class Worker(threading.Thread):
             job = saved
         self.emit("status", "저장·접수등록 중: " + job["title"])
         try:
+            if job.get("outgoing",{}).get("enabled") and job["outgoing"].get("open_hwp_after_registration") and not job["outgoing"].get("complete"):
+                from hwp_documents import check_template
+                check_template(job["outgoing"]["template_id"])
             if not job.get("routing") and not job.get("receipt_done"):
                 raise ValueError("‘저장 위치 선택’에서 공문 종류와 저장할 폴더를 먼저 골라 주세요.")
             result = process(job, self.config, self.store)
@@ -461,12 +467,15 @@ class App:
                 elif kind == "draft_source_result":
                     editor=getattr(self,"outgoing_editor",None)
                     if editor is not None:editor.deliver(data)
+                    self.workflow.deliver_excerpt(data)
                 elif kind == "ocr_clean_result":
                     editor=getattr(self,"ocr_text_editor",None)
                     if editor is not None:editor.deliver(data)
                 elif kind == "draft_exported":
                     self.status.set("한글 문서를 새 파일로 저장했습니다: "+data["path"])
-                    messagebox.showinfo("새 공문 저장",data["path"]+"\n\n원본 폼·스타일·문단 서식을 유지한 HWP를 엽니다. 기존 문단 안에서 수정해 주세요."+("\n프로그램에서 편집한 본문은 ‘본문 복사’로 복사해 한글의 필요한 문단에 넣어 주세요." if data.get("body_paste_needed") else ""))
+                    if data.get("open_after"):
+                        self.status.set("번호·오늘 날짜를 넣은 HWP를 엽니다. OCR 또는 한글에서 복사한 문구를 붙여넣고 Ctrl+S로 저장하세요.")
+                    else:messagebox.showinfo("새 공문 저장",data["path"])
                     if data["copy_only"] or data.get("open_after"):
                         try:os.startfile(data["path"])
                         except OSError:pass
