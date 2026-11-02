@@ -71,4 +71,4 @@ try {
 }
 if ($setup.ExitCode -ne 0) { throw '프로그램 교체는 끝났으나 자동 업데이트 연결 설정을 확인하지 못했습니다.' }
 Write-Host '복구 완료: v2.0.1. 앞으로 실행할 때 새 버전을 자동으로 확인합니다.' -ForegroundColor Green
-if (-not $NoLaunch) { Start-Process -FilePath $target -WorkingDirectory (Split-Path -Parent $target) -WindowStyle Hidden }
+if (-not $NoLaunch) { Start-Process -FilePath $target -WorkingDirectory (Split-Path -Parent $target) -WindowStyle Normal }
