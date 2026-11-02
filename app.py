@@ -123,6 +123,11 @@ class Worker(threading.Thread):
                             if not job.get("files_started"):job.update(data.get("receipt_fields",{}))
                             elif data.get("receipt_fields",{}).get("receipt_type"):job["receipt_type"]=data["receipt_fields"]["receipt_type"]
                         merge_edit(job,data["outgoing"])
+                        plan=job["outgoing"].get("folder_plan")
+                        if plan:
+                            from folder_naming import remember_profile
+                            prefs=remember_profile(self.config,"outgoing:"+job["outgoing"]["template_id"],plan["base"],plan["template"],plan["agency"],plan["children"],plan["save_in"])
+                            self.emit("folder_preferences",prefs)
                         self.store.put(job)
                         self.emit("job",job)
                         self.emit("outgoing_saved",{"hash":job["hash"],"template":job["outgoing"].get("template_path","")})
@@ -147,7 +152,12 @@ class Worker(threading.Thread):
                         merge_edit(job,data["outgoing"])
                         out=job["outgoing"]
                         if data.get("native_hwp"):
-                            from hwp_documents import export_hwp,style
+                            from hwp_documents import export_hwp,style,filename
+                            name=filename(style(out["template_id"]),out)
+                            if out.get("folder_plan"):
+                                from outgoing_folders import prepare
+                                data["path"]=str(prepare(job,self.config,self.store)/name)
+                                self.emit("job",job)
                             export_hwp(style(out["template_id"]),out,data["path"])
                             out["hwp_path"]=data["path"]
                             out["hwp_saved_number"]=str(out.get("number") or out.get("file_number",""))
@@ -197,6 +207,9 @@ class Worker(threading.Thread):
                     elif cmd == "route_tree":
                         from folder_naming import route_tree
                         self.emit("route_result", {**data,"records":route_tree(self.config["root"],data["agency"])})
+                    elif cmd == "folder_describe":
+                        from folder_naming import describe_directory
+                        self.emit("outgoing_folder_result",{**data,"record":describe_directory(data["path"])})
                     elif cmd == "route_apply":
                         from folder_naming import preflight
                         job = self.store.get(data["hash"])
@@ -206,7 +219,8 @@ class Worker(threading.Thread):
                         if job.get("files_started"):
                             before = {(t["relative"],t["template"]) for t in old_targets.values()}
                             after = {(t["relative"],t["template"]) for t in data["routing"]["targets"]}
-                            if before != after or job.get("routing",{}).get("children",[])!=data["routing"].get("children",[]) or job.get("routing",{}).get("agency")!=data["routing"]["agency"]:
+                            same_title=(job.get("routing",{}).get("folder_title") or job["title"])==(data["routing"].get("folder_title") or data["fields"].get("title",job["title"]))
+                            if not same_title or before != after or job.get("routing",{}).get("children",[])!=data["routing"].get("children",[]) or job.get("routing",{}).get("agency")!=data["routing"]["agency"]:
                                 raise ValueError("이미 파일 저장을 시작한 공문입니다. 기존 위치·이름으로 재시도해 주세요.")
                         if job.get("sheet_attempted") and job.get("routing",{}).get("agency") != data["routing"]["agency"]:
                             raise ValueError("등록을 시도한 공문의 종류는 변경할 수 없습니다.")
@@ -228,6 +242,10 @@ class Worker(threading.Thread):
                         self.store.put(job)
                         self.emit("job",job)
                         self.config.setdefault("route_templates",{}).update({t["relative"]:t["template"] for t in job["routing"]["targets"]})
+                        from folder_naming import remember_profile,destination
+                        for target in job["routing"]["targets"]:
+                            prefs=remember_profile(self.config,"incoming:"+target["relative"],destination(self.config["root"],target["relative"]),target["template"],job["routing"]["agency"],job["routing"].get("children",[]),"incoming")
+                        self.emit("folder_preferences",prefs)
                         self.emit("route_applied",{"hash":job["hash"],"templates":self.config["route_templates"],"document_template":job.get("outgoing",{}).get("template_path","")})
                         if data["execute"]:
                             self.execute(job)
@@ -356,6 +374,9 @@ class Worker(threading.Thread):
             if job.get("outgoing",{}).get("enabled") and job["outgoing"].get("open_hwp_after_registration") and not job["outgoing"].get("complete"):
                 from hwp_documents import check_template
                 check_template(job["outgoing"]["template_id"])
+                if job["outgoing"].get("folder_plan"):
+                    from outgoing_folders import validate
+                    validate(job["outgoing"]["folder_plan"],job["outgoing"])
             if not job.get("routing") and not job.get("receipt_done"):
                 raise ValueError("‘저장 위치 선택’에서 공문 종류와 저장할 폴더를 먼저 골라 주세요.")
             result = process(job, self.config, self.store)
@@ -521,6 +542,11 @@ class App:
                 elif kind == "route_result":
                     dialog = getattr(self,"route_dialog",None)
                     if dialog is not None: dialog.deliver(data)
+                elif kind == "folder_preferences":
+                    self.config.update(data);self.persist_config()
+                elif kind == "outgoing_folder_result":
+                    dialog=getattr(self,"outgoing_folder_dialog",None)
+                    if dialog is not None:dialog.deliver(data)
                 elif kind == "route_applied":
                     self.config["route_templates"] = data["templates"]
                     if data.get("document_template"):self.config["document_template"]=data["document_template"]
