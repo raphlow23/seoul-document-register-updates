@@ -29,7 +29,7 @@ def run():
         store=Store(base/"history.sqlite")
         for job in jobs:store.put(job)
         store.db.close()
-        root=tk.Tk();root.withdraw();errors=[];writes=[]
+        root=tk.Tk();root.withdraw();errors=[];writes=[];fail_receipt=[True]
         app=App(root,base,smoke=True);flow=app.workflow
         app.config.update(root=str(shared),downloads=str(downloads),recipient="담당자")
         app.commands.put(("config",app.config.copy()))
@@ -50,6 +50,9 @@ def run():
             walk(flow.content)
             root.withdraw()
         def process(job,config,db):
+            if not job.get("receipt_done") and fail_receipt[0]:
+                fail_receipt[0]=False
+                raise ConnectionError("fixture: connection failed before writing")
             writes.append("outgoing" if job.get("receipt_done") else "receipt")
             if not job.get("receipt_done"):
                 assert not job.get("outgoing",{}).get("enabled"), "Receipt must not prematurely register outgoing"
@@ -78,6 +81,10 @@ def run():
                 preview=route.preview.get("1.0","end")
                 assert "005. 확정 제목" in preview and "2.중앙회신" in preview
                 flow.continue_outgoing.set(True);route.apply(True)
+                wait(lambda:bool(errors));idle()
+                assert flow.step==3 and flow.pages["route"].winfo_children(), "Failure must leave usable retry controls"
+                assert writes==[], "Failed receipt must not silently create an outgoing record"
+                errors.clear();app.send("process",[app.jobs[h0]])
                 wait(lambda:flow.step==4);idle()
                 assert writes==["receipt"] and app.jobs[h0]["number"]=="581"
                 assert not app.tree.exists(h0) and flow.history_tree.exists(h0)
@@ -87,6 +94,7 @@ def run():
                 assert editor.current()["ledger_type"]=="처리지침"
                 assert editor.stamp["department"].get()=="편의증진부" and editor.stamp["person"].get()==""
                 editor.vars["title"].set("수정한 발신 제목");assert not editor.same.get()
+                editor.vars["receiver"].set("시험 수신 기관")
                 editor.vars["sender"].set("발신 담당자");assert editor.stamp["applicant"].get()=="발신 담당자"
                 # Navigation retains in-progress edits; it never clears registration history.
                 flow.history_home();flow.outgoing_form(app.jobs[h0])
