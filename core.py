@@ -189,6 +189,13 @@ def ingest(path, store, progress=None):
     old = store.get(hash_)
     if old:
         if old.get("archive_alias"):old=store.get(old["parent"]) or old
+        changed=False
+        for file in old.get("files",[]):
+            if file.get("hash")==hash_ and not Path(file["path"]).is_file():
+                file["path"]=str(path);changed=True
+        if old.get("source_archive") and path.suffix.lower()==".zip" and not Path(old["source_archive"]).is_file():
+            old["source_archive"]=str(path);changed=True
+        if changed:store.put(old)
         return old, False
     if path.suffix.lower()==".zip":
         from zip_intake import ingest_zip
