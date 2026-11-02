@@ -15,7 +15,7 @@ from core import Store
 class FolderWorkflowTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
-        self.root=Path(self.temp.name);self.base=self.root/"시행문";self.base.mkdir()
+        self.root=Path(self.temp.name).resolve();self.base=self.root/"시행문";self.base.mkdir()
         self.store=Store(self.root/"history.sqlite");self.addCleanup(self.store.db.close)
 
     def job(self,template="{number:03d}. {title}",identity="out1"):
