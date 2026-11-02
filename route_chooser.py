@@ -7,18 +7,22 @@ from folder_naming import AGENCIES, TEMPLATES, agency_for, folder_name, sequence
 
 
 class RouteChooser:
-    def __init__(self, app, job):
+    def __init__(self, app, job, parent=None):
         self.app, self.job = app, job
         self.owner, self.request = uuid.uuid4().hex, ""
         self.records, self.selected, self.templates = {}, set(), {}
         self.current, self.changing = None, False
-        self.win = tk.Toplevel(app.root)
-        self.win.title("공문 종류와 저장 위치 선택")
-        self.win.geometry(f"{min(1120,self.win.winfo_screenwidth()-60)}x{min(800,self.win.winfo_screenheight()-100)}")
-        self.win.minsize(900, 630)
-        self.win.transient(app.root)
-        self.win.grab_set()
-        self.win.protocol("WM_DELETE_WINDOW", self.close)
+        self.embedded = parent is not None
+        self.win = ttk.Frame(parent) if self.embedded else tk.Toplevel(app.root)
+        if self.embedded:
+            self.win.pack(fill="both", expand=True)
+        else:
+            self.win.title("공문 종류와 저장 위치 선택")
+            self.win.geometry(f"{min(1120,self.win.winfo_screenwidth()-60)}x{min(800,self.win.winfo_screenheight()-100)}")
+            self.win.minsize(900, 630)
+            self.win.transient(app.root)
+            self.win.grab_set()
+            self.win.protocol("WM_DELETE_WINDOW", self.close)
         outer = ttk.Frame(self.win, padding=18)
         outer.pack(fill="both", expand=True)
         ttk.Label(outer, text="공문 종류를 고르고 저장할 곳을 모두 체크하세요", font=("맑은 고딕", 16, "bold")).pack(anchor="w")
@@ -44,6 +48,12 @@ class RouteChooser:
         outcheck.pack(side="left",padx=10)
         if self.outgoing.get("sheet_attempted"):outcheck.configure(state="disabled")
         ttk.Button(registration,text="발신 정보·공문 작성",command=lambda:self.edit_outgoing(True)).pack(side="left")
+        if self.embedded:
+            for widget in registration.winfo_children()[2:]:widget.pack_forget()
+            # Guided receipts commit only the receipt. Outgoing is reviewed in its own step.
+            if not self.outgoing.get("sheet_attempted"):
+                self.outgoing["enabled"]=False
+                self.outgoing_enabled.set(False)
         panes = ttk.PanedWindow(outer, orient="horizontal")
         panes.pack(fill="both", expand=True, pady=12)
         left, right = ttk.Frame(panes), ttk.Frame(panes, padding=(14,0,0,0))
@@ -78,8 +88,12 @@ class RouteChooser:
         ttk.Label(outer, textvariable=self.status, wraplength=1050).pack(fill="x", pady=6)
         footer = ttk.Frame(outer)
         footer.pack(fill="x")
-        ttk.Button(footer, text="선택만 적용", command=lambda:self.apply(False)).pack(side="right")
-        ttk.Button(footer, text="선택한 위치에 저장·접수등록", command=lambda:self.apply(True)).pack(side="right", padx=8)
+        if self.embedded:
+            ttk.Button(footer, text="이전: 제목 확인", command=app.workflow.title_step).pack(side="left")
+            ttk.Checkbutton(footer,text="접수 후 발신 공문도 이어서 작성",variable=app.workflow.continue_outgoing).pack(side="left",padx=12)
+        else:
+            ttk.Button(footer, text="선택만 적용", command=lambda:self.apply(False)).pack(side="right")
+        ttk.Button(footer, text="저장하고 수신 접수", command=lambda:self.apply(True)).pack(side="right", padx=8)
         self.initial_after = self.win.after(100, self.load) if self.agency.get() else None
 
     def load(self):
