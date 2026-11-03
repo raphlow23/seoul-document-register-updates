@@ -299,10 +299,10 @@ class WorkflowShell:
             key=item["id"] if item else self.style_choice.get()
             if picker.exists(key):picker.selection_set(key);picker.see(key);selected()
         def add():
-            from template_manager import open_add_template
-            open_add_template(self.app,on_added=reload)
+            from template_manager import open_pick_template
+            open_pick_template(self.app,on_added=reload)
         reload()
-        ttk.Button(bar,text="양식 추가",command=add).pack(side="left",padx=8)
+        ttk.Button(bar,text="HWP 양식 넣기",command=add).pack(side="left",padx=8)
         ttk.Button(bar,text="이전: 수신 문서",command=self.outgoing_home).pack(side="left")
         ttk.Button(bar,text="다음: 발신 정보",command=lambda:self.outgoing_form(self.app.jobs[self.current],self.style_choice.get())).pack(side="right")
 
