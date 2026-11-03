@@ -30,7 +30,7 @@ class WorkflowShell:
     def __init__(self, app, outer):
         self.app=app;self.section="receipt";self.step=1;self.current=None
         self.pending_register=None;self.pending_open=None;self.draft_active=False;self.drafts={}
-        self.excerpt_request=None
+        self.excerpt_request=None;self.receipt_drafts={};self.route_drafts={}
         self.continue_outgoing=tk.BooleanVar(value=False)
         header=ttk.Frame(outer);header.pack(fill="x")
         ttk.Label(header,text="서울센터 공문 업무",font=("맑은 고딕",22,"bold")).pack(side="left")
@@ -39,6 +39,8 @@ class WorkflowShell:
         self.nav={}
         for key,label,fn in (("receipt","수신 접수",self.receipt_home),("outgoing","발신 작성",self.outgoing_home),("history","처리 이력",self.history_home)):
             button=ttk.Button(nav,text=label,command=fn);button.pack(side="left",padx=(0,8));self.nav[key]=button
+        self.back_button=ttk.Button(nav,text="← 이전 단계",command=self.back);self.back_button.pack(side="left",padx=4)
+        ttk.Button(nav,text="선택·설정 다시 확인",command=self.reconfigure).pack(side="left",padx=4)
         app.watching=tk.BooleanVar(value=False)
         ttk.Checkbutton(nav,text="다운로드 자동 확인",variable=app.watching,command=app.toggle_watch).pack(side="right")
         self.steps=tk.StringVar();ttk.Label(outer,textvariable=self.steps,foreground="#1c5295",font=("맑은 고딕",11,"bold")).pack(anchor="w",pady=(0,8))
@@ -62,6 +64,10 @@ class WorkflowShell:
             if editor is not None and getattr(editor,"embedded",False):
                 if name=="outgoing_editor":
                     self.drafts[editor.job["hash"]]=editor.current()
+                elif name=="title_dialog":
+                    self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current()}
+                elif name=="route_dialog" and editor.records:
+                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":[{"relative":p,"template":editor.templates[p]} for p in sorted(editor.selected)],"folder_title":editor.folder_title.get(),"children":[k for k,v in editor.children.items() if v.get()]}
                 editor.close()
 
     def show(self,page,section,step=1):
@@ -71,6 +77,7 @@ class WorkflowShell:
         labels=("첨부파일","제목 확인","저장 위치","접수 완료") if section=="receipt" else ("수신 문서","양식 선택","발신 정보","등록 · HWP 저장")
         self.steps.set("   →   ".join(("● " if i==step else "")+label for i,label in enumerate(labels,1)) if section!="history" else "등록된 문서와 저장 결과")
         for key,button in self.nav.items():button.configure(state="disabled" if key==section else "normal")
+        self.back_button.configure(state="disabled" if section=="history" or step==1 else "normal")
         self.draft_active=page in ("title","route","outgoing_types","outgoing_form")
 
     def empty(self,page):
@@ -83,6 +90,8 @@ class WorkflowShell:
         bar=ttk.Frame(page);bar.pack(fill="x",pady=(0,10))
         ttk.Button(bar,text="파일 추가",command=self.app.add_files).pack(side="left")
         ttk.Button(bar,text="목록 삭제",command=self.app.ignore).pack(side="left",padx=8)
+        self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · PDF / HWP / HWPX / ZIP · 여러 파일 가능",padding=12,foreground="#1c5295",anchor="center",relief="groove")
+        self.drop_zone.pack(fill="x",pady=(0,10))
         self.app.tree=table(page,[("state","상태",155),("category","분류",145),("title","공문 제목 / 파일명",500),("number","접수번호",100)],True)
         self.app.tree.bind("<<TreeviewSelect>>",self.app.select)
         bottom=ttk.Frame(page);bottom.pack(fill="x",pady=(12,0))
@@ -138,6 +147,32 @@ class WorkflowShell:
         if not self.available():return
         self.clear_editor();self.current=None;self.show("queue","receipt",1)
 
+    def back(self):
+        if not self.available():return
+        job=self.app.jobs.get(self.current) if self.current else None
+        if self.section=="receipt":
+            if self.step==2:return self.receipt_home()
+            if self.step==3 and job:
+                if job.get("files_started") or job.get("sheet_attempted"):
+                    self.app.status.set("파일 저장을 시작한 공문은 기존 제목·위치를 유지합니다. 연결 설정을 다시 확인하고 같은 문서로 재시도하세요.")
+                    return self.app.settings()
+                return self.title_step()
+            if self.step==4:return self.history_home()
+        elif self.section=="outgoing":
+            if self.step==2:return self.outgoing_home()
+            if self.step==3 and job:
+                if job.get("outgoing",{}).get("sheet_attempted"):return self.app.settings()
+                return self.start_outgoing(job)
+            if self.step==4 and job:return self.outgoing_form(job)
+
+    def reconfigure(self):
+        if not self.available():return
+        job=self.app.jobs.get(self.current) if self.current else None
+        if not job:return self.app.settings()
+        if self.section=="receipt" and self.step>1 and not (job.get("files_started") or job.get("sheet_attempted") or job.get("receipt_done")):return self.title_step()
+        if self.section=="outgoing" and self.step>1 and not job.get("outgoing",{}).get("sheet_attempted"):return self.start_outgoing(job)
+        self.app.settings()
+
     def history_home(self):
         if not self.available():return
         self.clear_editor();self.current=None;self.show("history","history")
@@ -163,6 +198,7 @@ class WorkflowShell:
         ttk.Label(page,text=job["title"],wraplength=1000).pack(anchor="w",pady=12)
         ttk.Label(page,text="이미 저장된 위치·제목·등록 표시를 기준으로 확인하고 재시도합니다.").pack(anchor="w")
         ttk.Button(page,text="저장 결과 확인",command=self.app.preview).pack(anchor="w",pady=12)
+        ttk.Button(page,text="연결·설정 다시 확인",command=self.app.settings).pack(anchor="w",pady=6)
         if not job.get("files_started") and not job.get("sheet_attempted"):
             ttk.Button(page,text="저장 위치 다시 선택",command=self.route_step).pack(anchor="w",pady=8)
         ttk.Button(page,text="접수 재시도",command=lambda:self.app.send("process",[job])).pack(anchor="e",pady=12)
@@ -192,11 +228,20 @@ class WorkflowShell:
             widget.pack(side="left",fill="x",expand=key=="category")
         from title_chooser import TitleChooser
         self.app.title_dialog=TitleChooser(self.app,jobs,parent=page)
+        draft=self.receipt_drafts.get(self.current)
+        if draft:
+            editor=self.app.title_dialog
+            editor.resume_title=draft["title"]
+            editor.file_box.current(max(0,min(draft["file"],len(editor.files)-1)))
+        elif jobs[0].get("title_source"):
+            self.app.title_dialog.resume_title=jobs[0]["title"]
 
     def route_step(self):
         self.clear_editor();page=self.empty("route");self.show("route","receipt",3)
         from route_chooser import RouteChooser
-        self.app.route_dialog=RouteChooser(self.app,self.app.jobs[self.current].copy(),parent=page)
+        job=self.app.jobs[self.current].copy()
+        if self.current in self.route_drafts:job["routing"]=self.route_drafts[self.current]
+        self.app.route_dialog=RouteChooser(self.app,job,parent=page)
 
     def completed(self,job):
         self.focus(job["hash"])
@@ -224,7 +269,7 @@ class WorkflowShell:
         if job.get("outgoing",{}).get("sheet_attempted"):return self.outgoing_form(job)
         page=self.empty("outgoing_types");self.show("outgoing_types","outgoing",2)
         heading(page,"사용할 HWP 양식을 고르세요",job["title"])
-        self.style_choice=tk.StringVar(value=job.get("outgoing",{}).get("template_id") or hwp_docs.suggested_style(job)["id"])
+        self.style_choice=tk.StringVar(value=self.drafts.get(job["hash"],{}).get("template_id") or job.get("outgoing",{}).get("template_id") or hwp_docs.suggested_style(job)["id"])
         bar=ttk.Frame(page);bar.pack(fill="x",pady=16)
         bar.pack_configure(side="bottom")
         choices=ttk.PanedWindow(page,orient="horizontal");choices.pack(fill="both",expand=True)
