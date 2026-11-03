@@ -29,9 +29,15 @@ class FileDropTests(unittest.TestCase):
         self.app.send.assert_called_once_with("add",[str(p) for p in files])
         self.assertTrue(all(p.read_bytes()==b"untouched" for p in files))
 
-    def test_unsupported_files_and_folders_are_not_imported(self):
-        path=self.base/"application.exe";path.write_bytes(b"not executed")
+    def test_temporary_files_and_folders_are_not_imported(self):
+        path=self.base/"file.crdownload";path.write_bytes(b"incomplete")
         self.assertEqual(self.drop.receive(self.event(path,self.base)),REFUSE_DROP);self.app.send.assert_not_called()
+
+    def test_excel_word_images_and_other_completed_files_are_accepted(self):
+        files=[self.base/name for name in ('붙임.XLSX','양식.xls','안내.docx','사진.jpg','자료.dat','확장자없음')]
+        for path in files:path.write_bytes(b'copy only')
+        self.assertEqual(self.drop.receive(self.event(*files)),COPY)
+        self.app.send.assert_called_once_with('add',[str(p) for p in files])
 
     def test_busy_rejects_without_losing_files(self):
         path=self.base/"document.hwp";path.write_bytes(b"fixture");self.app.busy=True
