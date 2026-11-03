@@ -123,19 +123,23 @@ class Worker(threading.Thread):
                             google_login.logout(self.config)
                             self.emit("google_logout_success", None)
                     elif cmd in ('receipt_attach','receipt_attach_paths'):
-                        from receipt_attachments import append
+                        from receipt_attachments import append,load_sources,discard_sources
                         job=self.store.get(data['hash'])
                         if not job:raise ValueError('첨부파일을 추가할 공문을 찾지 못했습니다.')
                         additions=[]
                         if cmd=='receipt_attach_paths':
-                            for path in data['paths']:
-                                source,_=ingest(path,self.store,progress=lambda t:self.emit('status',t));additions.append(source)
+                            additions=load_sources(data['paths'],job,self.store,progress=lambda t:self.emit('status',t))
                         else:additions=[self.store.get(key) for key in data['jobs']]
                         if any(source is None for source in additions):raise ValueError('추가할 첨부파일 이력이 없습니다.')
-                        result=append(job,additions,self.config,self.store)
+                        try:result=append(job,additions,self.config,self.store)
+                        finally:discard_sources(additions,self.store)
                         self.emit('job',result)
                         for source in additions:
                             if source['hash']!=job['hash']:self.emit('job',self.store.get(source['hash']))
+                        for file in result['files']:
+                            if file['hash']!=result['hash']:
+                                alias=self.store.get(file['hash'])
+                                if alias:self.emit('job',alias)
                         self.emit('receipt_attached',{'job':result})
                     elif cmd == "file_rollback":
                         from file_rollback import execute
