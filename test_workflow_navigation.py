@@ -8,7 +8,7 @@ class NavigationTests(unittest.TestCase):
     def shell(self,section,step,job):
         shell=WorkflowShell.__new__(WorkflowShell)
         shell.section=section;shell.step=step;shell.current='fixture';shell.available=lambda:True
-        shell.app=SimpleNamespace(jobs={'fixture':job},settings=Mock(),status=Mock())
+        shell.app=SimpleNamespace(jobs={'fixture':job},settings=Mock(),status=Mock(),send=Mock())
         for name in ('title_step','start_outgoing','outgoing_form','receipt_home','outgoing_home','history_home','receipt_review','outgoing_review','resume_receipt'):setattr(shell,name,Mock())
         return shell
 
@@ -20,7 +20,9 @@ class NavigationTests(unittest.TestCase):
         for marker in ('files_started','sheet_attempted'):
             job={'hash':'fixture',marker:True,'number':'581','title':'기존 제목'}
             shell=self.shell('receipt',3,job);shell.back()
-            shell.receipt_review.assert_called_once_with(job);shell.app.settings.assert_not_called();shell.title_step.assert_not_called()
+            if marker=='files_started':shell.app.send.assert_called_once_with('file_rollback',{'hash':'fixture','scope':'receipt','step':3})
+            else:shell.receipt_review.assert_called_once_with(job)
+            shell.app.settings.assert_not_called();shell.title_step.assert_not_called()
             self.assertEqual(job['number'],'581');self.assertTrue(job[marker])
 
     def test_outgoing_returns_to_picker_only_before_registration(self):
