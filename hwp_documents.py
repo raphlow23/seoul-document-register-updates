@@ -1,4 +1,4 @@
-"""Six supplied letter styles, exact template anchors and native Hancom HWP export."""
+"""Approved native HWP forms, exact template anchors and Hancom export."""
 from copy import deepcopy
 from datetime import date
 import json
@@ -24,15 +24,15 @@ def template_root():
 def catalog():
     path=template_root()/"catalog.json"
     if path.is_file():return json.loads(path.read_text(encoding="utf-8"))
-    labels=("일반 25개구 기초센터 발신공문","중앙 회신 공문","시청 회신 공문","업무연락 공문","처리지침 공문","서울시청 건축협의 회신 공문")
-    return [{"id":str(i+1),"label":label,"file":f"template{i+1}.hwp","family":"업무연락" if i==3 else "처리지침" if i==4 else "공문","folder":"0.시행문(업무연락)" if i==3 else "0.시행문(처리지침)" if i==4 else "0.시행문(센터)","prefix":"처리지침" if i==4 else "","spacing":"" if i==5 else " ","suffix":"","receiver":""} for i,label in enumerate(labels)]
+    kinds=(("7","센터회신","center_reply"),("1","센터발송","center_send"),("2","중앙회신","central_reply"),("3","시청회신","city_reply"),("4","업무연락","work_notice"),("5","처리지침","guideline"),("6","건축허가&사업계획승인 / 사용승인&사용검사","building_reply"))
+    return [{"id":key,"label":label,"role":role,"file":f"approved-20261103-{role}.hwp","family":"업무연락" if key=="4" else "처리지침" if key=="5" else "공문","folder":"0.시행문(업무연락)" if key=="4" else "0.시행문(처리지침)" if key=="5" else "0.시행문(센터)","prefix":"처리지침" if key=="5" else "","spacing":" ","suffix":"","receiver":"","blank_body":True,"metadata_only":True} for key,label,role in kinds]
 
 
 def style(style_id):
     return next(x for x in catalog() if x["id"] == str(style_id))
 
 
-@lru_cache(maxsize=6)
+@lru_cache(maxsize=128)
 def template_body(style_id):
     from core import extract
     item=style(style_id)
@@ -53,7 +53,8 @@ def suggested_style(job,family="공문"):
     if "중앙" in category:return style("2")
     if "시청" in category:
         return style("6" if any(k in job.get("title","") for k in ("협의","건축","주택","사업계획","사용승인","계획인가")) else "3")
-    return style("1")
+    available=catalog()
+    return next((x for x in available if x.get("role")=="center_reply"),style("1"))
 
 
 def destination(config, item):
