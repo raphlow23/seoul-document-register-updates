@@ -40,7 +40,7 @@ class WorkflowShell:
         for key,label,fn in (("receipt","수신 접수",self.receipt_home),("outgoing","발신 작성",self.outgoing_home),("history","처리 이력",self.history_home)):
             button=ttk.Button(nav,text=label,command=fn);button.pack(side="left",padx=(0,8));self.nav[key]=button
         self.back_button=ttk.Button(nav,text="← 이전 단계",command=self.back);self.back_button.pack(side="left",padx=4)
-        ttk.Button(nav,text="선택·설정 다시 확인",command=self.reconfigure).pack(side="left",padx=4)
+        ttk.Button(nav,text="선택 내용 다시 확인",command=self.reconfigure).pack(side="left",padx=4)
         app.watching=tk.BooleanVar(value=False)
         ttk.Checkbutton(nav,text="다운로드 자동 확인",variable=app.watching,command=app.toggle_watch).pack(side="right")
         self.steps=tk.StringVar();ttk.Label(outer,textvariable=self.steps,foreground="#1c5295",font=("맑은 고딕",11,"bold")).pack(anchor="w",pady=(0,8))
@@ -153,25 +153,59 @@ class WorkflowShell:
         if self.section=="receipt":
             if self.step==2:return self.receipt_home()
             if self.step==3 and job:
-                if job.get("files_started") or job.get("sheet_attempted"):
-                    self.app.status.set("파일 저장을 시작한 공문은 기존 제목·위치를 유지합니다. 연결 설정을 다시 확인하고 같은 문서로 재시도하세요.")
-                    return self.app.settings()
+                if self.receipt_committed(job):return self.receipt_review(job)
                 return self.title_step()
-            if self.step==4:return self.history_home()
+            if self.step==4 and job:return self.resume_receipt(job)
         elif self.section=="outgoing":
             if self.step==2:return self.outgoing_home()
             if self.step==3 and job:
-                if job.get("outgoing",{}).get("sheet_attempted"):return self.app.settings()
+                if job.get("outgoing",{}).get("sheet_attempted"):return self.outgoing_review(job)
                 return self.start_outgoing(job)
             if self.step==4 and job:return self.outgoing_form(job)
 
     def reconfigure(self):
         if not self.available():return
         job=self.app.jobs.get(self.current) if self.current else None
-        if not job:return self.app.settings()
-        if self.section=="receipt" and self.step>1 and not (job.get("files_started") or job.get("sheet_attempted") or job.get("receipt_done")):return self.title_step()
-        if self.section=="outgoing" and self.step>1 and not job.get("outgoing",{}).get("sheet_attempted"):return self.start_outgoing(job)
-        self.app.settings()
+        if not job:
+            if self.section=="receipt":return self.start_receipt()
+            if self.section=="outgoing":return self.start_outgoing_selected()
+            jobs=self.selected_jobs()
+            if len(jobs)==1:return self.receipt_review(jobs[0])
+            return messagebox.showinfo("문서 선택","확인할 문서를 한 개 선택하세요.")
+        if self.section=="receipt" and self.step>1:
+            return self.receipt_review(job) if self.receipt_committed(job) else self.title_step()
+        if self.section=="outgoing" and self.step>1:
+            return self.outgoing_review(job) if job.get("outgoing",{}).get("sheet_attempted") else self.start_outgoing(job)
+        messagebox.showinfo("문서 선택","확인할 문서를 선택한 뒤 다음 단계로 진행하세요.")
+
+    @staticmethod
+    def receipt_committed(job):
+        return bool(job.get("files_started") or job.get("sheet_attempted") or job.get("receipt_done") or job.get("state")=="완료")
+
+    def receipt_review(self,job):
+        self.clear_editor();self.current=job["hash"]
+        page=self.empty("title");self.show("title","receipt",2)
+        heading(page,"접수 제목과 첨부파일 확인","이미 저장·등록을 시작한 문서는 기존 선택 내용을 표시합니다. 이전 단계로 이동해도 접수번호와 이력은 유지됩니다.")
+        ttk.Label(page,text=job["title"],font=("맑은 고딕",14,"bold"),wraplength=950).pack(anchor="w",pady=12)
+        ttk.Label(page,text=" / ".join(str(job.get(k,"")) for k in ("category","receipt_type","date","recipient")),wraplength=950).pack(anchor="w",pady=8)
+        box=tk.Text(page,height=8,wrap="word");box.pack(fill="both",expand=True,pady=12)
+        box.insert("1.0","첨부파일\n"+"\n".join(str(f["path"]) for f in job.get("files",[])));box.configure(state="disabled")
+        bar=ttk.Frame(page);bar.pack(fill="x",pady=8)
+        ttk.Button(bar,text="이전: 첨부파일",command=self.receipt_home).pack(side="left")
+        ttk.Button(bar,text="다음: 저장 위치 확인",command=lambda:self.resume_receipt(self.app.jobs[job["hash"]])).pack(side="right")
+
+    def outgoing_review(self,job):
+        self.clear_editor();self.current=job["hash"]
+        page=self.empty("outgoing_types");self.show("outgoing_types","outgoing",2)
+        out=job.get("outgoing",{});key=out.get("template_id","")
+        label=next((item["label"] for item in hwp_docs.catalog() if item["id"]==key),key or "선택 양식")
+        heading(page,"등록에 사용한 발신 양식 확인","이미 등록을 시작한 발신은 기존 양식과 번호를 유지합니다. 다음 단계에서 작성 정보와 HWP를 확인할 수 있습니다.")
+        ttk.Label(page,text=label,font=("맑은 고딕",15,"bold"),wraplength=950).pack(anchor="w",pady=12)
+        ttk.Label(page,text=out.get("title",job["title"]),wraplength=950).pack(anchor="w",pady=10)
+        ttk.Label(page,text="발신번호: "+str(out.get("number") or "등록 결과 확인 중"),font=("맑은 고딕",13,"bold")).pack(anchor="w",pady=10)
+        bar=ttk.Frame(page);bar.pack(side="bottom",fill="x",pady=12)
+        ttk.Button(bar,text="이전: 수신 문서",command=self.outgoing_home).pack(side="left")
+        ttk.Button(bar,text="다음: 발신 정보",command=lambda:self.outgoing_form(self.app.jobs[job["hash"]])).pack(side="right")
 
     def history_home(self):
         if not self.available():return
@@ -193,15 +227,23 @@ class WorkflowShell:
         self.title_step(jobs)
 
     def resume_receipt(self,job):
+        self.clear_editor();self.current=job["hash"]
         page=self.empty("route");self.show("route","receipt",3)
-        heading(page,"이전에 시작한 접수를 이어서 처리합니다",job.get("reason",""))
+        done=bool(job.get("receipt_done") or job.get("state")=="완료")
+        heading(page,"저장 위치와 접수 결과 확인" if done else "이전에 시작한 접수를 이어서 처리합니다",job.get("reason",""))
         ttk.Label(page,text=job["title"],wraplength=1000).pack(anchor="w",pady=12)
-        ttk.Label(page,text="이미 저장된 위치·제목·등록 표시를 기준으로 확인하고 재시도합니다.").pack(anchor="w")
+        ttk.Label(page,text="기존 제목·저장 위치·접수 결과를 확인합니다." if done else "이미 저장된 위치·제목·등록 표시를 기준으로 확인하고 재시도합니다.").pack(anchor="w")
+        paths=job.get("destinations",[]) or [str(t.get("relative",""))+" / "+str(t.get("folder_name", "")) for t in job.get("routing",{}).get("targets",[])]
+        ttk.Label(page,text="\n".join(map(str,paths)),wraplength=950).pack(anchor="w",pady=8)
         ttk.Button(page,text="저장 결과 확인",command=self.app.preview).pack(anchor="w",pady=12)
         ttk.Button(page,text="연결·설정 다시 확인",command=self.app.settings).pack(anchor="w",pady=6)
-        if not job.get("files_started") and not job.get("sheet_attempted"):
+        if not done and not job.get("files_started") and not job.get("sheet_attempted"):
             ttk.Button(page,text="저장 위치 다시 선택",command=self.route_step).pack(anchor="w",pady=8)
-        ttk.Button(page,text="접수 재시도",command=lambda:self.app.send("process",[job])).pack(anchor="e",pady=12)
+        ttk.Button(page,text="이전: 제목 확인",command=self.back).pack(anchor="w",pady=8)
+        if done:
+            ttk.Button(page,text="다음: 접수 완료",command=lambda:self.completed(self.app.jobs[job["hash"]])).pack(anchor="e",pady=12)
+        else:
+            ttk.Button(page,text="접수 재시도",command=lambda:self.app.send("process",[self.app.jobs[job["hash"]]])).pack(anchor="e",pady=12)
 
     def recover(self):
         """A failed worker request must leave a usable screen, even if its panel already closed."""
@@ -476,7 +518,7 @@ class SimpleOutgoing(OutgoingEditor):
         ttk.Button(source,text="OCR 본문 추출 · 띄어쓰기 정리",command=self.prepare_excerpt).pack(side="right",padx=6)
         self.status=tk.StringVar(value="대장에서 실제 발신번호를 받은 뒤 원본 양식의 HWP를 저장하고 한글에서 편집합니다.")
         ttk.Label(panel,textvariable=self.status,wraplength=900).pack(anchor="w",pady=8)
-        if not self.out.get("sheet_attempted"):ttk.Button(actions,text="이전: 양식 선택",command=lambda:app.workflow.start_outgoing(job)).pack(side="left")
+        ttk.Button(actions,text="이전: 양식 선택",command=app.workflow.back).pack(side="left")
         ttk.Button(actions,text="작성 정보 저장",command=self.save).pack(side="left",padx=8)
         done=self.out.get("complete") and self.out.get("stamp",{}).get("complete")
         ttk.Button(actions,text="작성한 HWP 열기" if done else "발신번호 받고 한글로 열기",command=(lambda:app.workflow.export_registered(app.jobs[job["hash"]])) if done else self.register).pack(side="right")
