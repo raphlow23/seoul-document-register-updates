@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 기존 폴더 형식으로 수신·발신 저장","draft":True,"prerelease":False,"body":"수신·발신 저장 위치의 기존 폴더 이름을 읽어 순번·날짜·기관 표시 형식을 제안합니다. 폴더 제목은 대장 제목과 별도로 수정할 수 있습니다. 시청/중앙/기초 공문·센터발송·회신 내부폴더를 선택하고 HWP 저장 위치도 정합니다. 새 저장 위치가 비어 있으면 이전 형식과 내부 구성을 유지하며 폴더 순번만 1부터 시작합니다. 날짜 형식에는 번호를 붙이지 않습니다. 수신번호와 발신번호는 완료 화면에 표시하고, 발신번호는 HWP 파일명과 하단에 유지합니다. 새 버전 정상 배포 후 GitHub 릴리스는 최신 버전과 직전 버전만 남기고 이전 릴리스·첨부 파일을 자동 정리합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 이전 단계·파일 드래그·시트 읽기 수정","draft":True,"prerelease":False,"body":"이전 단계로 돌아가 제목·저장 위치·발신 정보를 다시 확인할 수 있습니다. 이미 시작한 등록의 번호와 이력은 유지하여 중복 등록을 방지합니다. PDF·HWP·HWPX·ZIP 여러 파일을 화면에 끌어다 놓아 추가합니다. 숨겨진 첫 행 때문에 정상 대장의 열 구성을 잘못 판단하던 문제와 일시적인 빈 클립보드 복사를 수정했습니다. 기본 양식 종류는 센터회신·센터발송·중앙회신·시청회신·업무연락·처리지침·건축/사용승인 7종입니다. 실제 개인 HWP 양식은 별도 비공개 보충 ZIP으로 최초 한 번 설치하며 공개 배포에는 포함하지 않습니다. 본문 타 기관 번호·날짜는 직접 입력하고 발신번호와 당일 날짜만 지정된 메타데이터에 넣습니다. 자동 업데이트는 기존 설정·개인 양식·처리 이력을 유지합니다. 정상 배포 후 최신·직전 릴리스만 남깁니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention"],check=True,timeout=60)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults"],check=True,timeout=90)
     startup=out/"browser-startup.json"
     subprocess.run([str(exe),"--test-browser-startup",str(startup)],check=True,timeout=90)
     print("Frozen browser startup check:",startup.read_text())
