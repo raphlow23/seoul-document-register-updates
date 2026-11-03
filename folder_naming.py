@@ -106,7 +106,7 @@ def infer_template(name):
         if kind == "number":
             if 1900 <= int(g[0]) <= 2100: return None
             nested = infer_template(g[2])
-            if g[2][0].isdigit() and (not nested or "{number" in nested): return None
+            if g[2][0].isdigit() and ((not nested and not re.match(r'^\d+[가-힣]',g[2])) or (nested and "{number" in nested)): return None
             return "{number:0" + str(len(g[0])) + "d}" + g[1] + (nested if nested and "{number" not in nested else "{title}")
     return None
 
@@ -143,8 +143,8 @@ def describe_directory(directory):
 def preferred_template(record,config,slot):
     saved=config.get("folder_profiles",{}).get(slot,{})
     if record["names"]:
-        if saved.get("path")==record["path"] and saved.get("template"):return saved["template"]
         if record["styles"]:return record["styles"][0]["template"]
+        if saved.get("path")==record["path"] and saved.get("template"):return saved["template"]
     return saved.get("template") or config.get("route_templates",{}).get(slot.removeprefix("incoming:")) or config.get("folder_defaults",{}).get("template") or "{title}"
 
 
