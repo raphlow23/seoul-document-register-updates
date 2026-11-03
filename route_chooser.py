@@ -101,11 +101,12 @@ class RouteChooser:
         footer = ttk.Frame(outer)
         footer.pack(fill="x")
         if self.embedded:
-            ttk.Button(footer, text="이전: 제목 확인", command=app.workflow.title_step).pack(side="left")
+            ttk.Button(footer, text="이전: 제목 확인", command=app.workflow.back).pack(side="left")
+            ttk.Button(footer,text="첨부파일 추가",command=app.workflow.add_attachments).pack(side="left",padx=5)
             ttk.Checkbutton(footer,text="접수 후 발신 공문도 이어서 작성",variable=app.workflow.continue_outgoing).pack(side="left",padx=12)
         else:
             ttk.Button(footer, text="선택만 적용", command=lambda:self.apply(False)).pack(side="right")
-        ttk.Button(footer, text="저장하고 수신 접수", command=lambda:self.apply(True)).pack(side="right", padx=8)
+        ttk.Button(footer, text="파일만 다시 저장 (접수번호 유지)" if job.get('receipt_done') and job.get('files_rolled_back') else "저장하고 수신 접수", command=lambda:self.apply(True)).pack(side="right", padx=8)
         if self.embedded:footer.pack_configure(side="bottom",before=panes,pady=(6,0))
         self.initial_after = self.win.after(100, self.load) if self.agency.get() else None
 
