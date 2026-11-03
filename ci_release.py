@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 엑셀 등 모든 첨부파일 표시","draft":True,"prerelease":False,"body":"다운로드 자동 확인·드래그 추가·파일 선택의 PDF/한글 형식 제한을 없앴습니다. 엑셀·CSV·워드·사진·도면·기타 완료된 파일도 목록에 표시하고 함께 저장합니다. 파일 선택창은 기본으로 모든 파일을 표시합니다. 제목·본문 추출은 PDF·HWP·HWPX에서 하며 엑셀 등 다른 파일은 분석·실행하지 않고 첨부로 보관합니다. 제목 선택창은 읽을 수 있는 문서를 먼저 보여 줍니다. 다운로드 중 임시파일·Office 잠금 파일·시스템 파일·폴더는 자동 감시·드래그에서 제외합니다. 파일 저장 취소·기존 번호 유지·공문 첨부 추가·ZIP 처리 기능을 유지합니다. 정상 배포 후 최신·직전 릴리스만 남깁니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 원본 대조·본문 자동 정리와 실제 폴더 이름","draft":True,"prerelease":False,"body":"공문 원본을 보면서 2항부터 붙임 끝까지 자동 정리된 본문을 수정·복사합니다. 제목과 1항은 제외하며, 2항을 찾지 못하면 직접 범위를 선택합니다. 띄어쓰기는 PC 안에서 정리하고 OCR 오인식은 원본과 대조해 수정합니다. PDF는 페이지 원본, HWP/HWPX는 내장 첫 화면과 OCR 원문을 표시합니다. 수신·발신 저장 위치를 고르면 기존 폴더 형식을 자동 적용하고 표식 대신 실제 생성될 폴더 이름을 표시합니다. 직접 수정과 빈 저장 위치의 이전 형식 유지도 지원합니다. 원본 파일·대장 등록·개인 설정·양식은 유지합니다. 정상 게시 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker"],check=True,timeout=90)
     startup=out/"browser-startup.json"
     subprocess.run([str(exe),"--test-browser-startup",str(startup)],check=True,timeout=90)
     print("Frozen browser startup check:",startup.read_text())
