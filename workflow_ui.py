@@ -67,7 +67,7 @@ class WorkflowShell:
                 elif name=="title_dialog":
                     self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current()}
                 elif name=="route_dialog" and editor.records:
-                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":[{"relative":p,"template":editor.templates[p]} for p in sorted(editor.selected)],"folder_title":editor.folder_title.get(),"children":[k for k,v in editor.children.items() if v.get()]}
+                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":[{"relative":p,"template":editor.templates[p],'template_manual':p in editor.manual_templates} for p in sorted(editor.selected)],"folder_title":editor.folder_title.get(),"children":[k for k,v in editor.children.items() if v.get()]}
                 editor.close()
 
     def show(self,page,section,step=1):
@@ -430,7 +430,7 @@ class WorkflowShell:
         source.pack(side="left",fill="x",expand=True)
         main_hash=job.get("title_source",{}).get("file_hash",job["hash"])
         source.current(next((i for i,f in enumerate(job["files"]) if f["hash"]==main_hash),0))
-        ttk.Button(sourcebar,text="OCR 본문 정리 · 복사",command=lambda:self.request_excerpt(job,job["files"][max(0,source.current())])).pack(side="right",padx=8)
+        ttk.Button(sourcebar,text="정리된 본문 확인 · 복사",command=lambda:self.request_excerpt(job,job["files"][max(0,source.current())])).pack(side="right",padx=8)
         ttk.Button(page,text="발신 정보 · 저장 위치 확인",command=lambda:self.outgoing_form(self.app.jobs[job["hash"]])).pack(anchor="w",pady=6)
         ttk.Button(page,text="다른 문서 작성",command=self.outgoing_home).pack(anchor="e",side="bottom",pady=12)
         if self.pending_open==job["hash"]:
@@ -442,6 +442,8 @@ class WorkflowShell:
             self.app.root.after(200,open_when_ready)
 
     def request_excerpt(self,job,file):
+        from attachment_files import can_extract
+        if not can_extract(file['path']):return messagebox.showinfo('본문 파일 선택','본문을 읽을 PDF·HWP·HWPX 공문을 선택하세요. 다른 형식은 첨부파일로 보관합니다.')
         owner,request=uuid.uuid4().hex,uuid.uuid4().hex
         if self.app.send("draft_source",{"owner":owner,"request":request,"file":file}):
             self.excerpt_request=(owner,request,job["hash"])
@@ -452,7 +454,7 @@ class WorkflowShell:
         self.excerpt_request=None
         if self.current!=expected[2] or self.section!="outgoing":return
         from ocr_text_editor import OcrTextEditor
-        OcrTextEditor(self.app,data["text"],parent=self.app.root)
+        OcrTextEditor(self.app,data["text"],parent=self.app.root,source_file=data['file'])
 
     def export_registered(self,job):
         # Use the ledger-authoritative saved metadata, never a suggested or sample number.
@@ -562,7 +564,8 @@ class SimpleOutgoing(OutgoingEditor):
         self.file_var=tk.StringVar(value="1. "+Path(job["files"][0]["path"]).name)
         self.file_box=ttk.Combobox(source,textvariable=self.file_var,values=[f"{i+1}. {Path(f['path']).name}" for i,f in enumerate(job["files"])],state="readonly")
         self.file_box.pack(side="left",fill="x",expand=True);self.file_box.bind("<<ComboboxSelected>>",self.load_source)
-        ttk.Button(source,text="OCR 본문 추출 · 띄어쓰기 정리",command=self.prepare_excerpt).pack(side="right",padx=6)
+        self.file_box.current(next((i for i,file in enumerate(job['files']) if file['hash']==job.get('text_file_hash',job['hash'])),0))
+        ttk.Button(source,text="정리된 본문 확인 · 복사",command=self.prepare_excerpt).pack(side="right",padx=6)
         self.status=tk.StringVar(value="대장에서 실제 발신번호를 받은 뒤 원본 양식의 HWP를 저장하고 한글에서 편집합니다.")
         ttk.Label(panel,textvariable=self.status,wraplength=900).pack(anchor="w",pady=8)
         ttk.Button(actions,text="이전: 양식 선택",command=app.workflow.back).pack(side="left")
@@ -628,12 +631,14 @@ class SimpleOutgoing(OutgoingEditor):
 
     def prepare_excerpt(self):
         if not self.app.workflow.available():return
+        from attachment_files import can_extract
+        if not can_extract(self.job['files'][max(0,self.file_box.current())]['path']):return messagebox.showinfo('본문 파일 선택','본문을 읽을 PDF·HWP·HWPX 공문을 선택하세요. 다른 형식은 첨부파일로 보관합니다.')
         text=self.source.get("1.0","end").strip()
         if not text:
             self.open_excerpt_when_loaded=True
             return self.load_source()
         from ocr_text_editor import OcrTextEditor
-        OcrTextEditor(self.app,text,parent=self.app.root)
+        OcrTextEditor(self.app,text,parent=self.app.root,source_file=self.job['files'][max(0,self.file_box.current())])
 
     def deliver(self,data):
         if data.get("owner")!=self.owner or data.get("request")!=self.request:return
