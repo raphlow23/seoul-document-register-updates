@@ -91,7 +91,7 @@ class WorkflowShell:
         ttk.Button(bar,text="파일 추가",command=self.app.add_files).pack(side="left")
         ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=5)
         ttk.Button(bar,text="목록 삭제",command=self.app.ignore).pack(side="left",padx=8)
-        self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · PDF / HWP / HWPX / ZIP · 여러 파일 가능",padding=12,foreground="#1c5295",anchor="center",relief="groove")
+        self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · 엑셀·워드·이미지 등 모든 첨부파일 · 여러 파일 가능",padding=12,foreground="#1c5295",anchor="center",relief="groove")
         self.drop_zone.pack(fill="x",pady=(0,10))
         self.app.tree=table(page,[("state","상태",155),("category","분류",145),("title","공문 제목 / 파일명",500),("number","접수번호",100)],True)
         self.app.tree.bind("<<TreeviewSelect>>",self.app.select)
@@ -257,7 +257,8 @@ class WorkflowShell:
         if not self.available():return
         jobs=self.selected_jobs()
         if len(jobs)!=1:return messagebox.showinfo('공문 선택','첨부파일을 추가할 기존 공문을 한 건 선택하세요.')
-        paths=filedialog.askopenfilenames(parent=self.app.root,title='이 공문에 추가할 첨부파일',filetypes=[('공문 첨부','*.pdf *.hwp *.hwpx *.zip'),('모든 파일','*.*')])
+        from attachment_files import FILE_TYPES
+        paths=filedialog.askopenfilenames(parent=self.app.root,title='이 공문에 추가할 첨부파일',initialdir=self.app.config.get('downloads',''),filetypes=FILE_TYPES)
         if paths:
             self.current=jobs[0]['hash']
             self.app.send('receipt_attach_paths',{'hash':self.current,'paths':list(paths)})
