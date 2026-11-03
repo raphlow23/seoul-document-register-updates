@@ -99,11 +99,12 @@ class TemplateLibraryTests(unittest.TestCase):
 
     def test_registered_hwp_link_survives_stale_editor_save(self):
         from outgoing import merge_edit
-        old={"complete":True,"id":"existing","number":"12","hwp_saved_number":"12","hwp_path":str(self.base/"edited.hwp")}
+        old={"complete":True,"id":"existing","number":"12","hwp_saved_number":"12","hwp_path":str(self.base/"edited.hwp"),'hwp_created_sha256':'original-hash'}
         job={"state":"수신 완료·발신 등록 대기","outgoing":old}
         merge_edit(job,{"enabled":True,"stamp":{},"title":"저장된 제목"})
         self.assertEqual(job["outgoing"]["hwp_path"],old["hwp_path"])
         self.assertEqual(job["outgoing"]["hwp_saved_number"],"12")
+        self.assertEqual(job['outgoing']['hwp_created_sha256'],'original-hash')
 
 
 if __name__=="__main__":unittest.main()
