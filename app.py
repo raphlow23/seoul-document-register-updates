@@ -13,7 +13,8 @@ from tkinter import filedialog, messagebox, ttk
 import webbrowser
 import google_login
 
-from core import CATEGORIES, EXTENSIONS, ROOT, SHEET_ID, TAB, Sheets, Store, ingest, process
+from core import CATEGORIES, ROOT, SHEET_ID, TAB, Sheets, Store, ingest, process
+from attachment_files import eligible,can_extract,FILE_TYPES
 from release_info import VERSION,UPDATE_BASE_URL
 from updater import check_and_stage, launch_helper, helper_main
 from queue_visibility import missing_download_source
@@ -167,7 +168,7 @@ class Worker(threading.Thread):
                     elif cmd == "draft_source":
                         saved=self.store.get(data["file"]["hash"])
                         text=saved.get("text","") if saved and saved.get("text_file_hash",saved["hash"])==data["file"]["hash"] else ""
-                        if not text:
+                        if not text and can_extract(data['file']['path']):
                             from core import extract
                             text=extract(data["file"]["path"],progress=lambda t:self.emit("status",t))
                         self.emit("draft_source_result",{**data,"text":text})
@@ -211,7 +212,7 @@ class Worker(threading.Thread):
                         file = data["file"]
                         saved = self.store.get(file["hash"])
                         text = saved.get("text", "") if saved and saved.get("text_file_hash",saved["hash"])==file["hash"] else ""
-                        if not text:
+                        if not text and can_extract(file['path']):
                             try:
                                 text = extract(file["path"], progress=lambda t: self.emit("status", t))
                             except ValueError:
@@ -353,7 +354,7 @@ class Worker(threading.Thread):
             raise ValueError("다운로드 폴더를 찾을 수 없습니다.")
         result = {}
         for p in folder.iterdir():
-            if p.suffix.lower() in EXTENSIONS and p.is_file():
+            if eligible(p):
                 try:
                     s = p.stat()
                     result[str(p)] = (s.st_size, s.st_mtime_ns)
@@ -385,7 +386,7 @@ class Worker(threading.Thread):
                 self.pending.pop(path, None)
 
     def add(self, path):
-        self.emit("status", "본문 확인 중: " + Path(path).name)
+        self.emit("status", "첨부파일 확인 중: " + Path(path).name)
         try:
             job, new = ingest(path, self.store, progress=lambda text: self.emit("status", text))
         except Exception as error:
@@ -802,7 +803,7 @@ class App:
         self.send("hide_list",[job["hash"] for job in jobs])
 
     def add_files(self):
-        paths = filedialog.askopenfilenames(title="공문 첨부파일 선택", filetypes=[("공문 및 압축파일", "*.pdf *.hwp *.hwpx *.zip"), ("모든 파일", "*.*")])
+        paths = filedialog.askopenfilenames(title="공문 첨부파일 선택",initialdir=self.config.get('downloads',''),filetypes=FILE_TYPES)
         if paths:
             self.send("add", paths)
 
