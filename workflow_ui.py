@@ -2,7 +2,7 @@
 from datetime import date
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox,filedialog
 import uuid
 
 from queue_visibility import missing_download_source
@@ -39,7 +39,7 @@ class WorkflowShell:
         self.nav={}
         for key,label,fn in (("receipt","수신 접수",self.receipt_home),("outgoing","발신 작성",self.outgoing_home),("history","처리 이력",self.history_home)):
             button=ttk.Button(nav,text=label,command=fn);button.pack(side="left",padx=(0,8));self.nav[key]=button
-        self.back_button=ttk.Button(nav,text="← 이전 단계",command=self.back);self.back_button.pack(side="left",padx=4)
+        self.back_button=ttk.Button(nav,text="← 이전 단계 (파일 취소)",command=self.back);self.back_button.pack(side="left",padx=4)
         ttk.Button(nav,text="선택 내용 다시 확인",command=self.reconfigure).pack(side="left",padx=4)
         app.watching=tk.BooleanVar(value=False)
         ttk.Checkbutton(nav,text="다운로드 자동 확인",variable=app.watching,command=app.toggle_watch).pack(side="right")
@@ -89,6 +89,7 @@ class WorkflowShell:
         heading(page,"1. 첨부파일을 선택하세요","같은 메일의 본 공문과 붙임을 함께 선택하세요. 여러 파일은 Ctrl 또는 Shift로 선택할 수 있습니다. ZIP 안의 문서도 표시됩니다.")
         bar=ttk.Frame(page);bar.pack(fill="x",pady=(0,10))
         ttk.Button(bar,text="파일 추가",command=self.app.add_files).pack(side="left")
+        ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=5)
         ttk.Button(bar,text="목록 삭제",command=self.app.ignore).pack(side="left",padx=8)
         self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · PDF / HWP / HWPX / ZIP · 여러 파일 가능",padding=12,foreground="#1c5295",anchor="center",relief="groove")
         self.drop_zone.pack(fill="x",pady=(0,10))
@@ -109,6 +110,7 @@ class WorkflowShell:
             bar=ttk.Frame(page);bar.pack(fill="x",pady=12)
             bar.pack_configure(side="bottom",before=tree.master)
             if name=="history":ttk.Button(bar,text="본문 · 저장 결과",command=self.app.preview).pack(side="left")
+            ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=6)
             ttk.Button(bar,text="이 문서로 발신 작성",command=self.start_outgoing_selected).pack(side="right")
 
     def selected_jobs(self):
@@ -128,7 +130,7 @@ class WorkflowShell:
         key=job["hash"]
         alias=job.get("archive_alias") or job["state"] in ("묶음에 포함","묶음 처리 완료")
         received=bool(job.get("receipt_done") or job["state"]=="완료")
-        hidden=alias or job.get("list_hidden") or job["state"]=="제외" or received or missing_download_source(job,self.app.config.get("downloads"))
+        hidden=alias or job.get("list_hidden") or job["state"]=="제외" or (received and not job.get('files_rolled_back')) or missing_download_source(job,self.app.config.get("downloads"))
         vals=(job["state"],job.get("category") or "확인 필요",job["title"],job.get("number",""))
         self.row(self.app.tree,key,not hidden,vals)
         out=job.get("outgoing",{})
@@ -150,6 +152,10 @@ class WorkflowShell:
     def back(self):
         if not self.available():return
         job=self.app.jobs.get(self.current) if self.current else None
+        from file_rollback import has_files
+        if job and self.section in ('receipt','outgoing') and has_files(job,self.section):
+            self.pending_open=self.pending_register=None
+            return self.app.send('file_rollback',{'hash':job['hash'],'scope':self.section,'step':self.step})
         if self.section=="receipt":
             if self.step==2:return self.receipt_home()
             if self.step==3 and job:
@@ -162,6 +168,21 @@ class WorkflowShell:
                 if job.get("outgoing",{}).get("sheet_attempted"):return self.outgoing_review(job)
                 return self.start_outgoing(job)
             if self.step==4 and job:return self.outgoing_form(job)
+
+    def rollback_finished(self,data):
+        def ready():
+            if not self.available():return self.app.root.after(50,ready)
+            self.clear_editor()
+            key=data['hash'];job=self.app.jobs[key]
+            draft=self.drafts.get(key)
+            if draft:
+                for name in ('hwp_path','hwp_saved_number','hwp_created_sha256'):draft.pop(name,None)
+                for name in ('folder_plan','save_folder','files_rolled_back'):
+                    if name in job.get('outgoing',{}):draft[name]=job['outgoing'][name]
+            self.current=key;self.section=data['scope'];self.step=data['step']
+            self.focus(key)
+            self.back()
+        self.app.root.after(50,ready)
 
     def reconfigure(self):
         if not self.available():return
@@ -192,6 +213,7 @@ class WorkflowShell:
         box.insert("1.0","첨부파일\n"+"\n".join(str(f["path"]) for f in job.get("files",[])));box.configure(state="disabled")
         bar=ttk.Frame(page);bar.pack(fill="x",pady=8)
         ttk.Button(bar,text="이전: 첨부파일",command=self.receipt_home).pack(side="left")
+        ttk.Button(bar,text="첨부파일 추가",command=self.add_attachments).pack(side="left",padx=8)
         ttk.Button(bar,text="다음: 저장 위치 확인",command=lambda:self.resume_receipt(self.app.jobs[job["hash"]])).pack(side="right")
 
     def outgoing_review(self,job):
@@ -221,12 +243,36 @@ class WorkflowShell:
         if not jobs:return messagebox.showinfo("첨부파일 선택","접수할 첨부파일을 선택하세요.")
         self.continue_outgoing.set(False)
         self.current=jobs[0]["hash"];self.app.select()
+        existing=[j for j in jobs if self.receipt_committed(j) or j.get('files_rolled_back')]
+        if existing and len(jobs)>1:
+            if len(existing)!=1:return messagebox.showinfo('첨부파일 추가','기존 공문은 한 건만 선택하고 새 첨부파일을 함께 선택하세요.')
+            self.current=existing[0]['hash']
+            return self.app.send('receipt_attach',{'hash':self.current,'jobs':[j['hash'] for j in jobs if j['hash']!=self.current]})
         if any(j.get("files_started") or j.get("sheet_attempted") for j in jobs):
             if len(jobs)>1:return messagebox.showinfo("재시도","이미 저장을 시작한 공문은 한 건씩 이어서 처리하세요.")
             return self.resume_receipt(jobs[0])
         self.title_step(jobs)
 
+    def add_attachments(self):
+        if not self.available():return
+        jobs=self.selected_jobs()
+        if len(jobs)!=1:return messagebox.showinfo('공문 선택','첨부파일을 추가할 기존 공문을 한 건 선택하세요.')
+        paths=filedialog.askopenfilenames(parent=self.app.root,title='이 공문에 추가할 첨부파일',filetypes=[('공문 첨부','*.pdf *.hwp *.hwpx *.zip'),('모든 파일','*.*')])
+        if paths:
+            self.current=jobs[0]['hash']
+            self.app.send('receipt_attach_paths',{'hash':self.current,'paths':list(paths)})
+
+    def attachments_added(self,job):
+        def ready():
+            if not self.available():return self.app.root.after(50,ready)
+            self.clear_editor();self.current=job['hash']
+            self.focus(job['hash'])
+            if self.receipt_committed(job):self.receipt_review(job)
+            else:self.title_step([job])
+        self.app.root.after(50,ready)
+
     def resume_receipt(self,job):
+        if job.get('files_rolled_back'):return self.route_step()
         self.clear_editor();self.current=job["hash"]
         page=self.empty("route");self.show("route","receipt",3)
         done=bool(job.get("receipt_done") or job.get("state")=="완료")
@@ -363,7 +409,7 @@ class WorkflowShell:
         self.focus(key)
         if self.pending_register==key:
             self.pending_register=None
-            self.app.commands.put(("process",[self.app.jobs[key].copy()]))
+            self.app.commands.put(("process_outgoing",[self.app.jobs[key].copy()]))
             self.app.busy=True
 
     def outgoing_result(self,job):
