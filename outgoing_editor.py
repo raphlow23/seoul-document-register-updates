@@ -131,6 +131,7 @@ class OutgoingEditor:
         self.file_var=tk.StringVar(value="1. "+Path(job["files"][0]["path"]).name)
         self.file_box=ttk.Combobox(left,textvariable=self.file_var,values=[f"{i+1}. {Path(f['path']).name}" for i,f in enumerate(job["files"])],state="readonly")
         self.file_box.pack(fill="x")
+        self.file_box.current(next((i for i,file in enumerate(job['files']) if file['hash']==job.get('text_file_hash',job['hash'])),0))
         self.file_box.bind("<<ComboboxSelected>>",self.load_source)
         self.source=tk.Text(left,wrap="word",height=18,font=("맑은 고딕",10),padx=8,pady=8)
         self.source.pack(fill="both",expand=True,pady=6)
@@ -219,16 +220,16 @@ class OutgoingEditor:
         self.status.set("복사했습니다. 한글의 원하는 위치에서 Ctrl+V로 붙여넣으세요.")
 
     def insert_selected(self):
-        try:text=self.source.get("sel.first","sel.last")
+        try:self.source.get("sel.first","sel.last")
         except tk.TclError:return messagebox.showinfo("본문 선택","왼쪽 OCR 원문에서 필요한 글을 먼저 선택하세요.",parent=self.win)
-        self.body.insert("insert",reflow(text))
+        self.prepare_excerpt()
 
     def prepare_excerpt(self):
         from ocr_text_editor import OcrTextEditor
         selected=False
         try:text=self.source.get("sel.first","sel.last");selected=True
         except tk.TclError:text=self.source.get("1.0","end")
-        OcrTextEditor(self.app,text,parent=self.win,selected=selected,on_insert=lambda t:self.body.insert("insert",t),on_hwp=lambda:self.export(False))
+        OcrTextEditor(self.app,text,parent=self.win,selected=selected,on_insert=lambda t:self.body.insert("insert",t),on_hwp=lambda:self.export(False),source_file=self.job['files'][max(0,self.file_box.current())])
 
     def compose(self):
         try:text=build_body(self.current())
