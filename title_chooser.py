@@ -165,6 +165,8 @@ class TitleChooser:
         if options:
             self.choice.set(0)
             self.choose(options[0])
+        if hasattr(self,"resume_title"):
+            self.set_title(self.resume_title);self.mode="manual";del self.resume_title
         self.draw()
         self.status.set("PDF에서 필요한 부분을 드래그하거나 오른쪽 제목 후보를 선택하세요." if self.image else "한글 첨부는 오른쪽 OCR·추출 본문에서 문장을 선택하세요.")
 
