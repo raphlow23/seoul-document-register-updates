@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 이전 단계가 설정창을 여는 오류 수정","draft":True,"prerelease":False,"body":"저장·등록을 시작한 문서에서 ‘이전 단계’를 눌렀을 때 설정창이 뜨던 오류를 수정했습니다. 수신은 저장 위치에서 제목·첨부파일 확인으로, 발신은 작성 정보에서 기존 양식 확인으로 돌아갑니다. 수신 완료 후에도 저장 위치→제목 확인→첨부파일 순서로 돌아갈 수 있습니다. 등록 전에는 수정하던 내용을 유지하여 다시 선택하고, 이미 저장·등록한 항목은 기존 결과를 확인합니다. 뒤로 가기로 접수·발신·직인대장을 다시 등록하거나 번호·이력을 지우지 않습니다. 연결 설정은 별도 ‘설정 · 연결’에서 엽니다. HWP 직접 양식 등록·첨부 드래그·자동 업데이트 기능을 유지합니다. 정상 배포 후 최신·직전 릴리스만 남깁니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 파일 저장 취소·첨부 추가·ZIP 오류 수정","draft":True,"prerelease":False,"body":"이전 단계에서 프로그램이 만든 폴더·파일을 원래 위치에서 제거하고 복구 보관합니다. 구글시트 수신·발신·직인대장과 번호는 유지합니다. 추가·수정한 파일이 섞여 있으면 취소 전에 중단해 보호합니다. 다시 진행하면 기존 접수번호로 파일만 저장하며 대장 등록을 반복하지 않습니다. 기존 공문과 새 첨부를 함께 선택하거나 ‘공문에 첨부 추가’에서 PDF·HWP·HWPX·ZIP을 추가할 수 있습니다. 파일을 다시 저장할 때 발신·직인대장의 미완료 등록을 임의로 실행하지 않습니다. Windows에서 압축 해제 폴더 이름 변경 중 WinError 5가 발생하던 문제를 폴더 이름 변경 없이 처리하도록 수정했습니다. 원본 다운로드·개인 양식·처리 이력을 유지합니다. 정상 배포 후 최신·직전 릴리스만 남깁니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets"],check=True,timeout=90)
     startup=out/"browser-startup.json"
     subprocess.run([str(exe),"--test-browser-startup",str(startup)],check=True,timeout=90)
     print("Frozen browser startup check:",startup.read_text())
