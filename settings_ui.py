@@ -25,9 +25,9 @@ def open_settings(app):
     ttk.Label(basic,text="발신 양식별 기본 저장 위치").grid(row=4,column=0,sticky="w",pady=12)
     ttk.Button(basic,text="양식별 저장 위치 설정",command=lambda:folder_settings_dialog(app,win)).grid(row=4,column=1,sticky="w",padx=10)
     def add_template():
-        from template_manager import open_add_template
-        open_add_template(app,parent=win)
-    ttk.Button(basic,text="양식 추가",command=add_template).grid(row=4,column=2)
+        from template_manager import open_pick_template
+        open_pick_template(app,parent=win)
+    ttk.Button(basic,text="HWP 양식 넣기",command=add_template).grid(row=4,column=2)
     connect=ttk.LabelFrame(basic,text="Google 연결",padding=12);connect.grid(row=5,column=0,columnspan=3,sticky="ew",pady=14)
     ttk.Label(connect,text="시트 편집 권한이 있는 계정으로 로그인하세요. 브라우저 방식은 API 설정이 필요 없습니다.",wraplength=760).pack(anchor="w")
     ttk.Label(connect,text="로그인하여 시트가 보이는지 확인 → 열린 전용 브라우저 창 닫기 → 연결 확인",wraplength=760).pack(anchor="w",pady=6)
