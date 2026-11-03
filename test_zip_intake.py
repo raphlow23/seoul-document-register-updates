@@ -20,7 +20,7 @@ def hwpx(title):
 class ZipTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
-        self.root=Path(self.tmp.name);self.store=core.Store(self.root/"history.sqlite");self.addCleanup(self.store.db.close)
+        self.root=Path(self.tmp.name).resolve();self.store=core.Store(self.root/"history.sqlite");self.addCleanup(self.store.db.close)
 
     def archive(self,name="첨부.zip",members=None):
         path=self.root/name
