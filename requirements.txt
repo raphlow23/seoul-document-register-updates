@@ -12,3 +12,4 @@ pywin32>=308; sys_platform == 'win32'
 websocket-client>=1.9,<2
 kiwipiepy==0.20.4
 kiwipiepy-model==0.20.0
+tkinterdnd2==0.6.1
