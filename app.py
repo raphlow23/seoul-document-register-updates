@@ -172,6 +172,12 @@ class Worker(threading.Thread):
                             from core import extract
                             text=extract(data["file"]["path"],progress=lambda t:self.emit("status",t))
                         self.emit("draft_source_result",{**data,"text":text})
+                    elif cmd == 'ocr_preview':
+                        from source_document_view import load
+                        try:
+                            image,count=load(data['file']['path'],data['page'])
+                            self.emit('ocr_preview_result',{**data,'image':image,'page_count':count})
+                        except Exception as error:self.emit('ocr_preview_result',{**data,'image':None,'page_count':1,'error':str(error)})
                     elif cmd == "ocr_clean":
                         from ocr_excerpt import clean
                         try:
@@ -548,6 +554,10 @@ class App:
                 elif kind == "ocr_clean_result":
                     editor=getattr(self,"ocr_text_editor",None)
                     if editor is not None:editor.deliver(data)
+                elif kind == 'ocr_preview_result':
+                    editor=getattr(self,'ocr_text_editor',None)
+                    if editor is not None:editor.deliver_preview(data)
+                    elif data.get('image') is not None:data['image'].close()
                 elif kind == "draft_exported":
                     self.status.set("한글 문서를 새 파일로 저장했습니다: "+data["path"])
                     if data.get("open_after"):
@@ -773,16 +783,11 @@ class App:
         dialog.title("공문 본문과 저장 결과")
         dialog.geometry("800x600")
         buttons=ttk.Frame(dialog);buttons.pack(fill="x",padx=10,pady=6)
-        def copy_ocr(clean=False):
-            from document_draft import reflow
-            body=reflow(job.get("text","")) if clean else job.get("text","")
-            dialog.clipboard_clear();dialog.clipboard_append(body);dialog.update_idletasks()
-        ttk.Button(buttons,text="OCR 본문 복사 → 한글에 붙여넣기",command=copy_ocr).pack(side="left")
-        ttk.Button(buttons,text="줄바꿈 정리하여 복사",command=lambda:copy_ocr(True)).pack(side="left",padx=6)
         def excerpt():
             from ocr_text_editor import OcrTextEditor
-            OcrTextEditor(self,job.get("text",""),parent=dialog)
-        ttk.Button(buttons,text="필요 본문 · 띄어쓰기 정리",command=excerpt).pack(side="left")
+            source=next((f for f in job['files'] if f['hash']==job.get('text_file_hash',job['hash'])),job['files'][0])
+            OcrTextEditor(self,job.get("text",""),parent=dialog,source_file=source)
+        ttk.Button(buttons,text="자동 정리된 본문 확인 · 복사",command=excerpt).pack(side="left")
         text = tk.Text(dialog, wrap="word", font=("맑은 고딕", 11), padx=15, pady=15)
         text.pack(fill="both", expand=True)
         content = f"등록번호: {job.get('number', '')}\n상태: {job['state']}\n{job['reason']}\n\n첨부파일\n"
@@ -791,7 +796,8 @@ class App:
         if job.get('rollback_history'):
             content+='\n\n되돌린 파일 복구 보관 위치\n'+'\n'.join(m['backup'] for m in job['rollback_history'][-1]['moves'])
         if job.get("routing"):
-            content += "\n\n선택한 저장 규칙\n" + "\n".join(t["relative"]+" / "+t["template"] for t in job["routing"]["targets"])
+            from folder_naming import folder_name
+            content += "\n\n폴더 이름\n" + "\n".join(t["relative"]+" / "+(t.get('folder_name') or folder_name(t['template'],t.get('folder_title') or job['routing'].get('folder_title') or job['title'],job['date'],t.get('folder_number'))) for t in job["routing"]["targets"])
         content += "\n\n읽은 본문\n" + (job["text"] or "본문을 읽지 못했습니다. 제목과 분류를 직접 입력할 수 있습니다.")
         text.insert("1.0", content)
         text.configure(state="disabled")
