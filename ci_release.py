@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 이전 단계·파일 드래그·시트 읽기 수정","draft":True,"prerelease":False,"body":"이전 단계로 돌아가 제목·저장 위치·발신 정보를 다시 확인할 수 있습니다. 이미 시작한 등록의 번호와 이력은 유지하여 중복 등록을 방지합니다. PDF·HWP·HWPX·ZIP 여러 파일을 화면에 끌어다 놓아 추가합니다. 숨겨진 첫 행 때문에 정상 대장의 열 구성을 잘못 판단하던 문제와 일시적인 빈 클립보드 복사를 수정했습니다. 기본 양식 종류는 센터회신·센터발송·중앙회신·시청회신·업무연락·처리지침·건축/사용승인 7종입니다. 실제 개인 HWP 양식은 별도 비공개 보충 ZIP으로 최초 한 번 설치하며 공개 배포에는 포함하지 않습니다. 본문 타 기관 번호·날짜는 직접 입력하고 발신번호와 당일 날짜만 지정된 메타데이터에 넣습니다. 자동 업데이트는 기존 설정·개인 양식·처리 이력을 유지합니다. 정상 배포 후 최신·직전 릴리스만 남깁니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 프로그램에서 HWP 양식 직접 등록","draft":True,"prerelease":False,"body":"설정 또는 발신 양식 선택 화면의 ‘HWP 양식 넣기’에서 원본 .hwp를 바로 선택합니다. 등록 창에 HWP 하나를 끌어다 놓아도 됩니다. ZIP이나 별도 설치 명령은 필요 없습니다. 번호·날짜·제목·수신처 위치를 자동 제안하며 같은 문구가 본문에도 있으면 주변 문장을 보고 바꿀 위치만 선택합니다. 위치를 확인하지 않으면 등록하지 않습니다. 원본은 유지하고 내부 사본에서 선택한 위치만 준비합니다. 원본 스타일·문단·표·그림과 타 기관 번호·날짜를 유지하는지 검증합니다. 추가 즉시 양식 목록에 반영하고 이후 업데이트에도 보관합니다. 실제 개인 HWP는 공개 GitHub 배포에 포함하지 않습니다. 이전 단계 이동·드래그 첨부·숨김 행 보정 기능을 유지합니다. 정상 배포 후 최신·직전 릴리스만 남깁니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots"],check=True,timeout=90)
     startup=out/"browser-startup.json"
     subprocess.run([str(exe),"--test-browser-startup",str(startup)],check=True,timeout=90)
     print("Frozen browser startup check:",startup.read_text())
