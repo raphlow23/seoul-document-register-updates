@@ -3,7 +3,6 @@ from pathlib import Path, PureWindowsPath
 import re
 import shutil
 import stat
-import tempfile
 import uuid
 import zipfile
 
@@ -47,9 +46,9 @@ def unpack(path,cache,progress=None):
     cache=Path(cache).resolve();cache.mkdir(parents=True,exist_ok=True)
     if Path(path).stat().st_size>MAX_ARCHIVE:raise ValueError("ZIP은 압축 파일 크기 200MB까지 처리합니다.")
     # A unique persistent directory keeps pending work usable after Downloads is cleaned or the app updates.
-    holder=tempfile.TemporaryDirectory(prefix="zip-",dir=cache)
-    work=Path(holder.name).resolve()
+    work=(cache/("bundle-"+uuid.uuid4().hex)).resolve()
     if not work.is_relative_to(cache):raise ValueError("ZIP 임시 저장 경로를 확인하지 못했습니다.")
+    work.mkdir();complete=False
     budget={"entries":0,"bytes":0};files=[]
     def expand(archive,base,depth):
         if depth>MAX_DEPTH:raise ValueError("ZIP 안의 ZIP은 최대 3단계까지 처리합니다.")
@@ -85,13 +84,16 @@ def unpack(path,cache,progress=None):
     try:
         expand(path,work/"files",0)
         if not files:raise ValueError("ZIP 안에 처리할 첨부파일이 없습니다.")
-        # Move completed extraction to an application-owned stable location; failure cleans only this temporary tree.
-        final=cache/("bundle-"+uuid.uuid4().hex)
-        work.rename(final)
-        return [final/f.relative_to(work) for f in files]
+        # Keep the unique extraction directory in place. Windows preview/antivirus can
+        # briefly hold children open, which makes renaming their parent fail with WinError 5.
+        complete=True
+        return files
     except (zipfile.BadZipFile,NotImplementedError,RuntimeError) as error:
         raise ValueError("ZIP을 읽지 못했습니다. 다운로드 완료 여부와 암호·압축 방식을 확인해 주세요.") from error
-    finally:holder.cleanup()
+    finally:
+        if not complete:
+            try:discard_extraction([work],cache)
+            except OSError:pass  # Preserve the original extraction error if a scanner holds a file.
 
 
 def ingest_zip(path,store,hash_,progress=None):
