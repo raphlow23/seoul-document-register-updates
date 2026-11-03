@@ -5,7 +5,6 @@ import json
 import os
 from pathlib import Path
 import re
-import tempfile
 import uuid
 import zipfile
 
@@ -41,21 +40,23 @@ def model_path(config):
         if source.name!=COMPONENT_NAME:raise ValueError("한국어 모델 버전이 올바르지 않습니다.")
     except (OSError,KeyError) as error:
         raise ValueError("띄어쓰기 모델을 준비하지 못했습니다. 새 설치본의 install.cmd를 실행하거나 공유 업데이트 폴더 연결을 확인해 주세요.") from error
-    with tempfile.TemporaryDirectory(prefix="prepare-",dir=root) as temporary:
-        work=Path(temporary).resolve()
-        if not work.is_relative_to(root):raise ValueError("모델 설치 경로를 확인하지 못했습니다.")
+    final=(root/(MODEL_VERSION+'-'+uuid.uuid4().hex)).resolve()
+    if not final.is_relative_to(root) or final==root:raise ValueError('모델 설치 위치가 올바르지 않습니다.')
+    final.mkdir()
+    try:
         with zipfile.ZipFile(source) as z:
             names=z.namelist()
             if len(names)!=len(MODEL_FILES)+1 or set(names)!=MODEL_FILES|{"BUILDINFO.json"} or sum(i.file_size for i in z.infolist())>100*1024*1024:
                 raise ValueError("한국어 모델 압축 구성이 올바르지 않습니다.")
             for name in names:
-                with z.open(name) as src,(work/name).open("xb") as dst:
+                with z.open(name) as src,(final/name).open("xb") as dst:
                     import shutil
                     shutil.copyfileobj(src,dst)
-        if not valid_model(work):raise ValueError("한국어 모델 압축 해제 검증에 실패했습니다.")
-        final=root/(MODEL_VERSION+"-"+uuid.uuid4().hex)
-        if not final.resolve().is_relative_to(root):raise ValueError("모델 설치 위치가 올바르지 않습니다.")
-        work.rename(final)
+        if not valid_model(final):raise ValueError("한국어 모델 압축 해제 검증에 실패했습니다.")
+    except Exception:
+        import shutil
+        if final.resolve().is_relative_to(root) and final!=root:shutil.rmtree(final,ignore_errors=True)
+        raise
     pointer=root/("active-"+uuid.uuid4().hex+".json")
     pointer.write_text(json.dumps({"folder":final.name}),encoding="utf-8")
     os.replace(pointer,root/"active.json")
