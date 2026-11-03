@@ -3,7 +3,7 @@ from copy import deepcopy
 from unittest.mock import Mock
 import unittest
 import test_file_rollback as fixture
-from receipt_attachments import append
+from receipt_attachments import append,load_sources,discard_sources
 import file_rollback
 import core
 
@@ -43,3 +43,23 @@ class AttachmentTests(unittest.TestCase):
         append(self.job,[self.extra()],self.config,self.store)
         self.assertEqual([f['hash'] for f in self.job['receipt_marker_files']],old)
         self.assertTrue(self.job['sheet_attempted'])
+
+    def test_zip_can_add_missing_files_while_including_the_original_registered_attachment(self):
+        import zipfile
+        folder=self.save();path=self.base/'new attachments.zip'
+        with zipfile.ZipFile(path,'w') as archive:
+            archive.writestr('original.pdf',self.source.read_bytes());archive.writestr('extra.txt',b'extra file')
+        sources=load_sources([path],self.job,self.store)
+        append(self.job,sources,self.config,self.store);discard_sources(sources,self.store)
+        self.assertFalse(folder.exists());self.assertEqual(len(self.job['files']),2);self.assertEqual(self.job['number'],'581')
+        self.assertTrue(all('title' in entry and 'state' in entry for entry in self.store.all()))
+        self.assertTrue(all(Path(file['path']).is_file() for file in self.job['files']))
+
+    def test_zip_cannot_take_another_registered_cases_attachment(self):
+        import zipfile
+        folder=self.save();extra=self.extra();extra.update(receipt_done=True,state='완료');self.store.put(extra)
+        path=self.base/'foreign.zip'
+        with zipfile.ZipFile(path,'w') as archive:archive.writestr('other.pdf',Path(extra['files'][0]['path']).read_bytes())
+        sources=load_sources([path],self.job,self.store)
+        with self.assertRaises(ValueError):append(self.job,sources,self.config,self.store)
+        discard_sources(sources,self.store);self.assertTrue(folder.exists())
