@@ -5,6 +5,34 @@ from core import digest
 from file_rollback import has_files,execute
 
 
+def load_sources(paths,job,store,progress=None):
+    from core import ingest
+    from zip_intake import unpack
+    sources=[]
+    for path in paths:
+        path=Path(path)
+        if path.suffix.lower()!='.zip':
+            source,_=ingest(path,store,progress=progress);sources.append(source);continue
+        hash_=digest(path);old=store.get(hash_)
+        if old and (old.get('receipt_done') or old.get('sheet_attempted') or old.get('files_started') or old.get('parent')) and (old.get('parent') or old['hash'])!=job['hash']:
+            raise ValueError('다른 공문에 이미 포함된 ZIP입니다. 해당 공문의 이력을 먼저 확인하세요.')
+        cache=Path(store.db.execute('PRAGMA database_list').fetchone()[2]).parent/'archive-cache'
+        files=unpack(path,cache,progress)
+        sources.append({'hash':hash_,'archive_hash':hash_,'source_archive':str(path),'files':[{'path':str(file),'hash':digest(file)} for file in files],'state':'확인 필요','_zip_cache':str(cache),'_zip_paths':[str(file) for file in files]})
+    return sources
+
+
+def discard_sources(sources,store):
+    from zip_intake import discard_extraction
+    # Only discard this import's new, otherwise unreferenced cache directories.
+    used={file['path'] for entry in store.all() for file in entry.get('files',[])}
+    for source in sources:
+        paths=source.get('_zip_paths',[])
+        if paths and not any(path in used for path in paths):
+            try:discard_extraction(paths,source['_zip_cache'])
+            except OSError:pass
+
+
 def append(job,additions,config,store):
     additions=[source for source in additions if source['hash']!=job['hash']]
     known={f['hash'] for f in job['files']};extra=[]
@@ -17,6 +45,7 @@ def append(job,additions,config,store):
             if file['hash'] in known:continue
             if not Path(file['path']).is_file() or digest(file['path'])!=file['hash']:raise ValueError('추가할 원본 첨부파일이 없거나 변경되었습니다.')
             old=store.get(file['hash'])
+            if old and old.get('parent')!=job['hash'] and (old.get('receipt_done') or old.get('sheet_attempted') or old.get('files_started') or old.get('state') in ('완료','묶음 처리 완료')):raise ValueError('다른 공문에서 이미 처리한 첨부파일입니다.')
             if old and old.get('parent') not in (None,job['hash'],source['hash']):raise ValueError('다른 묶음의 첨부파일은 보호합니다.')
             known.add(file['hash']);extra.append(deepcopy(file))
     if not extra:return job
@@ -27,9 +56,9 @@ def append(job,additions,config,store):
     job['reason']=f"첨부파일 {len(extra)}개 추가 · 총 {len(job['files'])}개 · 기존 시트 등록·번호 유지"
     updates={job['hash']:job}
     for source in additions:
-        updates[source['hash']]={**source,'parent':job['hash'],'state':'묶음에 포함','archive_alias':bool(source.get('archive_hash'))}
+        updates[source['hash']]={**job,**{key:value for key,value in source.items() if not key.startswith('_zip_')},'parent':job['hash'],'state':'묶음에 포함','archive_alias':bool(source.get('archive_hash'))}
     for file in extra:
         old=updates.get(file['hash']) or store.get(file['hash']) or {}
-        updates[file['hash']]={**old,'hash':file['hash'],'files':[file],'parent':job['hash'],'state':'묶음에 포함'}
+        updates[file['hash']]={**job,**old,'hash':file['hash'],'files':[file],'parent':job['hash'],'state':'묶음에 포함'}
     store.put_many(list(updates.values()))
     return job
