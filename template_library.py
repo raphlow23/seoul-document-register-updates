@@ -5,6 +5,7 @@ import json
 import os
 import re
 import uuid
+import tempfile
 
 import hwp_documents as docs
 
@@ -48,10 +49,15 @@ def suggestions(text):
         if match:result["date"]=match[0]
     if not result["number"]:
         match=re.search(r"서울\s*센터\s*20\d{2}\s*[-－]\s*\d{1,6}",text)
+        if not match:match=re.search(r"(?<!\d)20\d{2}\s*[-－]\s*\d{1,6}(?!\d)",text)
         if match:result["number"]=match[0]
     if not result["date"]:
         match=re.search(r"\(\s*(?:20)?\d{2}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}\s*\.?\s*\)",text)
         if match:result["date"]=match[0]
+    for key,label in (("title","제\\s*목"),("receiver","수\\s*신")):
+        if not result[key]:
+            match=re.search(r"(?m)^[ \t]*"+label+r"[ \t]*[:：]?[ \t]*(?:\r?\n[ \t]*)*([^\n]+)",text)
+            if match:result[key]=match[1].strip()
     return result
 
 
@@ -76,6 +82,14 @@ def add(source,settings,storage=None):
     raw=source.read_bytes()
     if len(raw)>100*1024*1024:raise ValueError("양식 파일이 변경되었습니다. 다시 선택하세요.")
     anchors={key:str(settings.get(key,"")).strip() for key in TOKENS}
+    original_number=anchors['number'];original_hash=hashlib.sha256(raw).hexdigest()
+    if settings.get('_source_sha256') and settings['_source_sha256']!=original_hash:raise ValueError('미리보기 이후 원본 HWP가 변경되었습니다. 파일을 다시 선택해 주세요.')
+    if any(value and docs._compact(text).count(docs._compact(value))>1 for value in anchors.values()):
+        from hwp_anchor_slots import prepare
+        with tempfile.TemporaryDirectory(prefix='sdr-form-') as temporary:
+            prepared=Path(temporary)/'selected-slots.hwp'
+            anchors=prepare(source,prepared,anchors,settings.get('_occurrences',{}),text)
+            raw=prepared.read_bytes();text=inspect(prepared)
     validate_anchors(text,anchors)
     label=str(settings.get("label","")).strip()
     family=settings.get("family","공문")
@@ -105,8 +119,8 @@ def add(source,settings,storage=None):
           "default_receiver":str(settings.get("default_receiver","")).strip(),"old_sender":anchors["sender"],
           "old_number":anchors["number"],"old_date":anchors["date"],"title_fragments":[anchors["title"]] if anchors["title"] else [],
           "blank_body":True,"metadata_only":True,"body_start":"","signature":"",
-          "date_pattern":"({year2:02d}. {month}. {day})","number_pattern":number_pattern(anchors["number"]),
-          "source_sha256":hashlib.sha256(raw).hexdigest()}
+          "date_pattern":"({year2:02d}. {month}. {day})","number_pattern":number_pattern(original_number),
+          "original_sha256":original_hash,"source_sha256":hashlib.sha256(raw).hexdigest()}
     temporary=root/("catalog-"+uuid.uuid4().hex+".tmp")
     try:
         with target.open("xb") as dst:dst.write(raw)
