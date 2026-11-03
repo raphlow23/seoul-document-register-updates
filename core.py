@@ -177,6 +177,13 @@ class Store:
         row = self.db.execute("SELECT payload FROM jobs WHERE hash=?", (hash_,)).fetchone()
         return json.loads(row[0]) if row else None
 
+    def put_many(self,jobs):
+        try:
+            self.db.executemany("INSERT INTO jobs VALUES (?,?) ON CONFLICT(hash) DO UPDATE SET payload=excluded.payload",[(job['hash'],json.dumps(job,ensure_ascii=False)) for job in jobs])
+            self.db.commit()
+        except Exception:
+            self.db.rollback();raise
+
     def put(self, job):
         self.db.execute("INSERT INTO jobs VALUES (?,?) ON CONFLICT(hash) DO UPDATE SET payload=excluded.payload",
                         (job["hash"], json.dumps(job, ensure_ascii=False)))
@@ -219,7 +226,7 @@ def ingest(path, store, progress=None):
     return job, True
 
 
-def copy_files(job, root, subfolders=None):
+def copy_files(job, root, subfolders=None,on_progress=None):
     root = Path(root)
     if not root.is_dir():
         raise ValueError("공유폴더에 접근할 수 없습니다. 탐색기에서 연결을 확인해 주세요.")
@@ -266,10 +273,18 @@ def copy_files(job, root, subfolders=None):
                 # Keep a failed partial copy distinguishable; original downloads stay intact.
                 if created and target.exists():
                     try:
-                        target.rename(target.with_name(target.name + ".incomplete-" + uuid.uuid4().hex[:8]))
+                        incomplete=target.with_name(target.name + ".incomplete-" + uuid.uuid4().hex[:8])
+                        target.rename(incomplete)
+                        from file_rollback import track_file
+                        track_file(job,incomplete,digest(incomplete),'receipt')
+                        if on_progress:on_progress()
                     except OSError:
                         pass
                 raise
+            if created:
+                from file_rollback import track_file
+                track_file(job,target,hash_,'receipt')
+                if on_progress:on_progress()
         if digest(target) != hash_:
             raise ValueError(f"복사 검증 실패: {target}")
         results.append(str(target))
@@ -394,9 +409,10 @@ class Sheets:
             except Exception:pass
 
     def register(self, job, store):
-        if getattr(self,"browser",None):self.browser.recover(["SDR:"+f["hash"] for f in job["files"]])
+        receipt_files=job.get('receipt_marker_files') or job['files']
+        if getattr(self,"browser",None):self.browser.recover(["SDR:"+f["hash"] for f in receipt_files])
         prop, rows, found = self.snapshot()
-        markers = ["SDR:" + f["hash"] for f in job["files"]]
+        markers = ["SDR:" + f["hash"] for f in receipt_files]
         existing = {found[m] for m in markers if m in found}
         if len(existing) > 1:
             raise ValueError("묶음 파일이 서로 다른 등록 행에 존재합니다. 확인해 주세요.")
@@ -508,6 +524,17 @@ def process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, st
 
 def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, stamp_factory=None):
     from outgoing import validate as validate_outgoing, finish as finish_outgoing
+    if job.get('receipt_done') and job.get('files_rolled_back'):
+        from folder_naming import copy_to_subfolders
+        job['destinations']=copy_to_subfolders(job,config['root'],on_progress=lambda:store.put(job))
+        job['files_rolled_back']=False
+        if not config.get('_register_outgoing_after_restore'):
+            out=job.get('outgoing',{})
+            job['state']='수신 완료·발신 등록 대기' if out.get('enabled') and not (out.get('complete') and out.get('stamp',{}).get('complete')) else '완료'
+            job['reason']='파일만 다시 저장 완료 · 기존 구글시트 등록·번호 유지'
+            store.put_many([job,*[{**job,'hash':file['hash'],'parent':job['hash'],'state':'묶음 처리 완료'} for file in job['files'] if file['hash']!=job['hash']]])
+            return job
+        store.put(job)
     out=validate_outgoing(job,config)
     if job["state"] == "완료" or job.get("receipt_done"):
         job["receipt_done"]=True
@@ -538,11 +565,12 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
         store.put(job)
         row, number = sheets_factory(receipt_config).register(job, store)
     else:
-        job["destinations"] = copy_files(job, config["root"])
+        job["destinations"] = copy_files(job, config["root"],on_progress=lambda:store.put(job))
         job["state"] = "저장 완료·등록 대기"
         store.put(job)
         row, number = sheets_factory(receipt_config).register(job, store)
     job["receipt_type"]=receipt_type
+    job['files_rolled_back']=False
     job["receipt_tab"]=RECEIPT_TABS[receipt_type]
     job.update(state="수신 완료·발신 등록 대기" if out["enabled"] else "완료", row=row, number=number, receipt_done=True, reason="저장·수신등록 완료")
     store.put(job)
