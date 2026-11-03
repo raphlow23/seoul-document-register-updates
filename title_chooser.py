@@ -17,6 +17,8 @@ class TitleChooser:
             for file in job["files"]:
                 if file["hash"] not in [x["hash"] for x in self.files]:
                     self.files.append(file)
+        from attachment_files import can_extract
+        self.files.sort(key=lambda file:not can_extract(file['path']))
         self.image = self.photo = None
         self.page, self.page_count = 0, 1
         self.zoom, self.scale = 1.0, 1.0
@@ -168,7 +170,8 @@ class TitleChooser:
         if hasattr(self,"resume_title"):
             self.set_title(self.resume_title);self.mode="manual";del self.resume_title
         self.draw()
-        self.status.set("PDF에서 필요한 부분을 드래그하거나 오른쪽 제목 후보를 선택하세요." if self.image else "한글 첨부는 오른쪽 OCR·추출 본문에서 문장을 선택하세요.")
+        from attachment_files import can_extract
+        self.status.set("엑셀 등 첨부파일은 그대로 함께 저장합니다. 제목을 직접 입력하거나 PDF·한글 파일을 골라 주세요." if not can_extract(self.selected_file()['path']) else "PDF에서 필요한 부분을 드래그하거나 오른쪽 제목 후보를 선택하세요." if self.image else "한글 첨부는 오른쪽 OCR·추출 본문에서 문장을 선택하세요.")
 
     def choose(self, option):
         self.set_title(option["title"])
