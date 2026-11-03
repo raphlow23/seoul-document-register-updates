@@ -105,7 +105,7 @@ def run():
                 assert writes==["receipt"] and app.jobs[h0]["number"]=="581"
                 assert not app.tree.exists(h0) and flow.history_tree.exists(h0)
                 # Reproduce the reported Back -> settings bug after a receipt has committed.
-                with patch.object(app,'settings',side_effect=AssertionError('Back must never open settings')):
+                with patch.object(app,'settings',side_effect=AssertionError('Back must never open settings')),patch('file_rollback.has_files',return_value=False):
                     flow.back();assert flow.section=='receipt' and flow.step==3
                     check_actions();flow.back();assert flow.step==2
                     check_actions();flow.back();assert flow.step==1
@@ -164,7 +164,7 @@ def run():
                 assert opened["outgoing"]["number"]=="12" and opened["outgoing"]["stamp"]["complete"]
                 assert writes==["receipt","outgoing"],writes
                 assert app.jobs[h0]["outgoing"]["stamp"]["complete"]
-                with patch.object(app,'settings',side_effect=AssertionError('Back must never open settings')):
+                with patch.object(app,'settings',side_effect=AssertionError('Back must never open settings')),patch('file_rollback.has_files',return_value=False):
                     flow.back();assert flow.step==3
                     flow.back();assert flow.step==2
                     check_actions();flow.back();assert flow.step==1
@@ -184,7 +184,10 @@ def run():
                 dialog=open_add_template(app);root.update_idletasks();dialog.destroy()
         finally:
             app.commands.put(("quit",None));app.worker.join(timeout=5)
+            for token in root.tk.call('after','info'):root.after_cancel(token)
             root.destroy()
+    from rollback_smoke import run as rollback_check
+    rollback_check()
     print("Guided receipt, grouped attachments, independent numbering, history, outgoing + stamp, settings: OK")
 
 
