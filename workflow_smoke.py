@@ -182,6 +182,23 @@ def run():
                     if isinstance(child,tk.Toplevel):child.destroy()
                 from template_manager import open_add_template
                 dialog=open_add_template(app);root.update_idletasks();dialog.destroy()
+                # Original PDF and automatic 2-to-attachments review use the real worker/UI.
+                from pypdf import PdfWriter
+                original=base/'source-preview.pdf';writer=PdfWriter();writer.add_blank_page(width=72,height=72)
+                with original.open('wb') as stream:writer.write(stream)
+                original_bytes=original.read_bytes()
+                from ocr_text_editor import OcrTextEditor
+                from ocr_excerpt import clean
+                source_text='제목 원본 공문\n1. 인사말\n2. 검토할 본문입니다.\n붙임 1. 확인서 1부. 끝.\n시행 1234'
+                # Spacing engine itself is exercised against the real model in unit checks.
+                with patch('ocr_excerpt.clean',side_effect=lambda text,config,start,attachments,spacing:clean(text,config,start,attachments,False)):
+                    review=OcrTextEditor(app,source_text,source_file={'path':str(original),'hash':digest(original)})
+                    wait(lambda:review.ready and review.original.image is not None);idle()
+                    assert review.result.get('1.0','end').strip().startswith('2.')
+                    assert review.result.get('1.0','end').strip().endswith('끝.')
+                    assert review.source.get('1.0','end').strip()==source_text
+                    assert original.read_bytes()==original_bytes
+                    review.close()
         finally:
             app.commands.put(("quit",None));app.worker.join(timeout=5)
             for token in root.tk.call('after','info'):root.after_cancel(token)
