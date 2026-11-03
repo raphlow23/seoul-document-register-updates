@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 def missing_download_source(job, downloads):
+    if job.get('files_rolled_back'):return False
     if not downloads:return False
     folder=Path(downloads)
     try:
