@@ -29,8 +29,10 @@ def run():
         store=Store(base/"history.sqlite")
         for job in jobs:store.put(job)
         store.db.close()
-        root=tk.Tk();root.withdraw();errors=[];writes=[];fail_receipt=[True]
+        from file_drop import create_root
+        root=create_root();root.withdraw();errors=[];writes=[];fail_receipt=[True]
         app=App(root,base,smoke=True);flow=app.workflow
+        assert app.file_drop is not None
         app.config.update(root=str(shared),downloads=str(downloads),recipient="담당자")
         app.commands.put(("config",app.config.copy()))
         def wait(predicate):
@@ -86,6 +88,14 @@ def run():
                 route.children["outgoing"].set(False);route.redraw_preview()
                 preview=route.preview.get("1.0","end")
                 assert "005. 확정 제목" in preview and "2.중앙회신" in preview
+                flow.back();assert flow.step==2
+                title=app.title_dialog
+                wait(lambda:app.busy);idle()
+                title.deliver({"request":title.request,"owner":title.owner,"kind":"prepare","agency":"central","text":"시험 제목","image":None,"options":[{"mode":"header","label":"제목란","title":"다른 추천"}]})
+                assert title.title.get("1.0","end").strip()=="확정 제목"
+                title.apply();wait(lambda:getattr(app,"route_dialog",None) is not None and bool(app.route_dialog.records));idle()
+                route=app.route_dialog
+                assert "0.중앙센터 공문" in route.selected and not route.children["outgoing"].get()
                 flow.continue_outgoing.set(True);route.apply(True)
                 wait(lambda:bool(errors));idle()
                 assert flow.step==3 and flow.pages["route"].winfo_children(), "Failure must leave usable retry controls"
@@ -115,6 +125,9 @@ def run():
                 editor.vars["title"].set("수정한 발신 제목");assert not editor.same.get()
                 editor.vars["receiver"].set("시험 수신 기관")
                 editor.vars["sender"].set("발신 담당자");assert editor.stamp["applicant"].get()=="발신 담당자"
+                flow.back();assert flow.step==2
+                flow.outgoing_form(app.jobs[h0],"5");editor=app.outgoing_editor
+                assert editor.vars["title"].get()=="수정한 발신 제목"
                 # Navigation retains in-progress edits; it never clears registration history.
                 flow.history_home();flow.outgoing_form(app.jobs[h0])
                 editor=app.outgoing_editor;assert editor.vars["title"].get()=="수정한 발신 제목"
