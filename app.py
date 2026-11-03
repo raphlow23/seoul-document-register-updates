@@ -122,6 +122,28 @@ class Worker(threading.Thread):
                         else:
                             google_login.logout(self.config)
                             self.emit("google_logout_success", None)
+                    elif cmd in ('receipt_attach','receipt_attach_paths'):
+                        from receipt_attachments import append
+                        job=self.store.get(data['hash'])
+                        if not job:raise ValueError('첨부파일을 추가할 공문을 찾지 못했습니다.')
+                        additions=[]
+                        if cmd=='receipt_attach_paths':
+                            for path in data['paths']:
+                                source,_=ingest(path,self.store,progress=lambda t:self.emit('status',t));additions.append(source)
+                        else:additions=[self.store.get(key) for key in data['jobs']]
+                        if any(source is None for source in additions):raise ValueError('추가할 첨부파일 이력이 없습니다.')
+                        result=append(job,additions,self.config,self.store)
+                        self.emit('job',result)
+                        for source in additions:
+                            if source['hash']!=job['hash']:self.emit('job',self.store.get(source['hash']))
+                        self.emit('receipt_attached',{'job':result})
+                    elif cmd == "file_rollback":
+                        from file_rollback import execute
+                        job=self.store.get(data['hash'])
+                        if not job:raise ValueError('되돌릴 문서 이력을 찾지 못했습니다.')
+                        result=execute(job,self.config,self.store,data['scope'])
+                        self.emit('job',result)
+                        self.emit('file_rollback_done',{**data,'job':result})
                     elif cmd == "outgoing_save":
                         from outgoing import merge_edit
                         job=self.store.get(data["hash"])
@@ -168,6 +190,10 @@ class Worker(threading.Thread):
                             export_hwp(style(out["template_id"]),out,data["path"])
                             out["hwp_path"]=data["path"]
                             out["hwp_saved_number"]=str(out.get("number") or out.get("file_number",""))
+                            from core import digest
+                            from file_rollback import track_file
+                            out['hwp_created_sha256']=digest(data['path']);out['files_rolled_back']=False
+                            track_file(job,data['path'],out['hwp_created_sha256'],'outgoing')
                         elif data["copy_only"]:
                             template_copy(out["template_path"],data["path"])
                         else:
@@ -220,7 +246,8 @@ class Worker(threading.Thread):
                     elif cmd == "route_apply":
                         from folder_naming import preflight
                         job = self.store.get(data["hash"])
-                        if not job or job["state"] in ("완료","묶음 처리 완료","묶음에 포함"):
+                        file_only=bool(job and job.get('receipt_done') and job.get('files_rolled_back'))
+                        if not job or (job["state"] in ("완료","묶음 처리 완료","묶음에 포함") and not file_only):
                             raise ValueError("완료된 공문의 저장 위치는 여기서 변경할 수 없습니다.")
                         old_targets = {t["relative"]:t for t in job.get("routing",{}).get("targets",[])}
                         if job.get("files_started"):
@@ -256,9 +283,9 @@ class Worker(threading.Thread):
                         self.emit("route_applied",{"hash":job["hash"],"templates":self.config["route_templates"],"document_template":job.get("outgoing",{}).get("template_path","")})
                         if data["execute"]:
                             self.execute(job)
-                    elif cmd == "process":
+                    elif cmd in ("process","process_outgoing"):
                         for job in data:
-                            self.execute(job)
+                            self.execute(job,register_outgoing=cmd=='process_outgoing')
                     elif cmd == "test":
                         Sheets(self.config).snapshot()
                         exists = Path(self.config["root"]).is_dir()
@@ -371,14 +398,14 @@ class Worker(threading.Thread):
         self.emit("job", job)
         self.emit("status", "확인 목록에 추가했습니다. 첨부에서 제목을 골라 주세요." if new else "이미 확인한 파일입니다. 기존 처리 이력을 표시합니다.")
 
-    def execute(self, job):
+    def execute(self, job,register_outgoing=False):
         # A queued UI snapshot must not undo a completed/attempted database transaction.
         saved = self.store.get(job["hash"])
         if saved and (saved["state"] in ("완료", "묶음 처리 완료", "묶음에 포함") or saved.get("sheet_attempted")):
             job = saved
         self.emit("status", "저장·접수등록 중: " + job["title"])
         try:
-            if job.get("outgoing",{}).get("enabled") and job["outgoing"].get("open_hwp_after_registration") and not job["outgoing"].get("complete"):
+            if (register_outgoing or not job.get('receipt_done')) and job.get("outgoing",{}).get("enabled") and job["outgoing"].get("open_hwp_after_registration") and not job["outgoing"].get("complete"):
                 from hwp_documents import check_template
                 check_template(job["outgoing"]["template_id"])
                 if job["outgoing"].get("folder_plan"):
@@ -386,9 +413,10 @@ class Worker(threading.Thread):
                     validate(job["outgoing"]["folder_plan"],job["outgoing"])
             if not job.get("routing") and not job.get("receipt_done"):
                 raise ValueError("‘저장 위치 선택’에서 공문 종류와 저장할 폴더를 먼저 골라 주세요.")
-            result = process(job, self.config, self.store)
+            files_only=bool(job.get('receipt_done') and job.get('files_rolled_back') and not register_outgoing)
+            result = process(job,{**self.config,'_register_outgoing_after_restore':True} if register_outgoing else self.config,self.store)
             self.emit("job", result)
-            self.emit("completed", result)
+            self.emit("files_resaved" if files_only else "completed", result)
         except Exception as e:
             job["reason"] = str(e)
             self.store.put(job)
@@ -488,9 +516,18 @@ class App:
                     messagebox.showerror("확인이 필요합니다", data)
                 elif kind == "notice":
                     messagebox.showinfo("연결 확인", data)
-                elif kind == "completed":
+                elif kind == 'file_rollback_done':
+                    self.busy=False
+                    self.workflow.rollback_finished(data)
+                    self.status.set('파일·폴더 저장을 취소했습니다. 구글시트 등록과 번호는 유지합니다.')
+                elif kind == 'receipt_attached':
+                    self.busy=False
+                    self.workflow.attachments_added(data['job'])
+                    self.status.set(data['job']['reason'])
+                elif kind in ("completed","files_resaved"):
                     out=data.get("outgoing",{})
                     detail=f"수신 {data['number']}"+(f" · 발신 {out.get('number','')} · 직인대장 등록 완료" if out.get("enabled") else " · 저장·수신등록 완료")
+                    if kind=='files_resaved':detail=f"수신 {data['number']} · 파일 다시 저장 완료 · 기존 대장 유지"
                     self.status.set(detail+" · "+data["title"])
                     self.workflow.completed(data)
                     self.root.bell()
@@ -746,6 +783,8 @@ class App:
         content = f"등록번호: {job.get('number', '')}\n상태: {job['state']}\n{job['reason']}\n\n첨부파일\n"
         content += "\n".join(f["path"] for f in job["files"])
         content += "\n\n저장 위치\n" + "\n".join(job.get("destinations", []))
+        if job.get('rollback_history'):
+            content+='\n\n되돌린 파일 복구 보관 위치\n'+'\n'.join(m['backup'] for m in job['rollback_history'][-1]['moves'])
         if job.get("routing"):
             content += "\n\n선택한 저장 규칙\n" + "\n".join(t["relative"]+" / "+t["template"] for t in job["routing"]["targets"])
         content += "\n\n읽은 본문\n" + (job["text"] or "본문을 읽지 못했습니다. 제목과 분류를 직접 입력할 수 있습니다.")
