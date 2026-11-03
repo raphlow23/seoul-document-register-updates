@@ -98,10 +98,11 @@ class BrowserUI:
         return r.get("result",{}).get("value")
 
     def key(self,key,ctrl=False):
-        vk={"Enter":13,"Escape":27,"Delete":46}.get(key,ord(key.upper()) if len(key)==1 else 0)
+        vk={"Enter":13,"Escape":27,"Delete":46,"End":35,"Home":36,"Tab":9}.get(key,ord(key.upper()) if len(key)==1 else 0)
         mod=2 if ctrl else 0
-        self.call("Input.dispatchKeyEvent",{"type":"keyDown","key":key,"windowsVirtualKeyCode":vk,"modifiers":mod})
-        self.call("Input.dispatchKeyEvent",{"type":"keyUp","key":key,"windowsVirtualKeyCode":vk,"modifiers":mod})
+        code="Key"+key.upper() if len(key)==1 and key.isalpha() else key
+        self.call("Input.dispatchKeyEvent",{"type":"keyDown","key":key,"code":code,"windowsVirtualKeyCode":vk,"modifiers":mod})
+        self.call("Input.dispatchKeyEvent",{"type":"keyUp","key":key,"code":code,"windowsVirtualKeyCode":vk,"modifiers":mod})
 
     def ready(self):
         deadline=time.monotonic()+12
@@ -134,9 +135,31 @@ class BrowserUI:
         raise ValueError("시트 탭을 확인하지 못했습니다: "+name+"\n현재 화면의 탭: "+actual+"\n시트 로딩이 끝난 뒤 ‘연결 확인’을 다시 눌러 주세요. 설정의 구글 시트 ID도 확인해 주세요.")
 
     def select(self,range_):
-        ok=self.evaluate("""(()=>{let x=document.querySelector('#t-name-box');if(!x)return false;x.focus();x.value="""+json.dumps(range_)+""";x.dispatchEvent(new Event('input',{bubbles:true}));return true})()""")
-        if not ok:raise ValueError("시트의 범위 입력란을 찾지 못했습니다.")
-        self.key("Enter");time.sleep(.15)
+        self.call("Page.bringToFront")
+        point=self.evaluate("""(()=>{const e=document.querySelector('#t-name-box');if(!e)return null;const r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()""")
+        if not point:raise ValueError("시트의 범위 입력란을 찾지 못했습니다.")
+        self.call("Input.dispatchMouseEvent",{"type":"mousePressed","button":"left","buttons":1,"clickCount":1,**point})
+        self.call("Input.dispatchMouseEvent",{"type":"mouseReleased","button":"left","buttons":0,"clickCount":1,**point})
+        if not self.evaluate("document.activeElement===document.querySelector('#t-name-box')"):
+            raise ValueError("범위 입력란에 포커스를 맞추지 못했습니다. 시트 창을 확인해 주세요.")
+        self.key("a",ctrl=True);self.call("Input.insertText",{"text":range_});self.key("Enter")
+        deadline=time.monotonic()+3
+        while time.monotonic()<deadline:
+            state=self.selection()
+            if state.get("range") and state.get("active")!="t-name-box":return state["range"]
+            time.sleep(.1)
+        raise ValueError("셀 범위 선택이 끝나지 않았습니다. 시트 창의 열려 있는 메뉴나 안내창을 닫아 주세요.")
+
+    def selection(self):
+        return self.evaluate("({range:document.querySelector('#t-name-box')?.value||'',active:document.activeElement?.id||''})") or {}
+
+    def grid_rows(self):
+        from browser_ranges import bounds
+        self.select("A1");self.key("End",ctrl=True);time.sleep(.25)
+        selected=self.selection().get("range","")
+        row,_,last,_=bounds(selected)
+        self._grid_row_count=max(row,last)
+        return self._grid_row_count
 
     @staticmethod
     def clipboard(value=None):
@@ -151,20 +174,34 @@ class BrowserUI:
         finally:cb.CloseClipboard()
 
     def read(self,range_):
-        self.select(range_)
-        sentinel="SDR-copy-"+uuid.uuid4().hex
-        self.clipboard(sentinel);self.key("c",ctrl=True)
-        deadline=time.monotonic()+8
-        while time.monotonic()<deadline:
-            text=self.clipboard()
-            if text!=sentinel:
-                if len(text)>5_000_000:raise ValueError("시트 복사 범위가 너무 큽니다.")
-                return list(csv.reader(io.StringIO(text),delimiter="\t"))
-            time.sleep(.1)
-        raise ValueError("시트 내용을 복사하지 못했습니다. 브라우저의 클립보드 접근을 허용하고 편집 화면인지 확인해 주세요.")
+        from browser_ranges import align,bounds
+        columns=re.fullmatch(r"([A-Z]+):([A-Z]+)",range_)
+        if columns:
+            range_=columns[1]+"1:"+columns[2]+str(self.grid_rows())
+        r1,c1,r2,c2=bounds(range_)
+        if (r2-r1+1)*(c2-c1+1)>50000:raise ValueError("읽을 대장 범위가 너무 큽니다. 범위를 줄여 확인해 주세요.")
+        detail=""
+        for _ in range(3):
+            selected=self.select(range_)
+            sentinel="SDR-copy-"+uuid.uuid4().hex
+            self.clipboard(sentinel);self.key("c",ctrl=True)
+            deadline=time.monotonic()+3
+            previous=None
+            while time.monotonic()<deadline:
+                text=self.clipboard()
+                if text and text!=sentinel:
+                    if len(text)>5_000_000:raise ValueError("시트 복사 범위가 너무 큽니다.")
+                    if text==previous:
+                        try:return align(text,range_,selected)
+                        except ValueError as error:detail=str(error);break
+                    previous=text
+                time.sleep(.1)
+        raise ValueError(detail or "시트 내용을 복사하지 못했습니다. 전용 시트 창이 편집 화면인지 확인하고 열린 안내창을 닫은 뒤 다시 연결해 주세요.")
 
     def write(self,cell,value):
-        self.select(cell)
+        from browser_ranges import bounds
+        selected=self.select(cell)
+        if bounds(selected)!=bounds(cell):raise ValueError("입력할 셀과 실제 선택 셀이 다릅니다. 숨김·필터 상태를 확인해 주세요. 입력하지 않았습니다.")
         if value:self.clipboard(value);self.key("v",ctrl=True)
         else:self.key("Delete")
         time.sleep(.2)
@@ -236,14 +273,14 @@ class BrowserSession:
         rows=self.getrows(f"A:{self.owner.last_column}")
         header=rows[self.owner.header_row] if len(rows)>self.owner.header_row else []
         if len(header)<=self.owner.title_column or "제" not in header[self.owner.title_column] or self.owner.header_word not in header[2]:
-            raise ValueError("브라우저 시트의 대장 열 구성이 예상과 다릅니다. 등록하지 않았습니다.")
+            raise ValueError(f"{self.owner.tab}의 {self.owner.header_row+1}행에서 제목·문서분류 열을 확인하지 못했습니다. 선택 범위와 숨김·필터 상태를 확인해 주세요. 등록하지 않았습니다.")
         # Identity fields prove matches; handwritten stamp-person and other later edits stay editable.
         identity={0,self.owner.title_column,5 if self.owner.marker_prefix=="SDS:" else getattr(self.owner,"number_col",3)}
         for entry in entries:
             if entry.get("complete") and entry["row"]<=len(rows) and all(rows[entry["row"]-1][c]==entry["after"][c] for c in identity):
                 for marker in entry["markers"]:found[marker]=entry["row"]
         self.rows=rows;self.owner.notes={}
-        return {"sheetId":0,"gridProperties":{"rowCount":max(len(rows)+1,1000)}},rows,found
+        return {"sheetId":0,"gridProperties":{"rowCount":getattr(self.ui,"_grid_row_count",max(len(rows),1000))}},rows,found
 
     def request(self,method,suffix="",**kwargs):
         self.intent_written=False
