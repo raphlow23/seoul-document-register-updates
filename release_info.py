@@ -1,5 +1,5 @@
-VERSION = "2.5.1"
-# All completed attachment formats are accepted by watchers, file pickers and drops.
+VERSION = "2.6.0"
+# Automatic body review beside the original and concrete destination folder names.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
 UPDATE_REPOSITORY = "raphlow23/seoul-document-register-updates"
