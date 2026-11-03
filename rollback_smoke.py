@@ -52,19 +52,24 @@ def run():
                 with zipfile.ZipFile(extra,'w') as archive:
                     archive.writestr('Contents/section0.xml','<section><p><t>추가 첨부파일의 내용을 확인합니다. 새로운 시험 자료입니다.</t></p></section>')
                 flow.receipt_home();app.send('add',[str(extra)]);idle();extra_key=core.digest(extra)
+                excel=base/'붙임 양식.xlsx';excel.write_bytes(b'Excel attachment preserved byte for byte')
+                app.send('add',[str(excel)]);idle();excel_key=core.digest(excel)
+                assert app.tree.exists(excel_key)
                 packet=base/'추가 첨부.zip'
                 with zipfile.ZipFile(packet,'w') as archive:
                     archive.write(source,'original.pdf');archive.write(extra,'extra.hwpx')
                 # Registered cases can be chosen in history via the direct attachment action.
                 flow.history_home();flow.focus(key)
-                with patch('workflow_ui.filedialog.askopenfilenames',return_value=(str(packet),)):flow.add_attachments()
-                wait(lambda:len(app.jobs[key]['files'])==2 and flow.section=='receipt' and flow.step==2);idle()
+                with patch('workflow_ui.filedialog.askopenfilenames',return_value=(str(packet),str(excel))):flow.add_attachments()
+                wait(lambda:len(app.jobs[key]['files'])==3 and flow.section=='receipt' and flow.step==2);idle()
                 assert not folder.exists() and app.jobs[key]['number']=='581'
                 assert not app.tree.exists(extra_key)
+                assert not app.tree.exists(excel_key)
                 flow.resume_receipt(app.jobs[key])
                 wait(lambda:getattr(app,'route_dialog',None) is not None and bool(app.route_dialog.records));idle()
                 app.route_dialog.apply(True);wait(lambda:flow.step==4);idle()
-                assert len(app.jobs[key]['destinations'])==2 and app.jobs[key]['number']=='581'
+                assert len(app.jobs[key]['destinations'])==3 and app.jobs[key]['number']=='581'
+                assert next(Path(p) for p in app.jobs[key]['destinations'] if p.endswith('.xlsx')).read_bytes()==excel.read_bytes()
                 assert source.read_bytes()==b'original fixture'
                 # A real generated output is removed independently of receipt copies.
                 saved=app.jobs[key]
