@@ -52,5 +52,7 @@ def prepare(job,config,store):
             child.mkdir(exist_ok=True)
         save=folder/children[plan["save_in"]] if plan["save_in"]!="root" else folder
         plan.update(created=True,path=str(folder),save_path=str(save))
+        from file_rollback import track_root
+        track_root(job,folder,'outgoing')
         out["save_folder"]=str(save);store.put(job)
         return save
