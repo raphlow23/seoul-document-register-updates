@@ -104,6 +104,12 @@ def run():
                 wait(lambda:flow.step==4);idle()
                 assert writes==["receipt"] and app.jobs[h0]["number"]=="581"
                 assert not app.tree.exists(h0) and flow.history_tree.exists(h0)
+                # Reproduce the reported Back -> settings bug after a receipt has committed.
+                with patch.object(app,'settings',side_effect=AssertionError('Back must never open settings')):
+                    flow.back();assert flow.section=='receipt' and flow.step==3
+                    check_actions();flow.back();assert flow.step==2
+                    check_actions();flow.back();assert flow.step==1
+                assert writes==['receipt'] and app.jobs[h0]['number']=='581'
                 import hwp_documents as docs
                 extra={**docs.style("1"),"id":"user_fixture","label":"사용 중 추가한 양식","file":"missing-preview.hwp","blank_body":True}
                 with patch.object(docs,"catalog",return_value=[*docs.catalog(),extra]):
@@ -158,6 +164,11 @@ def run():
                 assert opened["outgoing"]["number"]=="12" and opened["outgoing"]["stamp"]["complete"]
                 assert writes==["receipt","outgoing"],writes
                 assert app.jobs[h0]["outgoing"]["stamp"]["complete"]
+                with patch.object(app,'settings',side_effect=AssertionError('Back must never open settings')):
+                    flow.back();assert flow.step==3
+                    flow.back();assert flow.step==2
+                    check_actions();flow.back();assert flow.step==1
+                assert writes==['receipt','outgoing'] and app.jobs[h0]['outgoing']['number']=='12'
                 assert "012." in __import__("hwp_documents").filename(__import__("hwp_documents").style("5"),app.jobs[h0]["outgoing"])
                 # Deleting/moving downloads removes pending items, while registered history survives.
                 for f in files:Path(f["path"]).unlink()
