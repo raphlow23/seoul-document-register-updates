@@ -1,5 +1,5 @@
-VERSION = "2.4.1"
-# Direct HWP template registration and explicit repeated metadata positions.
+VERSION = "2.4.2"
+# Back always visits the previous workflow step, preserving committed transactions.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
 UPDATE_REPOSITORY = "raphlow23/seoul-document-register-updates"
