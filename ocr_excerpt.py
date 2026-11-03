@@ -11,8 +11,8 @@ def excerpt(text,start=2,attachments=True):
         if not result:raise ValueError("가져올 본문이 없습니다.")
         return result
     else:
-        begin=next((i for i,l in enumerate(lines[:attachment]) if re.match(r"^\s*"+str(int(start))+r"\s*[.)]\s*[^\d\s]",l)),None)
-        if begin is None:raise ValueError(f"본문 {start}항을 찾지 못했습니다. OCR 원문에서 필요한 구간을 선택하고 ‘선택한 글 정리’를 사용하세요.")
+        begin=next((i for i,l in enumerate(lines[:attachment]) if re.match(r"^\s*"+str(int(start))+r"\s*[.)．）]\s*\S",l)),None)
+        if begin is None:raise ValueError(f"본문 {start}항을 찾지 못했습니다. OCR 원문에서 필요한 구간을 선택하고 ‘직접 선택한 범위’를 사용하세요.")
     end=len(lines)
     for i in range(begin+1,len(lines)):
         c=compact(lines[i]).strip("_ ")
