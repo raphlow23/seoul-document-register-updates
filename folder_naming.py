@@ -295,11 +295,13 @@ def copy_to_subfolders(job, root, on_progress=None):
                 import ctypes
                 ctypes.windll.kernel32.SetFileAttributesW(str(marker),2)
         job["files_started"] = True
+        from file_rollback import track_root
+        track_root(job,folder,'receipt')
         if on_progress: on_progress()
         children=child_folders(job["routing"]["agency"],job["routing"].get("children",[]))
         for child in children.values():(folder/child).mkdir(exist_ok=True)
         # Incoming attachments belong to the source-letter folder when it is selected.
         incoming=children.get("incoming")
         relative=str(Path(name)/incoming) if incoming else name
-        results.extend(copy_files(job, parent, subfolders=[relative]))
+        results.extend(copy_files(job, parent, subfolders=[relative],on_progress=on_progress))
     return results
