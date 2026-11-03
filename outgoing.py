@@ -59,8 +59,18 @@ def merge_edit(job,edited):
     for key in ("id","row","number","document_number","tab","sheet_attempted","complete"):
         if key in old:edited[key]=old[key]
     if old.get("complete"):
-        for key in ("hwp_path","hwp_saved_number"):
+        for key in ("hwp_path","hwp_saved_number","hwp_created_sha256"):
             if key in old:edited[key]=old[key]
+    if 'files_rolled_back' in old:
+        edited['files_rolled_back']=old['files_rolled_back']
+        if old['files_rolled_back']:
+            for key in ('hwp_path','hwp_saved_number','hwp_created_sha256'):edited.pop(key,None)
+            plan=edited.get('folder_plan')
+            if plan and not old.get('folder_plan',{}).get('created'):
+                plan=dict(plan)
+                for key in ('folder_number','folder_name','created','path','save_path'):plan.pop(key,None)
+                edited['folder_plan']=plan
+                if plan.get('base'):edited['save_folder']=plan['base']
     edited["stamp"]={**edited.get("stamp",{})}
     for key in ("row","number","sheet_attempted","complete"):
         if key in old.get("stamp",{}):edited["stamp"][key]=old["stamp"][key]
