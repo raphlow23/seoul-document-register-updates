@@ -11,6 +11,7 @@ class RouteChooser:
         self.app, self.job = app, job
         self.owner, self.request = uuid.uuid4().hex, ""
         self.records, self.selected, self.templates = {}, set(), {}
+        self.manual_templates={t['relative'] for t in job.get('routing',{}).get('targets',[]) if t.get('template_manual')}
         self.current, self.changing = None, False
         self.embedded = parent is not None
         self.win = ttk.Frame(parent) if self.embedded else tk.Toplevel(app.root)
@@ -83,16 +84,17 @@ class RouteChooser:
         self.examples = tk.Listbox(right, height=3 if self.embedded else 6, font=("맑은 고딕",10))
         self.examples.pack(fill="x", pady=7)
         self.examples.bind("<<ListboxSelect>>", self.select_example)
-        ttk.Label(right, text="이름 형식 — 기존 예시를 클릭해 변경", wraplength=500).pack(anchor="w")
+        ttk.Label(right, text="생성될 폴더 이름 — 기존 형식 자동 적용", wraplength=500).pack(anchor="w")
         self.template = tk.StringVar()
-        self.template_box = ttk.Combobox(right, textvariable=self.template, values=TEMPLATES)
-        self.template_box.pack(fill="x", pady=7)
+        from folder_name_picker import ActualNamePicker
+        self.name_picker=ActualNamePicker(right,self.template,self.folder_title,lambda:self.records.get(self.current),lambda:self.job['date'],lambda:next((t.get('folder_number') for t in self.job.get('routing',{}).get('targets',[]) if t['relative']==self.current),None))
+        self.name_picker.pack(fill='x',pady=7);self.template_box=self.name_picker.box
         self.template.trace_add("write", self.changed)
         buttons = ttk.Frame(right)
         if not self.embedded:buttons.pack(fill="x")
         for label, template in (("날짜 + 제목",TEMPLATES[0]),("폴더순번 + 제목",TEMPLATES[4]),("제목만",TEMPLATES[-1])):
             ttk.Button(buttons, text=label, command=lambda t=template:self.template.set(t)).pack(side="left", padx=(0,5))
-        if not self.embedded:ttk.Label(right, text="{title}=선택한 제목 · {date}=접수일 · {number:03d}=이 폴더의 다음 순번\n폴더 순번은 구글 시트 D열 접수번호와 별개입니다.", wraplength=580).pack(anchor="w", pady=8)
+        if not self.embedded:ttk.Label(right, text="번호·날짜는 기존 폴더를 기준으로 계산합니다.\n폴더 순번은 구글 시트 접수번호와 별개입니다.", wraplength=580).pack(anchor="w", pady=8)
         ttk.Label(right, text="선택한 모든 위치의 생성 예정 이름", font=("맑은 고딕",11,"bold")).pack(anchor="w", pady=(8,3))
         self.preview = tk.Text(right, height=9, wrap="word", font=("맑은 고딕",10), padx=8,pady=8)
         self.preview.pack(fill="both", expand=True)
@@ -130,11 +132,12 @@ class RouteChooser:
             key = record["relative"]
             self.records[key] = record
             self.tree.insert(record.get("parent", ""), "end", iid=key, text="☐ " + Path(key).name, open=True)
-            self.templates[key] = old.get(key) or preferred_template(record,self.app.config,"incoming:"+key)
+            self.templates[key] = old.get(key) if key in old and (key in self.manual_templates or self.job.get('files_started') or not record['names']) else preferred_template(record,self.app.config,"incoming:"+key)
             if key in old:
                 self.selected.add(key)
                 self.tree.item(key, text="☑ " + Path(key).name)
         self.status.set("저장할 곳을 체크하고 기존 형식과 새 이름을 확인해 주세요. 폴더별 다음 순번을 사용하며 최종 순번은 저장 시 확정합니다.")
+        if self.records:self.focus_folder(next(iter(sorted(self.selected)),next(iter(self.records))))
         self.redraw_preview()
 
     def click(self, event):
@@ -145,14 +148,17 @@ class RouteChooser:
         else:
             self.selected.add(key)
         self.tree.item(key, text=("☑ " if key in self.selected else "☐ ") + Path(key).name)
-        self.current = key
+        self.focus_folder(key)
+        self.redraw_preview()
+
+    def focus_folder(self,key):
+        self.current=key
         self.examples.delete(0,"end")
         for example in self.records[key]["examples"]: self.examples.insert("end", example)
         self.changing = True
         self.template.set(self.templates[key])
-        self.template_box.configure(values=tuple(dict.fromkeys([s["template"] for s in self.records[key]["styles"]]+list(TEMPLATES))))
         self.changing = False
-        self.redraw_preview()
+        self.name_picker.refresh()
 
     def select_example(self, _=None):
         from folder_naming import infer_template
@@ -167,9 +173,11 @@ class RouteChooser:
     def changed(self, *_):
         if self.current and not self.changing:
             self.templates[self.current] = self.template.get()
+            self.manual_templates.add(self.current)
         self.redraw_preview()
 
     def redraw_preview(self):
+        if hasattr(self,'name_picker'):self.name_picker.refresh()
         lines = []
         for relative in sorted(self.selected):
             try:
@@ -190,7 +198,7 @@ class RouteChooser:
     def apply(self, execute):
         if not self.selected:
             return messagebox.showinfo("저장 위치", "저장할 곳을 한 곳 이상 체크해 주세요.",parent=self.win)
-        targets = [{"relative":p,"template":self.templates[p]} for p in sorted(self.selected)]
+        targets = [{"relative":p,"template":self.templates[p],'template_manual':p in self.manual_templates} for p in sorted(self.selected)]
         try:
             if not self.folder_title.get().strip():raise ValueError("폴더에 사용할 제목을 입력하세요.")
             for target in targets: folder_name(target["template"],self.folder_title.get(),self.job["date"],sequence_from_names(self.records[target["relative"]]["names"],target["template"]))
