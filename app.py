@@ -442,6 +442,13 @@ class App:
             self.render(job)
         self.worker = Worker(self.commands, self.events, self.config, self.data / "history.sqlite")
         self.worker.start()
+        try:
+            root.tk.call("package","present","tkdnd")
+        except tk.TclError:
+            self.file_drop=None
+        else:
+            from file_drop import FileDrop
+            self.file_drop=FileDrop(self,[root,self.tree,self.workflow.pages["queue"],self.workflow.drop_zone])
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.after(200, self.poll)
         if not smoke:
@@ -949,7 +956,8 @@ def main():
             ctypes.windll.user32.MessageBoxW(None, "프로그램이 이미 실행 중입니다.", "서울센터 공문 수신등록", 0)
             return
     try:
-        root = tk.Tk()
+        from file_drop import create_root
+        root = create_root()
         if "--self-test" in sys.argv:
             import ssl
             import certifi
@@ -983,6 +991,7 @@ def main():
                 root.update_idletasks()
                 root.update()
                 assert app.tree.winfo_exists()
+                assert app.file_drop is not None and root.tk.call("package","present","tkdnd")
                 assert len(app.fields) == 6
                 app.commands.put(("quit", None))
                 app.worker.join(timeout=5)
