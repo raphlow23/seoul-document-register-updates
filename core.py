@@ -208,8 +208,11 @@ def ingest(path, store, progress=None):
         from zip_intake import ingest_zip
         return ingest_zip(path,store,hash_,progress)
     try:
-        text, metadata = extract(path, with_meta=True, progress=progress)
+        from attachment_files import can_extract
+        if can_extract(path):text, metadata = extract(path, with_meta=True, progress=progress)
+        else:text, metadata='',{}
         info = classify(text, path.name)
+        if not can_extract(path):info.update(ready=False,reason='첨부 보관용 파일 · 제목은 파일명에서 선택하거나 직접 입력하세요.')
         if metadata.get("ocr_pages"):
             info["reason"] = f"한국어 OCR {metadata['ocr_pages']}쪽 · 평균 인식 신뢰도 {metadata['confidence']}점 · " + info["reason"]
             # A high average is not proof of correct names/numbers; extraction rules must also match.
