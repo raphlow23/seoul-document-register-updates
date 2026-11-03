@@ -52,9 +52,12 @@ def run():
                 with zipfile.ZipFile(extra,'w') as archive:
                     archive.writestr('Contents/section0.xml','<section><p><t>추가 첨부파일의 내용을 확인합니다. 새로운 시험 자료입니다.</t></p></section>')
                 flow.receipt_home();app.send('add',[str(extra)]);idle();extra_key=core.digest(extra)
+                packet=base/'추가 첨부.zip'
+                with zipfile.ZipFile(packet,'w') as archive:
+                    archive.write(source,'original.pdf');archive.write(extra,'extra.hwpx')
                 # Registered cases can be chosen in history via the direct attachment action.
                 flow.history_home();flow.focus(key)
-                with patch('workflow_ui.filedialog.askopenfilenames',return_value=(str(extra),)):flow.add_attachments()
+                with patch('workflow_ui.filedialog.askopenfilenames',return_value=(str(packet),)):flow.add_attachments()
                 wait(lambda:len(app.jobs[key]['files'])==2 and flow.section=='receipt' and flow.step==2);idle()
                 assert not folder.exists() and app.jobs[key]['number']=='581'
                 assert not app.tree.exists(extra_key)
