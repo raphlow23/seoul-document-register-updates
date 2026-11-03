@@ -43,6 +43,8 @@ websocket-client: Apache-2.0, https://github.com/websocket-client/websocket-clie
 kiwipiepy 0.20.4 / kiwipiepy-model 0.20.0: LGPL-3.0, https://github.com/bab2min/kiwipiepy
 The model files are provided in the signed SpacingModel component. Corresponding native source is included under licenses.
 NumPy: BSD-3-Clause and bundled dependencies, https://numpy.org
+tkinterdnd2 0.6.1 and bundled TkDND: MIT and BSD-style licenses; package license texts included.
+https://github.com/Eliav2/tkinterdnd2
 tqdm: MPL-2.0 and MIT, https://github.com/tqdm/tqdm
 colorama: BSD-3-Clause, https://github.com/tartley/colorama
 PyInstaller bootloader: GPL-2.0-or-later with bootloader exception.
