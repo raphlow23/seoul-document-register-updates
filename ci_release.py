@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 프로그램에서 HWP 양식 직접 등록","draft":True,"prerelease":False,"body":"설정 또는 발신 양식 선택 화면의 ‘HWP 양식 넣기’에서 원본 .hwp를 바로 선택합니다. 등록 창에 HWP 하나를 끌어다 놓아도 됩니다. ZIP이나 별도 설치 명령은 필요 없습니다. 번호·날짜·제목·수신처 위치를 자동 제안하며 같은 문구가 본문에도 있으면 주변 문장을 보고 바꿀 위치만 선택합니다. 위치를 확인하지 않으면 등록하지 않습니다. 원본은 유지하고 내부 사본에서 선택한 위치만 준비합니다. 원본 스타일·문단·표·그림과 타 기관 번호·날짜를 유지하는지 검증합니다. 추가 즉시 양식 목록에 반영하고 이후 업데이트에도 보관합니다. 실제 개인 HWP는 공개 GitHub 배포에 포함하지 않습니다. 이전 단계 이동·드래그 첨부·숨김 행 보정 기능을 유지합니다. 정상 배포 후 최신·직전 릴리스만 남깁니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 이전 단계가 설정창을 여는 오류 수정","draft":True,"prerelease":False,"body":"저장·등록을 시작한 문서에서 ‘이전 단계’를 눌렀을 때 설정창이 뜨던 오류를 수정했습니다. 수신은 저장 위치에서 제목·첨부파일 확인으로, 발신은 작성 정보에서 기존 양식 확인으로 돌아갑니다. 수신 완료 후에도 저장 위치→제목 확인→첨부파일 순서로 돌아갈 수 있습니다. 등록 전에는 수정하던 내용을 유지하여 다시 선택하고, 이미 저장·등록한 항목은 기존 결과를 확인합니다. 뒤로 가기로 접수·발신·직인대장을 다시 등록하거나 번호·이력을 지우지 않습니다. 연결 설정은 별도 ‘설정 · 연결’에서 엽니다. HWP 직접 양식 등록·첨부 드래그·자동 업데이트 기능을 유지합니다. 정상 배포 후 최신·직전 릴리스만 남깁니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
