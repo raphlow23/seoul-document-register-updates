@@ -18,6 +18,7 @@ class OutgoingFolderChooser:
         self.agency=tk.StringVar(value=plan.get("agency") or agency_for(job.get("category","")) or saved.get("agency") or "서울시청 공문")
         self.title=tk.StringVar(value=plan.get("folder_title") or out["title"])
         self.template=tk.StringVar(value=plan.get("template") or "")
+        self.manual_template=bool(plan.get('template_manual') or plan.get('folder_name') or plan.get('created'));self.changing_template=False
         children=plan.get("children",saved.get("children",app.config.get("folder_children",{}).get(self.agency.get(),CHILD_KINDS)))
         self.children={key:tk.BooleanVar(value=key in children) for key in CHILD_KINDS}
         self.save_in=tk.StringVar(value=plan.get("save_in",app.config.get("folder_profiles",{}).get(self.slot,{}).get("save_in","outgoing")))
@@ -45,8 +46,10 @@ class OutgoingFolderChooser:
         self.examples=tk.Listbox(left,height=9,font=("맑은 고딕",10));self.examples.pack(fill="both",expand=True,pady=6);self.examples.bind("<<ListboxSelect>>",self.choose_example)
         ttk.Label(right,text="폴더에 사용할 제목 (발신대장·HWP 제목은 유지)").pack(anchor="w")
         ttk.Entry(right,textvariable=self.title).pack(fill="x",pady=6)
-        ttk.Label(right,text="번호·날짜 형식").pack(anchor="w")
-        ttk.Combobox(right,textvariable=self.template,values=TEMPLATES).pack(fill="x",pady=6)
+        ttk.Label(right,text="생성될 폴더 이름 — 기존 형식 자동 적용").pack(anchor="w")
+        from folder_name_picker import ActualNamePicker
+        self.name_picker=ActualNamePicker(right,self.template,self.title,lambda:self.record,lambda:self.out.get('date') or date.today().isoformat(),lambda:(self.out.get('folder_plan') or {}).get('folder_number'))
+        self.name_picker.pack(fill='x',pady=6)
         location=ttk.Frame(right);location.pack(fill="x",pady=8)
         ttk.Label(location,text="HWP 넣을 위치").pack(side="left")
         self.location=ttk.Combobox(location,state="readonly",width=25);self.location.pack(side="left",padx=8)
@@ -55,6 +58,7 @@ class OutgoingFolderChooser:
         self.status=tk.StringVar(value="선택한 저장 위치의 기존 폴더 이름을 읽는 중…")
         ttk.Label(outer,textvariable=self.status,wraplength=910).pack(fill="x",pady=6)
         for var in (self.title,self.template):var.trace_add("write",lambda *_:self.redraw())
+        self.template.trace_add('write',self.template_changed)
         self.initial=self.win.after(100,self.load)
 
     def load(self):
@@ -65,7 +69,9 @@ class OutgoingFolderChooser:
         if data.get("owner")!=self.owner or data.get("request")!=self.request:return
         self.record=data["record"]
         for name in self.record["examples"]:self.examples.insert("end",name)
-        if not self.template.get():self.template.set(preferred_template(self.record,self.app.config,self.slot))
+        if not self.manual_template:
+            value=preferred_template(self.record,self.app.config,self.slot) if self.record['names'] else self.template.get() or preferred_template(self.record,self.app.config,self.slot)
+            self.changing_template=True;self.template.set(value);self.changing_template=False
         self.status.set("기존 폴더와 같은 형식을 제안했습니다. 저장할 때 실제 다음 순번을 확정합니다." if self.record["names"] else "빈 저장 위치: 이전 이름 형식을 유지합니다. 번호 형식은 1부터, 날짜 형식은 날짜부터 시작합니다.")
         self.apply_button.configure(state="normal");self.redraw()
 
@@ -76,6 +82,9 @@ class OutgoingFolderChooser:
         if template:self.template.set(template)
         else:self.status.set("이 예시의 앞 형식을 확정하지 못했습니다. 위 이름 형식을 직접 수정해 주세요.")
 
+    def template_changed(self,*_):
+        if not self.changing_template:self.manual_template=True
+
     def choose_location(self,_=None):
         selected=self.location.current()
         if 0<=selected<len(self.names):self.save_in.set(list(self.names)[selected])
@@ -83,10 +92,11 @@ class OutgoingFolderChooser:
 
     def plan(self):
         old=self.out.get("folder_plan") or {}
-        return {**old,"base":self.base,"template":self.template.get().strip(),"folder_title":self.title.get().strip(),"title_same":self.title.get().strip()==self.out["title"],"agency":self.agency.get(),"children":[k for k,v in self.children.items() if v.get()],"save_in":self.save_in.get(),"date":self.out.get("date") or date.today().isoformat()}
+        return {**old,"base":self.base,"template":self.template.get().strip(),'template_manual':self.manual_template,"folder_title":self.title.get().strip(),"title_same":self.title.get().strip()==self.out["title"],"agency":self.agency.get(),"children":[k for k,v in self.children.items() if v.get()],"save_in":self.save_in.get(),"date":self.out.get("date") or date.today().isoformat()}
 
     def redraw(self,_=None):
         if not hasattr(self,"preview"):return
+        self.name_picker.refresh()
         labels=child_folders(self.agency.get(),CHILD_KINDS)
         for key,widget in self.boxes.items():widget.configure(text=labels[key].split(".",1)[1])
         children=child_folders(self.agency.get(),[k for k,v in self.children.items() if v.get()])
