@@ -19,6 +19,41 @@ from release_info import PRODUCT, UPDATE_PUBLIC_KEY, VERSION
 MAX_EXE = 150 * 1024 * 1024
 
 
+def fresh_environment():
+    env=os.environ.copy()
+    # A restarted one-file EXE must extract its own runtime, independent of the
+    # helper's temporary directory and Tcl/Tk libraries which disappear on exit.
+    for name in list(env):
+        if name.startswith('_PYI_') or name in ('_MEIPASS2','TCL_LIBRARY','TK_LIBRARY'):
+            env.pop(name,None)
+    env['PYINSTALLER_RESET_ENVIRONMENT']='1'
+    return env
+
+
+def restart_target(target,cache,version,test=False,timeout=120):
+    receipt=Path(cache)/('restart-'+uuid.uuid4().hex+'.json')
+    arguments=[str(target),'--after-update',str(receipt)]
+    if test:arguments.append('--test-restart')
+    for attempt in range(3):
+        receipt.unlink(missing_ok=True)
+        process=subprocess.Popen(arguments,cwd=str(Path(target).parent),env=fresh_environment(),
+                                 creationflags=subprocess.CREATE_NO_WINDOW,close_fds=True)
+        deadline=time.monotonic()+timeout
+        while time.monotonic()<deadline:
+            try:
+                ready=json.loads(receipt.read_text(encoding='utf-8'))
+                if ready.get('status')=='ready' and ready.get('version')==version:
+                    return {'status':'ready','receipt':str(receipt),'attempts':attempt+1}
+                if ready.get('status')=='error':raise RuntimeError(ready.get('message','새 프로그램 시작 실패'))
+            except (FileNotFoundError,json.JSONDecodeError):pass
+            if process.poll() is not None:break
+            time.sleep(.2)
+        if process.poll() is None:
+            raise TimeoutError('새 프로그램이 실행 중이지만 창 준비 응답이 없습니다. 업데이트 폴더의 시작 기록을 확인해 주세요.')
+        time.sleep(1)
+    raise RuntimeError('업데이트 후 프로그램이 시작 직후 종료되었습니다. 재실행 3회를 시도했습니다.')
+
+
 def remote(source):
     value=str(source)
     if "://" in value and not value.startswith("https://"):raise ValueError("온라인 업데이트는 HTTPS 주소만 사용할 수 있습니다.")
@@ -192,8 +227,7 @@ def launch_helper(update, data):
             "staged": update["staged"], "manifest": update["manifest"]}
     planpath = cache / f"plan-{token}.json"
     planpath.write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
-    env = os.environ.copy()
-    env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+    env = fresh_environment()
     subprocess.Popen([str(helper), "--apply-update", str(planpath)], cwd=str(cache), env=env,
                      creationflags=subprocess.CREATE_NO_WINDOW, close_fds=True)
 
@@ -215,7 +249,7 @@ def wait_for_pid(pid, seconds=120):
         kernel.CloseHandle(ctypes.c_void_p(handle))
 
 
-def apply_plan(planpath, public_key=UPDATE_PUBLIC_KEY, wait=wait_for_pid, launch=True):
+def apply_plan(planpath, public_key=UPDATE_PUBLIC_KEY, wait=wait_for_pid, launch=True, test_restart=False):
     planpath = Path(planpath).resolve()
     plan = json.loads(planpath.read_text(encoding="utf-8"))
     manifest = verify_manifest(plan["manifest"], public_key)
@@ -245,25 +279,20 @@ def apply_plan(planpath, public_key=UPDATE_PUBLIC_KEY, wait=wait_for_pid, launch
         os.replace(pending, target)
         if launch:
             # No GUI and no updates during this health check. Restore on failure.
-            env = os.environ.copy()
-            env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+            env = fresh_environment()
             subprocess.run([str(target), "--self-test"], env=env, check=True, timeout=60,
                            creationflags=subprocess.CREATE_NO_WINDOW)
     except Exception:
         os.replace(backup, target)
         if launch:
-            env = os.environ.copy()
-            env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
+            env = fresh_environment()
             subprocess.Popen([str(target)], cwd=str(target.parent), env=env,
                              creationflags=subprocess.CREATE_NO_WINDOW)
         raise
     result = {"version": manifest["version"], "status": "updated"}
-    (cache / "last-result.json").write_text(json.dumps(result), encoding="utf-8")
     if launch:
-        env = os.environ.copy()
-        env["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
-        subprocess.Popen([str(target)], cwd=str(target.parent), env=env,
-                         creationflags=subprocess.CREATE_NO_WINDOW)
+        result['restart']=restart_target(target,cache,manifest['version'],test=test_restart)
+    (cache / "last-result.json").write_text(json.dumps(result), encoding="utf-8")
     planpath.unlink(missing_ok=True)
     return result
 
