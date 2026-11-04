@@ -3,6 +3,16 @@ import os
 from pathlib import Path
 
 
+def source_modified(job):
+    paths=[job['source_archive']] if job.get('source_archive') else [f.get('path','') for f in job.get('files',[])]
+    stamps=[]
+    for value in paths:
+        if not value:continue
+        try:stamps.append(Path(value).stat().st_mtime_ns)
+        except OSError:pass
+    return max(stamps,default=0)
+
+
 def missing_download_source(job, downloads):
     if job.get('files_rolled_back'):return False
     if not downloads:return False
