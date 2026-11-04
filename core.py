@@ -192,6 +192,8 @@ class Store:
 
 def ingest(path, store, progress=None):
     path = Path(path)
+    from attachment_files import eligible
+    if not eligible(path):raise ValueError('문서·ZIP 첨부파일만 추가할 수 있습니다. 이미지와 기타 파일은 제외합니다.')
     hash_ = digest(path)
     old = store.get(hash_)
     if old:
