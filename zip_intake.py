@@ -100,8 +100,13 @@ def ingest_zip(path,store,hash_,progress=None):
     from core import digest,ingest,classify
     cache=Path(store.db.execute("PRAGMA database_list").fetchone()[2]).parent/"archive-cache"
     paths=unpack(path,cache,progress)
+    from attachment_files import eligible
+    documents=[p for p in paths if eligible(p)]
+    if not documents:
+        discard_extraction(paths,cache)
+        raise ValueError('ZIP 안에 문서 첨부파일이 없습니다. 이미지와 기타 파일은 제외합니다.')
     files=[]
-    for p in sorted(paths,key=lambda p:(p.suffix.lower() not in DOCUMENTS,str(p))):
+    for p in sorted(documents,key=lambda p:(p.suffix.lower() not in DOCUMENTS,str(p))):
         value={"path":str(p),"hash":digest(p)}
         if value["hash"] not in {f["hash"] for f in files}:files.append(value)
     prior=[store.get(f["hash"]) for f in files]
