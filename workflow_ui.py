@@ -91,9 +91,14 @@ class WorkflowShell:
         ttk.Button(bar,text="파일 추가",command=self.app.add_files).pack(side="left")
         ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=5)
         ttk.Button(bar,text="목록 삭제",command=self.app.ignore).pack(side="left",padx=8)
-        self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · 엑셀·워드·이미지 등 모든 첨부파일 · 여러 파일 가능",padding=12,foreground="#1c5295",anchor="center",relief="groove")
+        self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · ZIP·PDF·한글·엑셀·HTML·DWG·DXF 등 · 이미지 제외",padding=12,foreground="#1c5295",anchor="center",relief="groove")
         self.drop_zone.pack(fill="x",pady=(0,10))
-        self.app.tree=table(page,[("state","상태",155),("category","분류",145),("title","공문 제목 / 파일명",500),("number","접수번호",100)],True)
+        self.app.tree=table(page,[("state","상태",145),("category","분류",130),("title","공문 제목 / 파일명",420),("modified","수정 날짜 ▼",145),("number","접수번호",90)],True)
+        def refresh_order():
+            if getattr(self.app,'closing',False):return
+            self.sort_queue()
+            self.app.root.after(5000,refresh_order)
+        self.app.root.after(5000,refresh_order)
         self.app.tree.bind("<<TreeviewSelect>>",self.app.select)
         bottom=ttk.Frame(page);bottom.pack(fill="x",pady=(12,0))
         bottom.pack_configure(side="bottom",before=self.app.tree.master)
@@ -130,9 +135,12 @@ class WorkflowShell:
         key=job["hash"]
         alias=job.get("archive_alias") or job["state"] in ("묶음에 포함","묶음 처리 완료")
         received=bool(job.get("receipt_done") or job["state"]=="완료")
-        hidden=alias or job.get("list_hidden") or job["state"]=="제외" or (received and not job.get('files_rolled_back')) or missing_download_source(job,self.app.config.get("downloads"))
-        vals=(job["state"],job.get("category") or "확인 필요",job["title"],job.get("number",""))
+        from attachment_files import DOCUMENT_SUFFIXES
+        document_files=any(Path(f.get('path','')).suffix.lower() in DOCUMENT_SUFFIXES for f in job.get('files',[]))
+        hidden=alias or not document_files or job.get("list_hidden") or job["state"]=="제외" or (received and not job.get('files_rolled_back')) or missing_download_source(job,self.app.config.get("downloads"))
+        vals=(job["state"],job.get("category") or "확인 필요",job["title"],self.modified_label(job),job.get("number",""))
         self.row(self.app.tree,key,not hidden,vals)
+        self.sort_queue()
         out=job.get("outgoing",{})
         numbers=str(job.get("number", ""))+(" / "+str(out["number"]) if out.get("number") else "")
         vals=(job.get("date",""),job["title"],numbers,job["state"])
@@ -144,6 +152,21 @@ class WorkflowShell:
             if tree.exists(key):tree.delete(key)
         elif tree.exists(key):tree.item(key,values=values)
         else:tree.insert("",0,iid=key,values=values)
+
+    @staticmethod
+    def modified_label(job):
+        from queue_visibility import source_modified
+        from datetime import datetime
+        value=source_modified(job)
+        return datetime.fromtimestamp(value/1_000_000_000).strftime('%Y-%m-%d %H:%M') if value else ''
+
+    def sort_queue(self):
+        from queue_visibility import source_modified
+        tree=self.app.tree
+        keys=tree.get_children('')
+        for index,key in enumerate(sorted(keys,key=lambda k:source_modified(self.app.jobs.get(k,{})),reverse=True)):
+            tree.move(key,'',index)
+            tree.set(key,'modified',self.modified_label(self.app.jobs.get(key,{})))
 
     def receipt_home(self):
         if not self.available():return
