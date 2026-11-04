@@ -943,6 +943,10 @@ class App:
 
 
 def main():
+    if len(sys.argv)==3 and sys.argv[1]=='--test-update-restart':
+        from updater import apply_plan
+        apply_plan(sys.argv[2],test_restart=True)
+        return
     if len(sys.argv)==2 and sys.argv[1]=="--test-workflow":
         from workflow_smoke import run
         run()
@@ -998,7 +1002,7 @@ def main():
     if len(sys.argv) == 3 and sys.argv[1] == "--test-apply-update":
         raise SystemExit(helper_main(sys.argv[2], launch=False))
     mutex = None
-    if os.name == "nt":
+    if os.name == "nt" and '--self-test' not in sys.argv:
         ctypes.windll.shcore.SetProcessDpiAwareness(1)
         ctypes.windll.kernel32.CreateMutexW.restype = ctypes.c_void_p
         mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\SeoulDocumentRegister-v1")
@@ -1048,7 +1052,23 @@ def main():
                 assert not app.worker.is_alive()
                 root.destroy()
         else:
-            App(root)
+            receipt=Path(sys.argv[2]).resolve() if len(sys.argv)>=3 and sys.argv[1]=='--after-update' else None
+            test_restart=receipt is not None and '--test-restart' in sys.argv
+            try:
+                app=App(root,receipt.parent/'restart-test-data' if test_restart else DATA,smoke=test_restart)
+            except Exception as error:
+                if receipt:receipt.write_text(json.dumps({'status':'error','message':str(error)},ensure_ascii=False),encoding='utf-8')
+                raise
+            if receipt:
+                def ready():
+                    if not app.worker.is_alive():return
+                    root.deiconify()
+                    root.lift()
+                    temporary=receipt.with_suffix('.part')
+                    temporary.write_text(json.dumps({'status':'ready','version':VERSION,'pid':os.getpid()}),encoding='utf-8')
+                    os.replace(temporary,receipt)
+                    if test_restart:root.after(1000,app.shutdown)
+                root.after(500,ready)
             root.mainloop()
     finally:
         if mutex:
