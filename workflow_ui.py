@@ -533,6 +533,12 @@ class SimpleOutgoing(OutgoingEditor):
         from copy import deepcopy
         self.folder_plan=deepcopy(self.out.get("folder_plan"))
         self.folder_mode=self.out.get("folder_mode","")
+        from outgoing_folders import receipt_case_folders,receipt_send_folders
+        self.receipt_roots=receipt_case_folders(job,app.config)
+        self.receipt_locations=receipt_send_folders(job,app.config)
+        self.reuse_receipt_case=bool(self.receipt_roots) and not (self.out.get('hwp_path') or (self.folder_plan and (self.folder_plan.get('created') or self.folder_plan.get('folder_name'))))
+        self.receipt_location=self.out.get('save_folder') if self.out.get('save_folder') in self.receipt_locations else next(iter(self.receipt_locations),'')
+        if self.reuse_receipt_case:self.folder_plan=None;self.folder_mode='direct'
         self.changing_folder=False
         self.win=ttk.Frame(parent,padding=12);self.win.pack(fill="both",expand=True)
         actions=ttk.Frame(self.win);actions.pack(side="bottom",fill="x",pady=10)
@@ -560,6 +566,7 @@ class SimpleOutgoing(OutgoingEditor):
         self.style_label.set(item["label"])
         if style_id or not self.vars["template_id"].get():self.choose_style(True)
         elif not self.body.get("1.0","end").strip():self.use_template_body(True)
+        if self.reuse_receipt_case:self.use_receipt_location()
         heading(panel,item["label"],"수신 제목을 기본으로 가져옵니다. 필요한 항목만 수정하세요.")
         ttk.Label(panel,text="발신대장: "+self.family.get()+"  ·  직인 분류: "+item["family"]+" ○",foreground="#1c5295").pack(anchor="w",pady=(0,12))
         fields=ttk.Frame(panel);fields.pack(fill="x")
@@ -575,11 +582,15 @@ class SimpleOutgoing(OutgoingEditor):
         ttk.Entry(route,textvariable=self.vars["save_folder"]).pack(side="left",fill="x",expand=True)
         ttk.Button(route,text="변경",command=self.choose_destination).pack(side="right",padx=6)
         folderbar=ttk.Frame(panel);folderbar.pack(fill="x",pady=6)
-        ttk.Button(folderbar,text="폴더 이름 형식 · 내부 구성",command=self.configure_folders).pack(side="left")
-        self.folder_summary=tk.StringVar(value="기존 폴더 형식을 읽어 새 공문폴더와 내부폴더를 만들 수 있습니다.")
+        ttk.Button(folderbar,text="기존 저장 폴더 선택" if self.reuse_receipt_case else "폴더 이름 형식 · 내부 구성",command=self.configure_folders).pack(side="left")
+        self.folder_summary=tk.StringVar(value=("수신 때 만든 센터발송 폴더에 HWP만 저장합니다." if self.receipt_locations else "수신 공문폴더 안에서 기존 발신 저장 폴더를 선택하세요.") if self.reuse_receipt_case else "기존 폴더 형식을 읽어 새 공문폴더와 내부폴더를 만들 수 있습니다.")
         ttk.Label(folderbar,textvariable=self.folder_summary,wraplength=650).pack(side="left",padx=10)
         def changed_folder(*_):
             if self.changing_folder:return
+            if self.reuse_receipt_case:
+                self.out['receipt_folder_override']=True;self.out['save_folder']=self.vars['save_folder'].get();self.folder_plan=None;self.folder_mode='direct'
+                self.folder_summary.set('선택한 기존 폴더에 HWP만 저장합니다. 새 공문폴더를 만들지 않습니다.')
+                return
             if self.folder_plan and not self.folder_plan.get("folder_name"):
                 self.folder_plan=None;self.folder_mode=""
                 self.folder_summary.set("저장 위치가 변경되었습니다. 기존 폴더 형식을 다시 확인합니다.")
@@ -628,6 +639,21 @@ class SimpleOutgoing(OutgoingEditor):
         if self.out.get("stamp",{}).get("sheet_attempted"):
             for widget in self.stamp_controls:widget.configure(state="disabled")
 
+    def use_receipt_location(self):
+        if not self.reuse_receipt_case:return
+        path=self.out.get('save_folder','') if self.out.get('receipt_folder_override') else self.receipt_location
+        self.changing_folder=True;self.vars['save_folder'].set(path);self.changing_folder=False
+        self.out['save_folder']=path
+        self.folder_plan=None;self.folder_mode='direct'
+
+    def choose_style(self,event=None):
+        reuse=getattr(self,'reuse_receipt_case',False)
+        if reuse:self.changing_folder=True
+        try:super().choose_style(event)
+        finally:
+            if reuse:self.changing_folder=False
+        if reuse:self.use_receipt_location()
+
     def register(self):
         if not self.app.workflow.available():return
         out=self.current()
@@ -662,6 +688,11 @@ class SimpleOutgoing(OutgoingEditor):
 
     def configure_folders(self,resume=False):
         if not self.app.workflow.available() or getattr(self.app,"outgoing_folder_dialog",None) is not None:return
+        if self.reuse_receipt_case:
+            path=filedialog.askdirectory(parent=self.app.root,title='수신 공문폴더 안의 기존 발신 저장 폴더 선택',initialdir=self.vars['save_folder'].get() or str(self.receipt_roots[0]),mustexist=True)
+            if path:self.vars['save_folder'].set(path)
+            if resume and path:self.app.root.after(100,self.register)
+            return
         from outgoing_folder_chooser import OutgoingFolderChooser
         def applied(plan):
             self.folder_plan=plan;self.folder_mode="case" if plan else "direct"
