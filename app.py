@@ -262,8 +262,8 @@ class Worker(threading.Thread):
                             raise ValueError("완료된 공문의 저장 위치는 여기서 변경할 수 없습니다.")
                         old_targets = {t["relative"]:t for t in job.get("routing",{}).get("targets",[])}
                         if job.get("files_started"):
-                            before = {(t["relative"],t["template"]) for t in old_targets.values()}
-                            after = {(t["relative"],t["template"]) for t in data["routing"]["targets"]}
+                            before = {(t["relative"],t["template"],tuple(t.get('children',job['routing'].get('children',[])))) for t in old_targets.values()}
+                            after = {(t["relative"],t["template"],tuple(t.get('children',data['routing'].get('children',[])))) for t in data["routing"]["targets"]}
                             same_title=(job.get("routing",{}).get("folder_title") or job["title"])==(data["routing"].get("folder_title") or data["fields"].get("title",job["title"]))
                             if not same_title or before != after or job.get("routing",{}).get("children",[])!=data["routing"].get("children",[]) or job.get("routing",{}).get("agency")!=data["routing"]["agency"]:
                                 raise ValueError("이미 파일 저장을 시작한 공문입니다. 기존 위치·이름으로 재시도해 주세요.")
@@ -289,7 +289,7 @@ class Worker(threading.Thread):
                         self.config.setdefault("route_templates",{}).update({t["relative"]:t["template"] for t in job["routing"]["targets"]})
                         from folder_naming import remember_profile,destination
                         for target in job["routing"]["targets"]:
-                            prefs=remember_profile(self.config,"incoming:"+target["relative"],destination(self.config["root"],target["relative"]),target["template"],job["routing"]["agency"],job["routing"].get("children",[]),"incoming")
+                            prefs=remember_profile(self.config,"incoming:"+target["relative"],destination(self.config["root"],target["relative"]),target["template"],job["routing"]["agency"],target.get('children',job["routing"].get("children",[])),"incoming")
                         self.emit("folder_preferences",prefs)
                         self.emit("route_applied",{"hash":job["hash"],"templates":self.config["route_templates"],"document_template":job.get("outgoing",{}).get("template_path","")})
                         if data["execute"]:
