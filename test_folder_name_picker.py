@@ -51,3 +51,22 @@ class FolderNamePickerTests(unittest.TestCase):
     def test_sequence_style_is_recognized_when_title_starts_with_korean_year(self):
         from folder_naming import infer_template
         self.assertEqual(infer_template('001. 2026년 시설 조사'),'{number:03d}. {title}')
+
+    def test_architecture_and_use_approval_have_separate_selectable_children(self):
+        from folder_naming import child_kinds,child_folders
+        names=['1.건축허가&사업계획승인','2.사용승인&사용검사']
+        app=SimpleNamespace(root=self.root,config={'root':str(self.base)},commands=queue.Queue(),busy=False)
+        job={'hash':'fixture','title':'새 제목','date':'2026-11-05','category':'서울시청 공문','files':[]}
+        dialog=RouteChooser(app,job);dialog.win.after_cancel(dialog.initial_after);dialog.request='fixture'
+        records=[]
+        for name in names:
+            folder=self.base/name;folder.mkdir();records.append({**describe_directory(folder),'relative':name})
+        dialog.deliver({'owner':dialog.owner,'request':'fixture','records':records})
+        for name in names:dialog.selected.add(name)
+        dialog.focus_folder(names[0]);dialog.redraw_preview()
+        self.assertEqual(list(child_folders('서울시청 공문',dialog.child_sets[names[0]]).values()),['1.시청공문','2.협의도면','3.시청회신'])
+        dialog.focus_folder(names[1]);dialog.redraw_preview()
+        self.assertEqual(list(child_folders('서울시청 공문',dialog.child_sets[names[1]]).values()),['1.시청공문','2.협의도면','3.현장사진','4.시청회신'])
+        dialog.children['photos'].set(False);dialog.children_changed()
+        self.assertEqual(list(child_folders('서울시청 공문',dialog.child_sets[names[1]]).values()),['1.시청공문','2.협의도면','3.시청회신'])
+        dialog.focus_folder(names[0]);self.assertTrue(dialog.children['drawings'].get());dialog.close()
