@@ -177,6 +177,18 @@ def run():
                 # Deleting/moving downloads removes pending items, while registered history survives.
                 for f in files:Path(f["path"]).unlink()
                 app.render(app.jobs[h0]);assert flow.history_tree.exists(h0)
+                # Removing history rows is a persisted display preference only.
+                extra_history={**deepcopy(app.jobs[h0]),'hash':'history-fixture-2'}
+                app.commands.put(('save',extra_history));app.render(extra_history);idle()
+                flow.history_home();flow.history_tree.selection_set([h0,'history-fixture-2'])
+                app.hide_history()
+                wait(lambda:not flow.history_tree.exists(h0) and not flow.history_tree.exists('history-fixture-2'));idle()
+                assert flow.outgoing_list_tree.exists(h0) and flow.outgoing_list_tree.exists('history-fixture-2')
+                with __import__('contextlib').closing(Store(base/'history.sqlite').db) as db:
+                    import json
+                    rows=[json.loads(row[0]) for row in db.execute('SELECT payload FROM jobs')]
+                    assert all(next(row for row in rows if row['hash']==key)['history_hidden'] for key in (h0,'history-fixture-2'))
+                assert writes==['receipt','outgoing'] and app.jobs[h0]['number']=='581' and app.jobs[h0]['outgoing']['number']=='12'
                 pending={**deepcopy(jobs[1]),"hash":"missing","files":[{"hash":"missing","path":str(downloads/"gone.pdf")}],"state":"확인 필요"}
                 app.render(pending);assert not app.tree.exists("missing")
                 assert not errors,errors
