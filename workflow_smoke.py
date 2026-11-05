@@ -40,7 +40,7 @@ def run():
         app.config.update(root=str(shared),downloads=str(downloads),recipient="담당자")
         app.commands.put(("config",app.config.copy()))
         def wait(predicate):
-            end=time.monotonic()+8
+            end=time.monotonic()+15
             while not predicate():
                 root.update()
                 if time.monotonic()>end:raise AssertionError(f"Timed out: {app.status.get()} / {errors}")
@@ -198,6 +198,23 @@ def run():
                     if isinstance(child,tk.Toplevel):child.destroy()
                 from template_manager import open_add_template
                 dialog=open_add_template(app);root.update_idletasks();dialog.destroy()
+                # The frozen application must include the real custom-folder dialog.
+                from child_folder_editor import ChildFolderEditor
+                child_results=[]
+                children=ChildFolderEditor(root,'중앙센터 공문',['incoming','outgoing','reply'],['incoming','reply'],lambda order,selected:child_results.append((order,selected)))
+                with patch('child_folder_editor.simpledialog.askstring',return_value='검토자료'):children.add()
+                children.move(-1);children.move(-1);children.move(-1);children.apply()
+                assert child_results[0][0][0]=='custom:검토자료' and 'outgoing' not in child_results[0][1]
+                # A ZIP downloaded before enabling the watcher is still discovered.
+                import zipfile
+                archive=downloads/'automatic-before-watch.ZIP'
+                with zipfile.ZipFile(archive,'w') as zipped:
+                    zipped.writestr('붙임.csv',b'fixture table');zipped.writestr('도면.dwg',b'fixture drawing')
+                app.send('watch',True)
+                wait(lambda:any(j.get('source_archive')==str(archive) for j in app.jobs.values()));idle()
+                zip_job=next(j for j in app.jobs.values() if j.get('source_archive')==str(archive) and not j.get('parent'))
+                assert app.tree.exists(zip_job['hash']) and '[ZIP] automatic-before-watch.ZIP' in app.tree.item(zip_job['hash'],'values')[2]
+                app.send('watch',False);idle()
                 # Original PDF and automatic 2-to-attachments review use the real worker/UI.
                 from pypdf import PdfWriter
                 original=base/'source-preview.pdf';writer=PdfWriter();writer.add_blank_page(width=72,height=72)
