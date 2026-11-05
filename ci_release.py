@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 업데이트 후 자동 실행·문서와 도면 첨부","draft":True,"prerelease":False,"body":"업데이트 후 새 프로그램 창이 준비된 것을 확인하고 완료합니다. 시작 직후 종료되면 최대 3회 재시도하며, 업데이트 도우미의 임시 실행환경을 새 프로그램에 물려주지 않습니다. 다운로드·추가 목록에는 PDF·HWP/HWPX·엑셀·HTML·워드·프레젠테이션·텍스트·ZIP·DWG·DXF를 표시하며 이미지와 기타 파일은 제외합니다. ZIP 안에서도 같은 기준으로 문서·도면을 모읍니다. 첨부 목록은 파일 수정 날짜가 최신인 순서로 정렬하고 날짜를 표시합니다. 건축허가·사업계획승인은 시청공문/협의도면/시청회신, 사용승인·사용검사는 시청공문/협의도면/현장사진/시청회신을 선택해 만들 수 있습니다. 위치별 선택을 따로 기억하고 선택된 폴더만 연속 번호로 만듭니다. 수신 접수 완료 후 저장된 공문 폴더를 자동으로 열어 인쇄와 수기 접수번호 기재를 이어갈 수 있습니다. 원본 ZIP과 기존 처리 이력·설정·한글 양식은 보존합니다. 정상 게시 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 처리 이력 목록 삭제","draft":True,"prerelease":False,"body":"처리 이력에 목록 삭제 버튼을 추가했습니다. Ctrl·Shift로 여러 항목을 선택하거나 Ctrl+A로 모두 선택한 뒤 삭제할 수 있습니다. 프로그램을 다시 실행해도 삭제한 항목은 처리 이력 목록에 다시 나타나지 않습니다. 저장 파일·Google 시트·접수번호·발신번호·직인 등록·중복 접수 방지 기록은 유지합니다. 발신할 수신 문서 목록은 유지하므로 필요할 때 발신 작성을 이어갈 수 있습니다. 기존 자동 업데이트 후 재실행·첨부 필터와 날짜 정렬·저장 폴더 구성을 유지합니다. 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
