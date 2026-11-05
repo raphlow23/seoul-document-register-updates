@@ -51,9 +51,13 @@ class AttachmentTests(unittest.TestCase):
             archive.writestr('original.pdf',self.source.read_bytes());archive.writestr('extra.txt',b'extra file')
         sources=load_sources([path],self.job,self.store)
         append(self.job,sources,self.config,self.store);discard_sources(sources,self.store)
-        self.assertFalse(folder.exists());self.assertEqual(len(self.job['files']),2);self.assertEqual(self.job['number'],'581')
+        self.assertFalse(folder.exists());self.assertEqual(len(self.job['files']),1);self.assertEqual(len(self.job['archive_files']),1);self.assertEqual(self.job['number'],'581')
         self.assertTrue(all('title' in entry and 'state' in entry for entry in self.store.all()))
         self.assertTrue(all(Path(file['path']).is_file() for file in self.job['files']))
+        forbidden=Mock(side_effect=AssertionError('No duplicate receipt registration'))
+        core.process(self.job,self.config,self.store,sheets_factory=forbidden)
+        saved=next(Path(p) for p in self.job['destinations'] if Path(p).suffix=='.zip')
+        self.assertEqual(saved.read_bytes(),path.read_bytes());forbidden.assert_not_called()
 
     def test_zip_cannot_take_another_registered_cases_attachment(self):
         import zipfile
