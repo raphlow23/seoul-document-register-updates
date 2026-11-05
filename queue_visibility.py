@@ -3,6 +3,15 @@ import os
 from pathlib import Path
 
 
+def resume_downloads(saved,inventory):
+    seen={p:tuple(v) for p,v in saved.get('seen',{}).items()}
+    # v2.7.0 removed old ZIPs from the resume baseline. Do not replay that backlog
+    # when upgrading to the new-files-only policy.
+    if not saved.get('zip_new_only'):
+        seen.update({p:sig for p,sig in inventory.items() if Path(p).suffix.lower()=='.zip'})
+    return seen
+
+
 def source_modified(job):
     paths=[job['source_archive']] if job.get('source_archive') else [f.get('path','') for f in job.get('files',[])]
     stamps=[]
