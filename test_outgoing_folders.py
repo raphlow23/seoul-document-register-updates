@@ -13,6 +13,32 @@ from core import Store
 
 
 class FolderWorkflowTests(unittest.TestCase):
+    def test_received_case_outgoing_reuses_existing_center_send_folder_without_new_case(self):
+        import core
+        from app import App
+        from file_drop import create_root
+        import hwp_documents
+        case=self.base/'접수한 공문';case.mkdir();send=case/'4.센터발송';send.mkdir()
+        (case/'.수신등록.json').write_text(json.dumps({'id':'receipt1'}),encoding='utf-8')
+        source=self.root/'source.pdf';source.write_bytes(b'fixture source')
+        job=self.job();job['outgoing'].pop('number',None);job['outgoing'].pop('folder_plan',None)
+        job.update(category='중앙센터 공문',date='2026-11-05',recipient='담당자',files=[{'path':str(source),'hash':core.digest(source)}],text='2. 시험 본문',text_file_hash=core.digest(source),storage_roots=[{'scope':'receipt','path':str(case)}])
+        self.store.put(job);root=create_root();root.withdraw();app=App(root,self.root,smoke=True)
+        app.config.update(root=str(self.root),recipient='담당자')
+        try:
+            before={str(p) for p in self.root.rglob('*') if p.is_dir()}
+            app.workflow.focus(job['hash']);app.workflow.outgoing_form(job,'1');editor=app.outgoing_editor
+            self.assertEqual(editor.vars['save_folder'].get(),str(send));self.assertEqual(editor.folder_mode,'direct');self.assertIsNone(editor.current()['folder_plan'])
+            editor.style_label.set(hwp_documents.style('2')['label']);editor.choose_style(True)
+            self.assertEqual(editor.vars['save_folder'].get(),str(send))
+            editor.vars['receiver'].set('수신 기관')
+            with patch('hwp_documents.check_template'),patch.object(editor,'save') as save,patch('outgoing_folder_chooser.OutgoingFolderChooser') as chooser:
+                editor.register();save.assert_called_once();chooser.assert_not_called()
+            self.assertEqual(before,{str(p) for p in self.root.rglob('*') if p.is_dir()})
+        finally:
+            app.commands.put(('quit',None));app.worker.join(timeout=5)
+            for token in root.tk.call('after','info'):root.after_cancel(token)
+            root.destroy()
     def test_outgoing_hwp_destination_can_be_a_reordered_custom_folder(self):
         job=self.job();plan=job['outgoing']['folder_plan']
         plan.update(children=['reply','custom:검토자료','incoming'],child_order=['reply','custom:검토자료','incoming','outgoing'],save_in='custom:검토자료')
