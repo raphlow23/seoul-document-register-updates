@@ -59,11 +59,14 @@ class AttachmentTests(unittest.TestCase):
         saved=next(Path(p) for p in self.job['destinations'] if Path(p).suffix=='.zip')
         self.assertEqual(saved.read_bytes(),path.read_bytes());forbidden.assert_not_called()
 
-    def test_zip_cannot_take_another_registered_cases_attachment(self):
+    def test_zip_can_reuse_a_shared_attachment_without_changing_another_case(self):
         import zipfile
         folder=self.save();extra=self.extra();extra.update(receipt_done=True,state='완료');self.store.put(extra)
         path=self.base/'foreign.zip'
         with zipfile.ZipFile(path,'w') as archive:archive.writestr('other.pdf',Path(extra['files'][0]['path']).read_bytes())
         sources=load_sources([path],self.job,self.store)
-        with self.assertRaises(ValueError):append(self.job,sources,self.config,self.store)
-        discard_sources(sources,self.store);self.assertTrue(folder.exists())
+        original=deepcopy(self.store.get(extra['hash']))
+        append(self.job,sources,self.config,self.store)
+        self.assertEqual(self.store.get(extra['hash']),original)
+        self.assertEqual(len(self.job['files']),2);self.assertEqual(self.job['number'],'581')
+        discard_sources(sources,self.store);self.assertFalse(folder.exists())
