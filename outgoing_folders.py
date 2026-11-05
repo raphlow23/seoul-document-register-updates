@@ -7,6 +7,34 @@ from folder_naming import folder_name,child_folders,next_sequence
 PLAN_FIELDS=("base","template","folder_title","agency","children","child_order","save_in","date")
 
 
+def receipt_case_folders(job,config):
+    if not job.get('receipt_done'):return []
+    candidates=[Path(r['path']) for r in job.get('storage_roots',[]) if r.get('scope')=='receipt']
+    for target in job.get('routing',{}).get('targets',[]):
+        if target.get('folder_name') and config.get('root'):candidates.append(Path(config['root'])/target['relative']/target['folder_name'])
+    for value in job.get('destinations',[]):
+        for parent in Path(value).parents:
+            if (parent/'.수신등록.json').is_file():candidates.append(parent);break
+    result=[]
+    for folder in candidates:
+        try:
+            folder=folder.resolve();marker=json.loads((folder/'.수신등록.json').read_text(encoding='utf-8'))
+            if marker.get('id')==job.get('id') and folder not in result:result.append(folder)
+        except (OSError,ValueError):continue
+    return result
+
+
+def receipt_send_folders(job,config):
+    result=[]
+    for folder in receipt_case_folders(job,config):
+        try:children=sorted(folder.iterdir(),key=lambda p:p.name)
+        except OSError:continue
+        for child in children:
+            if child.name.split('.',1)[-1]=='센터발송' and child.is_dir() and child.resolve().parent==folder:
+                result.append(str(child))
+    return result
+
+
 def validate(plan,out):
     base=Path(plan.get("base",""))
     if not base.is_absolute() or not base.is_dir():raise ValueError("발신 공문폴더를 만들 상위 저장 위치에 접근할 수 없습니다.")
