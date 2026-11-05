@@ -69,7 +69,7 @@ class WorkflowShell:
                     self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current()}
                 elif name=="route_dialog" and editor.records:
                     editor.children_changed()
-                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":[{"relative":p,"template":editor.templates[p],'template_manual':p in editor.manual_templates,'children':editor.child_sets.get(p,[])} for p in sorted(editor.selected)],"folder_title":editor.folder_title.get(),"children":[k for k,v in editor.children.items() if v.get()]}
+                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":[{"relative":p,"template":editor.templates[p],'template_manual':p in editor.manual_templates,'children':editor.child_sets.get(p,[]),**({'child_order':editor.child_orders[p]} if p in editor.child_orders else {})} for p in sorted(editor.selected)],"folder_title":editor.folder_title.get(),"children":[k for k,v in editor.children.items() if v.get()]}
                 editor.close()
 
     def show(self,page,section,step=1):
@@ -91,6 +91,7 @@ class WorkflowShell:
         heading(page,"1. 첨부파일을 선택하세요","같은 메일의 본 공문과 붙임을 함께 선택하세요. 여러 파일은 Ctrl 또는 Shift로 선택할 수 있습니다. ZIP 안의 문서도 표시됩니다.")
         bar=ttk.Frame(page);bar.pack(fill="x",pady=(0,10))
         ttk.Button(bar,text="파일 추가",command=self.app.add_files).pack(side="left")
+        ttk.Button(bar,text='ZIP 다시 확인',command=lambda:self.app.send('refresh_zips',None)).pack(side='left',padx=5)
         ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=5)
         ttk.Button(bar,text="목록 삭제",command=self.app.ignore).pack(side="left",padx=8)
         self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · ZIP·PDF·한글·엑셀·HTML·DWG·DXF 등 · 이미지 제외",padding=12,foreground="#1c5295",anchor="center",relief="groove")
@@ -145,7 +146,8 @@ class WorkflowShell:
         from attachment_files import DOCUMENT_SUFFIXES
         document_files=any(Path(f.get('path','')).suffix.lower() in DOCUMENT_SUFFIXES for f in job.get('files',[]))
         hidden=alias or not document_files or job.get("list_hidden") or job["state"]=="제외" or (received and not job.get('files_rolled_back')) or missing_download_source(job,self.app.config.get("downloads"))
-        vals=(job["state"],job.get("category") or "확인 필요",job["title"],self.modified_label(job),job.get("number",""))
+        queue_title=f"[ZIP] {Path(job['source_archive']).name} · {job['title']}" if job.get('source_archive') else job['title']
+        vals=(job["state"],job.get("category") or "확인 필요",queue_title,self.modified_label(job),job.get("number",""))
         self.row(self.app.tree,key,not hidden,vals)
         self.sort_queue()
         out=job.get("outgoing",{})
