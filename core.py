@@ -369,6 +369,24 @@ class Sheets:
     marker_prefix = "SDR:"
     header_row = 2
     notes_start = 5
+    def validate_header(self,rows):
+        if self.marker_prefix!='SDR:':
+            header=rows[self.header_row] if len(rows)>self.header_row else []
+            if len(header)<=self.title_column or '제' not in header[self.title_column] or self.header_word not in header[2]:
+                raise ValueError(f'{self.tab}의 대장 열 구성을 확인하지 못했습니다. 등록하지 않았습니다.')
+            return
+        matches=[]
+        for i,row in enumerate(rows[:50]):
+            cells=[re.sub(r'\s+','',str(v)) for v in row]+['']*8
+            if not re.fullmatch(r'(?:(?:문서|공문|수신|접수)?제목|건명|문서명)(?:\([^)]*\))?',cells[5]):continue
+            # A:D may be merged vertically or C:D may share one document-number heading.
+            columns=[''.join(re.sub(r'\s+','',str(r[c])) for r in rows[max(0,i-2):i+1] if len(r)>c) for c in range(8)]
+            if '연번' not in columns[0] or not any(w in columns[1] for w in ('일자','일','날짜')):continue
+            if not any(w in columns[2]+columns[3] for w in ('문서','업무연락','처리지침','접수번호','번호')):continue
+            if not any(w in columns[4] for w in ('발신','발송','보낸')):continue
+            matches.append(i)
+        if len(matches)!=1:raise ValueError(f'{self.tab}의 수신대장 머리글을 확인하지 못했습니다. A열 연번·B열 일자·C:D열 문서/업무연락/처리지침 번호·E열 발신처·F열 제목을 확인하세요. 등록하지 않았습니다.')
+        self.header_row=matches[0];self.notes_start=self.header_row+2
     def __init__(self, config):
         self.browser=None
         if config.get("auth_mode")=="browser":
@@ -446,7 +464,9 @@ class Sheets:
 
     def register(self, job, store):
         markers=receipt_markers(job)
-        if getattr(self,"browser",None):self.browser.recover(markers)
+        if getattr(self,"browser",None):
+            self.browser.snapshot()
+            self.browser.recover(markers)
         prop, rows, found = self.snapshot()
         existing = {found[m] for m in markers if m in found}
         if len(existing) > 1:
@@ -458,7 +478,7 @@ class Sheets:
         else:
             if job.get("sheet_attempted"):
                 raise ValueError("이전 등록 결과가 불확실합니다. 시트에서 등록 여부를 확인한 뒤 설정을 점검해 주세요.")
-            populated = [i + 1 for i, r in enumerate(rows) if i >= 4 and len(r) > 5 and str(r[5]).strip()]
+            populated = [i + 1 for i, r in enumerate(rows) if i > self.header_row and len(r) > 5 and str(r[5]).strip() and str(r[0]).isdigit() and str(r[3]).isdigit()]
             if not populated:
                 raise ValueError("기존 접수번호 기준 행이 없습니다.")
             row = max(populated) + 1
