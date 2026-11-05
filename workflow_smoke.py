@@ -3,6 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 import tempfile
 import time
+import os
 import tkinter as tk
 from tkinter import ttk
 from unittest.mock import patch
@@ -25,6 +26,8 @@ def run():
             source=downloads/f"attachment{i}.pdf";source.write_bytes(f"fixture {i}, never OCRed".encode())
             files.append({"hash":digest(source),"path":str(source)})
         h0,h1=[f["hash"] for f in files]
+        os.utime(files[0]['path'],ns=(1800000200000000000,1800000200000000000))
+        os.utime(files[1]['path'],ns=(1800000100000000000,1800000100000000000))
         jobs=[{"hash":f["hash"],"files":[f],"title":f"원래 제목 {i}","category":"중앙센터 공문","state":"확인 필요","reason":"시험", "date":"2026-11-02","recipient":"담당자","issuer":"중앙센터","text":"2. 시험 본문\n붙임 1. 자료. 끝."} for i,f in enumerate(files)]
         store=Store(base/"history.sqlite")
         for job in jobs:store.put(job)
@@ -32,6 +35,7 @@ def run():
         from file_drop import create_root
         root=create_root();root.withdraw();errors=[];writes=[];fail_receipt=[True]
         app=App(root,base,smoke=True);flow=app.workflow
+        assert app.tree.get_children('')[0]==h0, 'Newest modification must be first'
         assert app.file_drop is not None
         app.config.update(root=str(shared),downloads=str(downloads),recipient="담당자")
         app.commands.put(("config",app.config.copy()))
@@ -71,7 +75,7 @@ def run():
                 out["stamp"].update(complete=True,sheet_attempted=True)
             job.update(state="완료",reason="fixture registered");db.put(job);return job
         try:
-            with patch("app.messagebox.showerror",side_effect=lambda *a,**kw:errors.append(a)),patch("app.process",side_effect=process),patch("hwp_documents.check_template"),patch.object(flow,"export_registered") as open_hwp:
+            with patch('workflow_ui.os.startfile'),patch("app.messagebox.showerror",side_effect=lambda *a,**kw:errors.append(a)),patch("app.process",side_effect=process),patch("hwp_documents.check_template"),patch.object(flow,"export_registered") as open_hwp:
                 idle();app.tree.selection_set([h0,h1])
                 flow.start_receipt();title=app.title_dialog
                 assert flow.step==2 and title.embedded
