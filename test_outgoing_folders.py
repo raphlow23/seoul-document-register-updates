@@ -13,6 +13,12 @@ from core import Store
 
 
 class FolderWorkflowTests(unittest.TestCase):
+    def test_outgoing_hwp_destination_can_be_a_reordered_custom_folder(self):
+        job=self.job();plan=job['outgoing']['folder_plan']
+        plan.update(children=['reply','custom:검토자료','incoming'],child_order=['reply','custom:검토자료','incoming','outgoing'],save_in='custom:검토자료')
+        target=prepare(job,{'root':str(self.root)},self.store)
+        self.assertEqual(target.name,'2.검토자료');self.assertTrue(target.is_dir())
+        self.assertTrue((target.parent/'1.시청회신').is_dir());self.assertTrue((target.parent/'3.시청공문').is_dir())
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name).resolve();self.base=self.root/"시행문";self.base.mkdir()
