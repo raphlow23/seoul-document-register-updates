@@ -3,7 +3,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
 import uuid
-from folder_naming import AGENCIES, TEMPLATES, agency_for, folder_name, sequence_from_names,child_folders,CHILD_KINDS,preferred_template
+from folder_naming import AGENCIES, TEMPLATES, agency_for, folder_name, sequence_from_names,child_folders,CHILD_KINDS,ALL_CHILD_KINDS,child_kinds,preferred_template
 
 
 class RouteChooser:
@@ -13,6 +13,7 @@ class RouteChooser:
         self.records, self.selected, self.templates = {}, set(), {}
         self.manual_templates={t['relative'] for t in job.get('routing',{}).get('targets',[]) if t.get('template_manual')}
         self.current, self.changing = None, False
+        self.child_sets={t['relative']:list(t['children']) for t in job.get('routing',{}).get('targets',[]) if 'children' in t}
         self.embedded = parent is not None
         self.win = ttk.Frame(parent) if self.embedded else tk.Toplevel(app.root)
         if self.embedded:
@@ -66,14 +67,17 @@ class RouteChooser:
         ttk.Entry(right,textvariable=self.folder_title).pack(fill="x",pady=(3,8))
         self.folder_title.trace_add("write",lambda *_:self.redraw_preview())
         ttk.Label(left, text="저장 위치 — 여러 곳 선택 가능", font=("맑은 고딕",11,"bold")).pack(anchor="w", pady=(0,6))
-        self.children={key:tk.BooleanVar(value=key in job.get("routing",{}).get("children",[] if job.get("files_started") else app.config.get("folder_children",{}).get(self.agency.get(),app.config.get("folder_defaults",{}).get("children",CHILD_KINDS)))) for key in CHILD_KINDS}
+        self.children={key:tk.BooleanVar(value=key in job.get("routing",{}).get("children",[] if job.get("files_started") else app.config.get("folder_children",{}).get(self.agency.get(),app.config.get("folder_defaults",{}).get("children",CHILD_KINDS)))) for key in ALL_CHILD_KINDS}
         childbar=ttk.Frame(outer) if self.embedded else left
         if self.embedded:
             childbar.pack(fill="x",before=panes,pady=(6,0))
             ttk.Label(childbar,text="만들 내부폴더:").pack(side="left",padx=(0,10))
-        for key,label in zip(CHILD_KINDS,("공문 (기관별 기초공문/중앙공문/시청공문)","센터발송","회신 (기관별 기초회신/중앙회신/시청회신)")):
-            text={"incoming":"기관별 공문","outgoing":"센터발송","reply":"기관별 회신"}[key] if self.embedded else label
-            ttk.Checkbutton(childbar,text=text,variable=self.children[key],command=self.redraw_preview).pack(side="left" if self.embedded else "top",anchor="w",padx=(0,10))
+        self.child_boxes={}
+        for key in ALL_CHILD_KINDS:
+            text={'incoming':'기관별 공문','outgoing':'센터발송','drawings':'협의도면','photos':'현장사진','reply':'기관별 회신'}[key]
+            box=ttk.Checkbutton(childbar,text=text,variable=self.children[key],command=self.children_changed)
+            self.child_boxes[key]=box
+            if key in CHILD_KINDS:box.pack(side='left' if self.embedded else 'top',anchor='w',padx=(0,10))
         area=ttk.Frame(left);area.pack(fill="both",expand=True)
         self.tree = ttk.Treeview(area, show="tree", selectmode="browse", height=12)
         scroll=ttk.Scrollbar(area,command=self.tree.yview);self.tree.configure(yscrollcommand=scroll.set)
@@ -131,6 +135,10 @@ class RouteChooser:
         for record in payload["records"]:
             key = record["relative"]
             self.records[key] = record
+            if key not in self.child_sets:
+                kinds=child_kinds(key)
+                saved=self.app.config.get('folder_profiles',{}).get('incoming:'+key,{})
+                self.child_sets[key]=list(saved.get('children',kinds) if kinds!=CHILD_KINDS else self.job.get('routing',{}).get('children',[k for k,v in self.children.items() if v.get() and k in kinds]))
             self.tree.insert(record.get("parent", ""), "end", iid=key, text="☐ " + Path(key).name, open=True)
             self.templates[key] = old.get(key) if key in old and (key in self.manual_templates or self.job.get('files_started') or not record['names']) else preferred_template(record,self.app.config,"incoming:"+key)
             if key in old:
@@ -153,6 +161,13 @@ class RouteChooser:
 
     def focus_folder(self,key):
         self.current=key
+        kinds=child_kinds(key)
+        for box in self.child_boxes.values():box.pack_forget()
+        labels=child_folders(self.agency.get(),kinds)
+        for child,var in self.children.items():var.set(child in self.child_sets.get(key,kinds))
+        for child in kinds:
+            self.child_boxes[child].configure(text=labels[child].split('.',1)[1])
+            self.child_boxes[child].pack(side='left' if self.embedded else 'top',anchor='w',padx=(0,10))
         self.examples.delete(0,"end")
         for example in self.records[key]["examples"]: self.examples.insert("end", example)
         self.changing = True
@@ -176,7 +191,12 @@ class RouteChooser:
             self.manual_templates.add(self.current)
         self.redraw_preview()
 
+    def children_changed(self):
+        if self.current:self.child_sets[self.current]=[k for k,v in self.children.items() if v.get() and k in child_kinds(self.current)]
+        self.redraw_preview()
+
     def redraw_preview(self):
+        if self.current:self.child_sets[self.current]=[k for k,v in self.children.items() if v.get() and k in child_kinds(self.current)]
         if hasattr(self,'name_picker'):self.name_picker.refresh()
         lines = []
         for relative in sorted(self.selected):
@@ -187,7 +207,7 @@ class RouteChooser:
             except (ValueError,TypeError,KeyError) as error:
                 name = "이름 형식을 선택해 주세요: " + str(error)
             lines.append(relative+"\n  └ "+name)
-            children=child_folders(self.agency.get(),[k for k,v in self.children.items() if v.get()])
+            children=child_folders(self.agency.get(),self.child_sets.get(relative,CHILD_KINDS))
             lines.extend("       └ "+child for child in children.values())
             lines.append("       첨부 저장: "+children.get("incoming","상위 공문 폴더"))
         self.preview.configure(state="normal")
@@ -198,7 +218,8 @@ class RouteChooser:
     def apply(self, execute):
         if not self.selected:
             return messagebox.showinfo("저장 위치", "저장할 곳을 한 곳 이상 체크해 주세요.",parent=self.win)
-        targets = [{"relative":p,"template":self.templates[p],'template_manual':p in self.manual_templates} for p in sorted(self.selected)]
+        self.children_changed()
+        targets = [{"relative":p,"template":self.templates[p],'template_manual':p in self.manual_templates,'children':self.child_sets.get(p,list(CHILD_KINDS))} for p in sorted(self.selected)]
         try:
             if not self.folder_title.get().strip():raise ValueError("폴더에 사용할 제목을 입력하세요.")
             for target in targets: folder_name(target["template"],self.folder_title.get(),self.job["date"],sequence_from_names(self.records[target["relative"]]["names"],target["template"]))
