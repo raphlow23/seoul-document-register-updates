@@ -47,6 +47,7 @@ def _roots(job,config,scope):
     candidates=[Path(r['path']) for r in job.get('storage_roots',[]) if r['scope'] in scopes]
     if scope=='receipt':
         for target in job.get('routing',{}).get('targets',[]):
+            if target.get('storage_mode')=='year':continue
             if target.get('folder_name'):candidates.append(Path(config['root'])/target['relative']/target['folder_name'])
         # Older versions persisted destination files rather than absolute case-folder roots.
         for file in job.get('destinations',[]):
@@ -104,6 +105,7 @@ def plan(job,config,scope):
     sources={Path(f['path']).name:f['hash'] for f in storage_files(job)}
     for path in job.get('destinations',[]) if scope=='receipt' else []:
         file=checked(path)
+        if file in {checked(p) for p in job.get('receipt_shared_files',[])} and file not in allowed:continue
         if any(file.is_relative_to(root) for root in roots):
             matches=[f['hash'] for f in storage_files(job) if file.name in (Path(f['path']).name,Path(f['path']).stem+'_'+f['hash'][:12]+Path(f['path']).suffix)]
             if len(set(matches))==1:allowed[file]=matches[0]
@@ -191,7 +193,7 @@ def execute(job,config,store,scope):
                 copies=[Path(m['backup'])/rel if m['inventory']['dirs'] else Path(m['backup']) for m in transaction['moves'] for rel,hash_ in m['inventory']['files'].items() if hash_==file['hash']]
                 if copies:
                     file.setdefault('original_source_path',file['path']);file['path']=str(copies[0])
-            job.update(files_started=False,files_rolled_back=True,destinations=[])
+            job.update(files_started=False,files_rolled_back=True,destinations=[],receipt_shared_files=[])
             job['state']='접수 유지·파일 다시 저장' if job.get('receipt_done') else '저장 취소·등록 결과 확인' if job.get('sheet_attempted') else '확인 필요'
             for target in job.get('routing',{}).get('targets',[]):
                 for key in ('folder_number','folder_name'):target.pop(key,None)
