@@ -31,6 +31,18 @@ class UI:
 
 
 class BrowserTests(unittest.TestCase):
+    def test_guideline_receipt_number_heading_and_shifted_header(self):
+        self.owner.tab=core.RECEIPT_TABS['처리지침']
+        self.ui.rows[2]=['연번','접수 일자','처리 지침 번호','','발신처','제 목','수신자','방법']
+        self.ui.rows=[['']*8]*2+self.ui.rows
+        self.assertEqual(self.owner.register(self.job,self.store),(8,'21'))
+        self.assertEqual(self.owner.header_row,4);self.assertEqual(self.ui.rows[7][5],self.job['title'])
+        self.assertEqual(self.owner.register(self.job,self.store),(8,'21'))
+
+    def test_receipt_wrong_title_column_fails_before_any_write(self):
+        self.ui.rows[2][4],self.ui.rows[2][5]=self.ui.rows[2][5],self.ui.rows[2][4]
+        with self.assertRaisesRegex(ValueError,'머리글'):self.owner.register(self.job,self.store)
+        self.assertFalse(self.ui.writes);self.assertFalse(self.job.get('sheet_attempted'))
     def test_same_title_and_shared_attachment_get_a_new_row_then_retry_keeps_that_row(self):
         self.job.update(title='같은 공문 제목',files=[{'hash':'body-one','path':'first.pdf'},{'hash':'shared','path':'common.xlsx'}])
         self.assertEqual(self.owner.register(self.job,self.store),(6,'21'))
