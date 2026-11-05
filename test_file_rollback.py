@@ -26,6 +26,18 @@ class FileRollbackTests(unittest.TestCase):
         self.folder=Path(self.job['storage_roots'][0]['path'])
         return self.folder
 
+    def test_multiple_city_destinations_create_their_own_children_and_rollback(self):
+        from folder_naming import child_kinds
+        targets=[]
+        for relative in ('1.건축허가&사업계획승인','2.사용승인&사용검사'):
+            (self.root/relative).mkdir();targets.append({'relative':relative,'template':'{number:03d}. {title}','children':list(child_kinds(relative))})
+        self.job['category']='서울시청 공문';self.job['routing']={'agency':'서울시청 공문','targets':targets,'children':['incoming','reply']}
+        self.save();folders=[Path(r['path']) for r in self.job['storage_roots']]
+        self.assertTrue((folders[0]/'2.협의도면').is_dir());self.assertTrue((folders[0]/'3.시청회신').is_dir())
+        self.assertTrue((folders[1]/'3.현장사진').is_dir());self.assertTrue((folders[1]/'4.시청회신').is_dir())
+        self.assertTrue(all('1.시청공문' in p for p in self.job['destinations']))
+        rollback.execute(self.job,self.config,self.store,'receipt');self.assertTrue(all(not f.exists() for f in folders));self.assertEqual(self.job['number'],'581')
+
     def test_rollback_removes_case_folder_but_keeps_source_and_all_ledger_identity(self):
         folder=self.save();identity={k:deepcopy(self.job[k]) for k in ('number','row','title','sheet_attempted','receipt_done','receipt_tab','id')}
         rollback.execute(self.job,self.config,self.store,'receipt')
