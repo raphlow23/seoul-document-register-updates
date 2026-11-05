@@ -91,7 +91,6 @@ class WorkflowShell:
         heading(page,"1. 첨부파일을 선택하세요","같은 메일의 본 공문과 붙임을 함께 선택하세요. 여러 파일은 Ctrl 또는 Shift로 선택할 수 있습니다. ZIP 안의 문서도 표시됩니다.")
         bar=ttk.Frame(page);bar.pack(fill="x",pady=(0,10))
         ttk.Button(bar,text="파일 추가",command=self.app.add_files).pack(side="left")
-        ttk.Button(bar,text='ZIP 다시 확인',command=lambda:self.app.send('refresh_zips',None)).pack(side='left',padx=5)
         ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=5)
         ttk.Button(bar,text="목록 삭제",command=self.app.ignore).pack(side="left",padx=8)
         self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · ZIP·PDF·한글·엑셀·HTML·DWG·DXF 등 · 이미지 제외",padding=12,foreground="#1c5295",anchor="center",relief="groove")
