@@ -4,13 +4,13 @@ import json
 import string
 from folder_naming import folder_name,child_folders,next_sequence
 
-PLAN_FIELDS=("base","template","folder_title","agency","children","save_in","date")
+PLAN_FIELDS=("base","template","folder_title","agency","children","child_order","save_in","date")
 
 
 def validate(plan,out):
     base=Path(plan.get("base",""))
     if not base.is_absolute() or not base.is_dir():raise ValueError("발신 공문폴더를 만들 상위 저장 위치에 접근할 수 없습니다.")
-    children=child_folders(plan["agency"],plan.get("children",[]))
+    children=child_folders(plan["agency"],plan.get("children",[]),plan.get('child_order'))
     selected=plan.get("save_in","outgoing")
     if selected!="root" and selected not in children:raise ValueError("HWP를 넣을 내부폴더를 선택하세요.")
     title=plan.get("folder_title") or out["title"]
