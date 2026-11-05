@@ -12,14 +12,26 @@ AGENCIES = {
 }
 TEMPLATES = ("{date}_{title}", "{ymd}_{title}", "{dotdate} {title}", "{year}-{number:03d} {title}", "{number:03d}. {title}", "{title}")
 CHILD_KINDS=("incoming","outgoing","reply")
+ALL_CHILD_KINDS=('incoming','outgoing','drawings','photos','reply')
+
+
+def child_kinds(location):
+    parts=PureWindowsPath(str(location)).parts
+    if any('사용승인&사용검사' in p for p in parts):return ('incoming','drawings','photos','reply')
+    if any('건축허가&사업계획승인' in p for p in parts):return ('incoming','drawings','reply')
+    return CHILD_KINDS
+
+
+def receipt_children(routing,target):
+    return child_folders(routing['agency'],target.get('children',routing.get('children',[])))
 AGENCY_SUFFIX=re.compile(r"(\s*\((?:[^()\r\n]*(?:센터|시청|중앙|기초|서울시)[^()\r\n]*(?:발송|제출|회신|협의|접수)|시청|중앙|센터|기초센터|25개구)\))$")
 
 
 def child_folders(agency,selected):
-    if any(k not in CHILD_KINDS for k in selected):raise ValueError("하위 폴더 선택이 올바르지 않습니다.")
+    if any(k not in ALL_CHILD_KINDS for k in selected):raise ValueError("하위 폴더 선택이 올바르지 않습니다.")
     prefix={"기초센터 공문":"기초","중앙센터 공문":"중앙","서울시청 공문":"시청"}[agency]
-    labels={"incoming":prefix+"공문","outgoing":"센터발송","reply":prefix+"회신"}
-    return {key:f"{i}.{labels[key]}" for i,key in enumerate((k for k in CHILD_KINDS if k in selected),1)}
+    labels={"incoming":prefix+"공문","outgoing":"센터발송","drawings":"협의도면","photos":"현장사진","reply":prefix+"회신"}
+    return {key:f"{i}.{labels[key]}" for i,key in enumerate((k for k in ALL_CHILD_KINDS if k in selected),1)}
 
 
 def agency_for(category):
@@ -260,6 +272,7 @@ def preflight(job, root):
     child_folders(agency,routing.get("children",[]))
     seen = set()
     for target in targets:
+        receipt_children(routing,target)
         relative = target["relative"]
         if relative in seen: raise ValueError("같은 저장 위치를 두 번 선택했습니다.")
         seen.add(relative)
@@ -298,7 +311,7 @@ def copy_to_subfolders(job, root, on_progress=None):
         from file_rollback import track_root
         track_root(job,folder,'receipt')
         if on_progress: on_progress()
-        children=child_folders(job["routing"]["agency"],job["routing"].get("children",[]))
+        children=receipt_children(job['routing'],target)
         for child in children.values():(folder/child).mkdir(exist_ok=True)
         # Incoming attachments belong to the source-letter folder when it is selected.
         incoming=children.get("incoming")
