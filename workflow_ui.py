@@ -111,12 +111,17 @@ class WorkflowShell:
         for name in ("history","outgoing_list"):
             page=self.pages[name]
             heading(page,"처리 이력" if name=="history" else "발신할 수신 문서를 고르세요","수신 접수가 끝난 문서에서 발신 공문을 이어서 작성할 수 있습니다. 수신 접수는 반복하지 않습니다.")
-            tree=table(page,[("date","접수일",110),("title","제목",520),("number","수신 / 발신번호",175),("state","상태",180)])
+            tree=table(page,[("date","접수일",110),("title","제목",520),("number","수신 / 발신번호",175),("state","상태",180)],extended=name=='history')
             setattr(self,name+"_tree",tree)
             tree.bind("<<TreeviewSelect>>",self.app.select)
             bar=ttk.Frame(page);bar.pack(fill="x",pady=12)
             bar.pack_configure(side="bottom",before=tree.master)
-            if name=="history":ttk.Button(bar,text="본문 · 저장 결과",command=self.app.preview).pack(side="left")
+            if name=="history":
+                ttk.Button(bar,text="본문 · 저장 결과",command=self.app.preview).pack(side="left")
+                ttk.Button(bar,text='목록 삭제',command=self.app.hide_history).pack(side='left',padx=6)
+                tree.bind('<Delete>',lambda event:self.app.hide_history())
+                tree.bind('<Control-a>',lambda event,t=tree:(t.selection_set(t.get_children('')),'break')[-1])
+                ttk.Label(page,text='Ctrl·Shift로 여러 항목 선택 → 목록 삭제. 파일·시트·접수번호는 유지됩니다.',foreground='#667085').pack(fill='x',before=bar,pady=(6,0))
             ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=6)
             ttk.Button(bar,text="이 문서로 발신 작성",command=self.start_outgoing_selected).pack(side="right")
 
@@ -146,7 +151,8 @@ class WorkflowShell:
         out=job.get("outgoing",{})
         numbers=str(job.get("number", ""))+(" / "+str(out["number"]) if out.get("number") else "")
         vals=(job.get("date",""),job["title"],numbers,job["state"])
-        for tree in (self.history_tree,self.outgoing_list_tree):self.row(tree,key,received and not alias,vals)
+        self.row(self.history_tree,key,received and not alias and not job.get('history_hidden'),vals)
+        self.row(self.outgoing_list_tree,key,received and not alias,vals)
 
     @staticmethod
     def row(tree,key,visible,values):
