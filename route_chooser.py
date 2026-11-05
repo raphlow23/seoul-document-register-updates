@@ -3,6 +3,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
 import uuid
+import re
 from folder_naming import AGENCIES, TEMPLATES, agency_for, folder_name, sequence_from_names,child_folders,CHILD_KINDS,ALL_CHILD_KINDS,child_kinds,preferred_template
 
 
@@ -15,6 +16,9 @@ class RouteChooser:
         self.current, self.changing = None, False
         self.child_sets={t['relative']:list(t['children']) for t in job.get('routing',{}).get('targets',[]) if 'children' in t}
         self.child_orders={t['relative']:list(t['child_order']) for t in job.get('routing',{}).get('targets',[]) if t.get('child_order') is not None}
+        self.folder_titles={t['relative']:t.get('folder_title') or job.get('routing',{}).get('folder_title') or job['title'] for t in job.get('routing',{}).get('targets',[])}
+        self.storage_modes={t['relative']:t.get('storage_mode','case') for t in job.get('routing',{}).get('targets',[])}
+        self.year_folders={t['relative']:t.get('year_folder',job['date'][:4]) for t in job.get('routing',{}).get('targets',[])}
         self.embedded = parent is not None
         self.win = ttk.Frame(parent) if self.embedded else tk.Toplevel(app.root)
         if self.embedded:
@@ -64,9 +68,20 @@ class RouteChooser:
         panes.add(left, weight=2)
         panes.add(right, weight=3)
         self.folder_title=tk.StringVar(value=job.get("routing",{}).get("folder_title") or job["title"])
-        ttk.Label(right,text="폴더에 사용할 제목 (대장 제목은 유지)").pack(anchor="w")
+        self.location_label=tk.StringVar(value='설정할 저장 위치를 선택하세요')
+        ttk.Label(right,textvariable=self.location_label,foreground='#1c5295',wraplength=550).pack(anchor='w')
+        ttk.Label(right,text="선택한 위치의 폴더 제목 (대장 제목은 유지)").pack(anchor="w")
         ttk.Entry(right,textvariable=self.folder_title).pack(fill="x",pady=(3,8))
-        self.folder_title.trace_add("write",lambda *_:self.redraw_preview())
+        self.folder_title.trace_add("write",self.title_changed)
+        options=ttk.Frame(right);options.pack(fill='x',pady=(0,6))
+        self.make_children=tk.BooleanVar(value=True)
+        ttk.Checkbutton(options,text='이 위치에 내부 폴더 만들기',variable=self.make_children,command=self.toggle_children).pack(anchor='w')
+        self.year_only=tk.BooleanVar(value=False)
+        self.year_check=ttk.Checkbutton(options,text='지침: 연도 폴더에 수신 파일만 저장 (공문 폴더 생략)',variable=self.year_only,command=self.mode_changed)
+        self.year_check.pack(anchor='w')
+        self.year_folder=tk.StringVar(value=job['date'][:4])
+        self.year_box=ttk.Combobox(options,textvariable=self.year_folder,width=12,state='disabled')
+        self.year_box.pack(anchor='w');self.year_folder.trace_add('write',self.year_changed)
         ttk.Label(left, text="저장 위치 — 여러 곳 선택 가능", font=("맑은 고딕",11,"bold")).pack(anchor="w", pady=(0,6))
         self.children={key:tk.BooleanVar(value=key in job.get("routing",{}).get("children",[] if job.get("files_started") else app.config.get("folder_children",{}).get(self.agency.get(),app.config.get("folder_defaults",{}).get("children",CHILD_KINDS)))) for key in ALL_CHILD_KINDS}
         childbar=ttk.Frame(outer) if self.embedded else left
@@ -87,6 +102,8 @@ class RouteChooser:
         scroll=ttk.Scrollbar(area,command=self.tree.yview);self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left",fill="both", expand=True);scroll.pack(side="right",fill="y")
         self.tree.bind("<ButtonRelease-1>", self.click)
+        self.tree.bind('<<TreeviewSelect>>',lambda _:(self.focus_folder(self.tree.selection()[0]),self.redraw_preview()) if self.tree.selection() and self.tree.selection()[0] in self.records else None)
+        ttk.Label(left,text='왼쪽 체크: 저장 여부 · 위치 이름: 해당 위치 설정',wraplength=380).pack(anchor='w')
         if not self.embedded:ttk.Label(left, text="체크된 각 위치 안에 새 공문 폴더를 만듭니다.\n원본 첨부파일은 다운로드 폴더에 남습니다.", wraplength=380).pack(anchor="w", pady=8)
         ttk.Label(right, text="기존 폴더 이름 예시", font=("맑은 고딕",11,"bold")).pack(anchor="w")
         self.examples = tk.Listbox(right, height=3 if self.embedded else 6, font=("맑은 고딕",10))
@@ -142,6 +159,8 @@ class RouteChooser:
             if key not in self.child_sets:
                 kinds=child_kinds(key)
                 saved=self.app.config.get('folder_profiles',{}).get('incoming:'+key,{})
+                self.storage_modes.setdefault(key,saved.get('storage_mode','case'))
+                if saved.get('year_folder'):self.year_folders.setdefault(key,saved['year_folder'])
                 self.child_sets[key]=list(saved.get('children',kinds) if kinds!=CHILD_KINDS else saved.get('children',self.job.get('routing',{}).get('children',[k for k,v in self.children.items() if v.get() and k in kinds])))
                 if saved.get('child_order') is not None and not self.job.get('files_started'):self.child_orders[key]=list(saved['child_order'])
             self.tree.insert(record.get("parent", ""), "end", iid=key, text="☐ " + Path(key).name, open=True)
@@ -156,6 +175,11 @@ class RouteChooser:
     def click(self, event):
         key = self.tree.identify_row(event.y)
         if key not in self.records: return
+        if 'indicator' in self.tree.identify_element(event.x,event.y):return
+        # Clicking a name changes the editing destination; only the checkbox toggles it.
+        box_left=self.tree.bbox(key)[0]+(20 if self.records[key].get('parent') else 0)
+        if event.x>box_left+36:
+            self.focus_folder(key);self.redraw_preview();return
         if key in self.selected:
             self.selected.remove(key)
         else:
@@ -166,6 +190,20 @@ class RouteChooser:
 
     def focus_folder(self,key):
         self.current=key
+        self.changing=True
+        self.location_label.set('현재 설정: '+key)
+        self.folder_title.set(self.folder_titles.get(key,self.job.get('routing',{}).get('folder_title') or self.job['title']))
+        self.folder_titles[key]=self.folder_title.get()
+        guideline=self.is_guideline(key)
+        self.year_check.configure(state='normal' if guideline else 'disabled')
+        self.year_only.set(self.storage_modes.get(key,'case')=='year')
+        self.year_folder.set(self.year_folders.get(key,self.job['date'][:4]))
+        years=[n for n in self.records[key]['names'] if re.fullmatch(r'20\d{2}년?',n)]
+        if key not in self.year_folders:
+            self.year_folder.set(next((n for n in years if n.rstrip('년')==self.job['date'][:4]),self.job['date'][:4]))
+            self.year_folders[key]=self.year_folder.get()
+        self.year_box.configure(values=years or [self.job['date'][:4]],state='normal' if self.year_only.get() else 'disabled')
+        self.make_children.set(bool(self.child_sets.get(key,[])) and not self.year_only.get())
         kinds=self.child_sequence(key)
         for box in self.child_boxes.values():box.pack_forget()
         self.child_edit_button.pack_forget()
@@ -186,7 +224,47 @@ class RouteChooser:
         self.changing = True
         self.template.set(self.templates[key])
         self.changing = False
+        self.update_child_state()
         self.name_picker.refresh()
+
+    def is_guideline(self,key):
+        return '5.보건복지부 및 중앙처리지침' in key and ('중앙지침' in key or '보건복지부 지침' in key)
+
+    def title_changed(self,*_):
+        if self.current and not self.changing:self.folder_titles[self.current]=self.folder_title.get()
+        if not self.changing:self.redraw_preview()
+
+    def year_changed(self,*_):
+        if self.current and not self.changing:
+            self.year_folders[self.current]=self.year_folder.get();self.redraw_preview()
+
+    def mode_changed(self):
+        if not self.current:return
+        self.storage_modes[self.current]='year' if self.year_only.get() else 'case'
+        if self.year_only.get():
+            self.make_children.set(False);self.child_sets[self.current]=[]
+            for var in self.children.values():var.set(False)
+        self.year_box.configure(state='normal' if self.year_only.get() else 'disabled')
+        self.update_child_state();self.redraw_preview()
+
+    def update_child_state(self):
+        state='normal' if self.make_children.get() and not self.year_only.get() else 'disabled'
+        for box in self.child_boxes.values():box.configure(state=state)
+        self.child_edit_button.configure(state=state)
+
+    def toggle_children(self):
+        if not self.current:return
+        if self.make_children.get():
+            self.year_only.set(False);self.storage_modes[self.current]='case'
+            self.child_sets[self.current]=list(self.child_sequence(self.current))
+        else:self.child_sets[self.current]=[]
+        self.focus_folder(self.current);self.redraw_preview()
+
+    def targets(self):
+        return [{"relative":p,"template":self.templates[p],'template_manual':p in self.manual_templates,
+                 'folder_title':self.folder_titles.get(p,self.job['title']),'children':self.child_sets.get(p,[]),
+                 'storage_mode':self.storage_modes.get(p,'case'),'year_folder':self.year_folders.get(p,self.job['date'][:4]),
+                 **({'child_order':self.child_orders[p]} if p in self.child_orders else {})} for p in sorted(self.selected)]
 
     def select_example(self, _=None):
         from folder_naming import infer_template
@@ -206,6 +284,7 @@ class RouteChooser:
 
     def children_changed(self):
         if self.current:self.child_sets[self.current]=[k for k in self.child_sequence(self.current) if self.children[k].get()]
+        if self.current:self.make_children.set(bool(self.child_sets[self.current]));self.update_child_state()
         self.redraw_preview()
 
     def child_sequence(self,key):
@@ -223,12 +302,16 @@ class RouteChooser:
     def redraw_preview(self):
         if self.current:self.child_sets[self.current]=[k for k in self.child_sequence(self.current) if self.children[k].get()]
         if hasattr(self,'name_picker'):self.name_picker.refresh()
+        if self.current and hasattr(self,'name_picker'):
+            year=self.storage_modes.get(self.current)=='year'
+            for widget in self.name_picker.winfo_children():widget.configure(state='disabled' if year else 'readonly' if widget is self.name_picker.box else 'normal')
+            if year:self.name_picker.value.set(self.year_folders.get(self.current,self.job['date'][:4])+' (수신 파일만 저장)')
         lines = []
         for relative in sorted(self.selected):
             try:
                 old = next((t for t in self.job.get("routing",{}).get("targets",[]) if t["relative"]==relative),{})
                 ordinal = old.get("folder_number") or sequence_from_names(self.records[relative]["names"],self.templates.get(relative,""))
-                name = folder_name(self.templates.get(relative,""),self.folder_title.get(),self.job["date"],ordinal)
+                name = self.year_folders.get(relative,self.job['date'][:4]) if self.storage_modes.get(relative)=='year' else folder_name(self.templates.get(relative,""),self.folder_titles.get(relative,self.job['title']),self.job["date"],ordinal)
             except (ValueError,TypeError,KeyError) as error:
                 name = "이름 형식을 선택해 주세요: " + str(error)
             lines.append(relative+"\n  └ "+name)
@@ -244,10 +327,13 @@ class RouteChooser:
         if not self.selected:
             return messagebox.showinfo("저장 위치", "저장할 곳을 한 곳 이상 체크해 주세요.",parent=self.win)
         self.children_changed()
-        targets = [{"relative":p,"template":self.templates[p],'template_manual':p in self.manual_templates,'children':self.child_sets.get(p,list(CHILD_KINDS)),**({'child_order':self.child_orders[p]} if p in self.child_orders else {})} for p in sorted(self.selected)]
+        targets = self.targets()
         try:
             if not self.folder_title.get().strip():raise ValueError("폴더에 사용할 제목을 입력하세요.")
-            for target in targets: folder_name(target["template"],self.folder_title.get(),self.job["date"],sequence_from_names(self.records[target["relative"]]["names"],target["template"]))
+            from folder_naming import validate_target_mode
+            for target in targets:
+                validate_target_mode(target)
+                if target.get('storage_mode')!='year':folder_name(target["template"],target['folder_title'],self.job["date"],sequence_from_names(self.records[target["relative"]]["names"],target["template"]))
             if self.receipt_type.get() not in ("공문","업무연락","처리지침"):raise ValueError("수신 등록대장을 선택해 주세요.")
             self.outgoing["enabled"]=self.outgoing_enabled.get()
             if execute and self.outgoing["enabled"]:
@@ -257,7 +343,7 @@ class RouteChooser:
         except (ValueError,TypeError,KeyError) as error:
             return messagebox.showerror("폴더 이름 확인",str(error),parent=self.win)
         self.app.busy = True
-        self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"folder_title":self.folder_title.get().strip() if self.folder_title.get().strip()!=self.job["title"] else "","children":[k for k,v in self.children.items() if v.get()]},
+        self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"folder_title":"","children":[]},
                                              "fields":{**{k:self.job.get(k,"") for k in ("title","date","recipient","issuer")},"receipt_type":self.receipt_type.get()},
                                              "outgoing":self.outgoing,"execute":execute}))
         self.close()
