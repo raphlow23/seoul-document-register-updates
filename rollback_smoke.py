@@ -37,7 +37,7 @@ def run():
         def idle():wait(lambda:not app.busy and not app.worker.working.is_set() and app.commands.empty())
         def local_process(job,config,store):return core.process(job,config,store,sheets_factory=Forbidden,outgoing_factory=Forbidden,stamp_factory=Forbidden)
         try:
-            with patch('app.messagebox.showerror',side_effect=lambda *a,**k:errors.append(a)),patch('app.process',side_effect=local_process),patch.object(app,'settings',side_effect=AssertionError('Back opened settings')):
+            with patch('workflow_ui.os.startfile'),patch('app.messagebox.showerror',side_effect=lambda *a,**k:errors.append(a)),patch('app.process',side_effect=local_process),patch.object(app,'settings',side_effect=AssertionError('Back opened settings')):
                 wait(lambda:key in app.jobs);idle()
                 flow.completed(app.jobs[key]);flow.back()
                 wait(lambda:flow.step==3 and getattr(app,'route_dialog',None) is not None and bool(app.route_dialog.records));idle()
