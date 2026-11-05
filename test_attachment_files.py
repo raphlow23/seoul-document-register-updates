@@ -23,14 +23,14 @@ class AttachmentFileTests(unittest.TestCase):
         return result
 
     def test_watch_inventory_includes_all_formats_but_not_incomplete_or_office_lock_files(self):
-        accepted=self.files(['붙임.xls','붙임.xlsx','자료.xlsm','표.csv','양식.docx','사진.png','도면.dwg','이름만'])
-        ignored=self.files(['양식.tmp','data.crdownload','other.part','~$붙임.xlsx','desktop.ini'])
+        accepted=self.files(['붙임.xls','붙임.xlsx','자료.xlsm','표.csv','양식.docx','안내.html','양식.htm','묶음.zip','도면.dwg','도면.DXF'])
+        ignored=self.files(['양식.tmp','data.crdownload','other.part','~$붙임.xlsx','desktop.ini','사진.png','사진.jpg','이름만','파일.exe'])
         worker=Worker(queue.Queue(),queue.Queue(),{'downloads':str(self.downloads)},self.base/'unused.sqlite')
         found=worker.files();self.assertEqual(set(found),{str(p) for p in accepted})
         self.assertTrue(all(not eligible(p) for p in ignored))
 
     def test_nontext_attachments_are_not_parsed_or_executed_and_copy_unchanged(self):
-        files=self.files(['입력.xlsx','사진.jpg','파일.unknown','파일.exe'])
+        files=self.files(['입력.xlsx','안내.html','양식.docx','도면.dwg','도면.dxf'])
         target=self.base/'shared';target.mkdir();(target/'case').mkdir()
         with patch('core.extract',side_effect=AssertionError('Do not parse attachments')) as extract:
             for file in files:
@@ -41,7 +41,7 @@ class AttachmentFileTests(unittest.TestCase):
         extract.assert_not_called()
 
     def test_file_dialog_defaults_to_all_files(self):
-        self.assertEqual(FILE_TYPES[0][1],'*.*')
+        self.assertIn('*.xlsx',FILE_TYPES[0][1]);self.assertIn('*.html',FILE_TYPES[0][1]);self.assertNotIn('*.jpg',FILE_TYPES[0][1]);self.assertNotIn('*.*',FILE_TYPES[0][1])
 
     def test_inaccessible_file_does_not_stop_download_inventory(self):
         with patch.object(Path,'is_file',side_effect=PermissionError('inaccessible')):
