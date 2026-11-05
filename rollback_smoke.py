@@ -73,6 +73,12 @@ def run():
                 assert saved_zip.read_bytes()==packet.read_bytes()
                 assert next(Path(p) for p in app.jobs[key]['destinations'] if p.endswith('.xlsx')).read_bytes()==excel.read_bytes()
                 assert source.read_bytes()==b'original fixture'
+                # Continuing outgoing uses the existing receipt's send folder.
+                flow.outgoing_form(app.jobs[key],'1');editor=app.outgoing_editor
+                selfolder=Path(editor.vars['save_folder'].get())
+                assert selfolder==folder/'2.센터발송' and selfolder.is_dir()
+                assert editor.folder_mode=='direct' and editor.current()['folder_plan'] is None
+                flow.outgoing_home();flow.drafts.pop(key,None);flow.focus(key)
                 # A real generated output is removed independently of receipt copies.
                 saved=app.jobs[key]
                 from outgoing import defaults
