@@ -4,6 +4,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox,filedialog
 import uuid
+import os
 
 from queue_visibility import missing_download_source
 from outgoing_editor import OutgoingEditor, FAMILY_LABELS
@@ -67,7 +68,8 @@ class WorkflowShell:
                 elif name=="title_dialog":
                     self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current()}
                 elif name=="route_dialog" and editor.records:
-                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":[{"relative":p,"template":editor.templates[p],'template_manual':p in editor.manual_templates} for p in sorted(editor.selected)],"folder_title":editor.folder_title.get(),"children":[k for k,v in editor.children.items() if v.get()]}
+                    editor.children_changed()
+                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":[{"relative":p,"template":editor.templates[p],'template_manual':p in editor.manual_templates,'children':editor.child_sets.get(p,[])} for p in sorted(editor.selected)],"folder_title":editor.folder_title.get(),"children":[k for k,v in editor.children.items() if v.get()]}
                 editor.close()
 
     def show(self,page,section,step=1):
@@ -368,7 +370,20 @@ class WorkflowShell:
         box.insert("1.0","저장 위치\n"+"\n".join(map(str,paths)));box.configure(state="disabled")
         bar=ttk.Frame(page);bar.pack(fill="x")
         ttk.Button(bar,text="다른 공문 접수",command=self.receipt_home).pack(side="left")
+        ttk.Button(bar,text='저장된 공문 폴더 열기',command=lambda:self.open_receipt_folders(job)).pack(side='left',padx=8)
         ttk.Button(bar,text="이 공문으로 발신 작성"+(" →" if self.continue_outgoing.get() else ""),command=lambda:self.start_outgoing(job)).pack(side="right")
+        self.open_receipt_folders(job)
+
+    def open_receipt_folders(self,job):
+        opened=set();failed=[]
+        for value in job.get('destinations',[]):
+            folder=Path(value).parent
+            key=os.path.normcase(os.path.abspath(folder))
+            if key in opened:continue
+            opened.add(key)
+            try:os.startfile(str(folder))
+            except OSError as error:failed.append(str(error))
+        if failed:self.app.status.set('접수는 완료됐습니다. 폴더를 열지 못했습니다: '+failed[0])
 
     def start_outgoing_selected(self):
         jobs=self.selected_jobs()
