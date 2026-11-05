@@ -265,16 +265,17 @@ class Worker(threading.Thread):
                             raise ValueError("완료된 공문의 저장 위치는 여기서 변경할 수 없습니다.")
                         old_targets = {t["relative"]:t for t in job.get("routing",{}).get("targets",[])}
                         if job.get("files_started"):
-                            before = {(t["relative"],t["template"],tuple(t.get('children',job['routing'].get('children',[]))),tuple(t.get("child_order") or [])) for t in old_targets.values()}
-                            after = {(t["relative"],t["template"],tuple(t.get('children',data['routing'].get('children',[]))),tuple(t.get("child_order") or [])) for t in data["routing"]["targets"]}
-                            same_title=(job.get("routing",{}).get("folder_title") or job["title"])==(data["routing"].get("folder_title") or data["fields"].get("title",job["title"]))
-                            if not same_title or before != after or job.get("routing",{}).get("children",[])!=data["routing"].get("children",[]) or job.get("routing",{}).get("agency")!=data["routing"]["agency"]:
+                            def signature(t,routing):
+                                return (t['relative'],t['template'],tuple(t.get('children',routing.get('children',[]))),tuple(t.get('child_order') or []),t.get('folder_title') or routing.get('folder_title') or job['title'],t.get('storage_mode','case'),t.get('year_folder',job['date'][:4]))
+                            before = {signature(t,job['routing']) for t in old_targets.values()}
+                            after = {signature(t,data['routing']) for t in data['routing']['targets']}
+                            if before != after or job.get("routing",{}).get("agency")!=data["routing"]["agency"]:
                                 raise ValueError("이미 파일 저장을 시작한 공문입니다. 기존 위치·이름으로 재시도해 주세요.")
                         if job.get("sheet_attempted") and job.get("routing",{}).get("agency") != data["routing"]["agency"]:
                             raise ValueError("등록을 시도한 공문의 종류는 변경할 수 없습니다.")
                         for target in data["routing"]["targets"]:
                             old = old_targets.get(target["relative"],{})
-                            if old.get("template") == target["template"]:
+                            if old.get("template") == target["template"] and old.get('storage_mode','case')==target.get('storage_mode','case') and (old.get('folder_title') or job.get('routing',{}).get('folder_title') or job['title'])==(target.get('folder_title') or data['routing'].get('folder_title') or job['title']):
                                 target.update({k:old[k] for k in ("folder_number","folder_name") if k in old})
                         if not job.get("sheet_attempted") and not job.get("files_started"):
                             job.update(data["fields"])
@@ -293,6 +294,7 @@ class Worker(threading.Thread):
                         from folder_naming import remember_profile,destination
                         for target in job["routing"]["targets"]:
                             prefs=remember_profile(self.config,"incoming:"+target["relative"],destination(self.config["root"],target["relative"]),target["template"],job["routing"]["agency"],target.get('children',job["routing"].get("children",[])),"incoming",target.get("child_order"))
+                            self.config['folder_profiles']['incoming:'+target['relative']].update(storage_mode=target.get('storage_mode','case'))
                         self.emit("folder_preferences",prefs)
                         self.emit("route_applied",{"hash":job["hash"],"templates":self.config["route_templates"],"document_template":job.get("outgoing",{}).get("template_path","")})
                         if data["execute"]:
