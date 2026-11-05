@@ -14,6 +14,10 @@ MAX_ENTRIES=1000
 MAX_DEPTH=3
 
 
+class NoDocuments(ValueError):
+    pass
+
+
 def discard_extraction(paths,cache):
     cache=Path(cache).resolve()
     roots={Path(p).resolve().relative_to(cache).parts[0] for p in paths}
@@ -83,7 +87,7 @@ def unpack(path,cache,progress=None):
                 else:files.append(target)
     try:
         expand(path,work/"files",0)
-        if not files:raise ValueError("ZIP 안에 처리할 첨부파일이 없습니다.")
+        if not files:raise NoDocuments("ZIP 안에 처리할 첨부파일이 없어 목록에서 제외합니다.")
         # Keep the unique extraction directory in place. Windows preview/antivirus can
         # briefly hold children open, which makes renaming their parent fail with WinError 5.
         complete=True
@@ -100,11 +104,11 @@ def ingest_zip(path,store,hash_,progress=None):
     from core import digest,ingest,classify
     cache=Path(store.db.execute("PRAGMA database_list").fetchone()[2]).parent/"archive-cache"
     paths=unpack(path,cache,progress)
-    from attachment_files import eligible
-    documents=[p for p in paths if eligible(p)]
+    from attachment_files import ZIP_DOCUMENTS
+    documents=[p for p in paths if p.suffix.lower() in ZIP_DOCUMENTS]
     if not documents:
         discard_extraction(paths,cache)
-        raise ValueError('ZIP 안에 문서 첨부파일이 없습니다. 이미지와 기타 파일은 제외합니다.')
+        raise NoDocuments('ZIP 안에 문서·도면·오피스 첨부파일이 없어 목록에서 제외합니다.')
     files=[]
     for p in sorted(documents,key=lambda p:(p.suffix.lower() not in DOCUMENTS,str(p))):
         value={"path":str(p),"hash":digest(p)}
@@ -114,6 +118,10 @@ def ingest_zip(path,store,hash_,progress=None):
     if all(prior) and len(owners)==1:
         old=store.get(next(iter(owners)))
         if old and {f["hash"] for f in old["files"]}=={f["hash"] for f in files}:
+            if not any(old.get(k) for k in ('receipt_done','sheet_attempted','files_started','parent','list_hidden')):
+                archives=old.setdefault('archive_files',[])
+                if hash_ not in {f['hash'] for f in archives}:archives.append({'path':str(path),'hash':hash_})
+                old.setdefault('source_archive',str(path));store.put(old)
             store.put({**old,"hash":hash_,"state":"묶음에 포함","parent":old["hash"],"archive_alias":True})
             discard_extraction(paths,cache)
             return old,False
@@ -127,6 +135,7 @@ def ingest_zip(path,store,hash_,progress=None):
     else:
         job={"text":"","ocr":{},"number":"","destinations":[],"receipt_type":"공문",**classify("",Path(path).name)}
     job.update(hash=hash_,id=uuid.uuid4().hex,files=files,archive_hash=hash_,source_archive=str(path),
+               archive_files=[{'path':str(path),'hash':hash_}],
                text_file_hash=primary["hash"],state="확인 필요",ready=False,
                reason=f"ZIP 첨부 {len(files)}개 · 제목 출처 파일과 저장 위치를 선택해 주세요.")
     job.pop("parent",None)
