@@ -100,6 +100,8 @@ class Worker(threading.Thread):
                         self.store.put(data)
                     elif cmd == "hide_list":
                         self.hide_list(data)
+                    elif cmd == 'hide_history':
+                        self.hide_list(data,history=True)
                     elif cmd == "google_login":
                         config = {**self.config, **data, "auth_mode": "oauth"}
                         self.emit("status", "브라우저의 Google 로그인 창에서 편집 권한이 있는 계정을 선택해 주세요.")
@@ -339,13 +341,13 @@ class Worker(threading.Thread):
                 finally:
                     self.working.clear()
 
-    def hide_list(self,keys):
+    def hide_list(self,keys,history=False):
         for key in keys:
             job=self.store.get(key)
             if job:
-                job["list_hidden"]=True
+                job['history_hidden' if history else 'list_hidden']=True
                 self.store.put(job);self.emit("job",job)
-        self.emit("status",f"{len(keys)}개 항목을 목록에서 삭제했습니다. 원본 파일과 등록 이력은 그대로 보관합니다.")
+        self.emit("status",f"{len(keys)}개 항목을 {'처리 이력 목록' if history else '첨부 목록'}에서 삭제했습니다. 파일·구글시트 등록·중복 접수 방지 기록은 유지합니다.")
 
     def sync_sources(self):
         for job in self.store.all():
@@ -807,6 +809,11 @@ class App:
         if not jobs:
             return
         self.send("hide_list",[job["hash"] for job in jobs])
+
+    def hide_history(self):
+        keys=list(self.workflow.history_tree.selection())
+        if not keys:return messagebox.showinfo('처리 이력','목록에서 삭제할 항목을 선택하세요. Ctrl 또는 Shift로 여러 항목을 선택할 수 있습니다.')
+        self.send('hide_history',keys)
 
     def add_files(self):
         paths = filedialog.askopenfilenames(title="공문 첨부파일 선택",initialdir=self.config.get('downloads',''),filetypes=FILE_TYPES)
