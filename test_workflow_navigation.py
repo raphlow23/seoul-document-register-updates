@@ -5,6 +5,14 @@ from workflow_ui import WorkflowShell
 
 
 class NavigationTests(unittest.TestCase):
+    def test_receipt_opens_saved_attachment_folders_once_without_printing(self):
+        from unittest.mock import patch
+        shell=WorkflowShell.__new__(WorkflowShell);shell.app=SimpleNamespace(status=Mock())
+        job={'number':'581','destinations':[r'C:\fixture\case\1.시청공문\main.pdf',r'C:\fixture\case\1.시청공문\attached.xlsx',r'C:\fixture\other\1.시청공문\main.pdf']}
+        with patch('workflow_ui.os.startfile') as opened:shell.open_receipt_folders(job)
+        self.assertEqual(opened.call_count,2)
+        self.assertTrue(all('print' not in call.kwargs for call in opened.call_args_list));self.assertEqual(job['number'],'581')
+
     def shell(self,section,step,job):
         shell=WorkflowShell.__new__(WorkflowShell)
         shell.section=section;shell.step=step;shell.current='fixture';shell.available=lambda:True
