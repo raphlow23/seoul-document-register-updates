@@ -4,7 +4,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,messagebox
 import uuid
-from folder_naming import AGENCIES,CHILD_KINDS,TEMPLATES,agency_for,preferred_template,folder_name,sequence_from_names,child_folders,infer_template
+from folder_naming import AGENCIES,CHILD_KINDS,ALL_CHILD_KINDS,child_kinds,TEMPLATES,agency_for,preferred_template,folder_name,sequence_from_names,child_folders,infer_template
 
 
 class OutgoingFolderChooser:
@@ -19,9 +19,11 @@ class OutgoingFolderChooser:
         self.title=tk.StringVar(value=plan.get("folder_title") or out["title"])
         self.template=tk.StringVar(value=plan.get("template") or "")
         self.manual_template=bool(plan.get('template_manual') or plan.get('folder_name') or plan.get('created'));self.changing_template=False
-        children=plan.get("children",saved.get("children",app.config.get("folder_children",{}).get(self.agency.get(),CHILD_KINDS)))
-        self.children={key:tk.BooleanVar(value=key in children) for key in CHILD_KINDS}
-        self.save_in=tk.StringVar(value=plan.get("save_in",app.config.get("folder_profiles",{}).get(self.slot,{}).get("save_in","outgoing")))
+        self.kinds=child_kinds(self.base)
+        if self.kinds!=CHILD_KINDS:self.agency.set('서울시청 공문')
+        children=plan.get('children',self.kinds if self.kinds!=CHILD_KINDS else saved.get("children",app.config.get("folder_children",{}).get(self.agency.get(),CHILD_KINDS)))
+        self.children={key:tk.BooleanVar(value=key in children) for key in self.kinds}
+        self.save_in=tk.StringVar(value=plan.get("save_in",'reply' if self.kinds!=CHILD_KINDS else app.config.get("folder_profiles",{}).get(self.slot,{}).get("save_in","outgoing")))
         self.enabled=tk.BooleanVar(value=True)
         self.win=tk.Toplevel(app.root);self.win.title("발신 공문폴더 이름 · 내부 구성")
         self.win.geometry(f"970x{min(730,self.win.winfo_screenheight()-100)}");self.win.transient(app.root);self.win.grab_set();self.win.protocol("WM_DELETE_WINDOW",self.close)
@@ -36,8 +38,9 @@ class OutgoingFolderChooser:
         top=ttk.Frame(outer);top.pack(fill="x",pady=6)
         ttk.Label(top,text="기관").pack(side="left")
         agency=ttk.Combobox(top,textvariable=self.agency,values=list(AGENCIES),state="readonly",width=20);agency.pack(side="left",padx=8);agency.bind("<<ComboboxSelected>>",self.redraw)
+        if self.kinds!=CHILD_KINDS:agency.configure(state='disabled')
         self.names={};self.boxes={}
-        for key in CHILD_KINDS:
+        for key in self.kinds:
             self.boxes[key]=ttk.Checkbutton(top,variable=self.children[key],command=self.redraw)
             self.boxes[key].pack(side="left",padx=8)
         middle=ttk.PanedWindow(outer,orient="horizontal");middle.pack(fill="both",expand=True,pady=8)
@@ -97,7 +100,7 @@ class OutgoingFolderChooser:
     def redraw(self,_=None):
         if not hasattr(self,"preview"):return
         self.name_picker.refresh()
-        labels=child_folders(self.agency.get(),CHILD_KINDS)
+        labels=child_folders(self.agency.get(),self.kinds)
         for key,widget in self.boxes.items():widget.configure(text=labels[key].split(".",1)[1])
         children=child_folders(self.agency.get(),[k for k,v in self.children.items() if v.get()])
         self.names={"root":"상위 공문폴더",**children}
