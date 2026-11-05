@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 완화신청 수신 저장 위치 추가","draft":True,"prerelease":False,"body":"서울시청 공문 수신 접수의 저장 위치에 3.완화신청을 추가합니다. 다른 위치와 중복 선택할 수 있고 기존 폴더 형식에 맞춘 제목, 위치별 내부 폴더 생성 여부와 순서 설정을 그대로 사용합니다. 자동 업데이트·재실행을 유지하고 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 완화신청 접수명·구청명 폴더 기본 형식","draft":True,"prerelease":False,"body":"3.완화신청을 선택하면 구청명과 주소·사업명을 확인하고 수신접수 제목을 기본 입력합니다. 수신접수명은 완화된 세부기준의 승인신청에 따른 의견요청 (주소·사업명), 폴더명은 폴더연번.날짜._[구청명] 완화된 세부기준의 승인신청에 따른 의견요청(주소·사업명) 형식입니다. 구청명은 구청까지 직접 입력하며 실제 문서에 적힌 구청명만 후보로 가져옵니다. 폴더 연번은 기존 폴더의 다음 순번을 사용하고 시트 접수번호와 분리합니다. 접수명과 폴더명은 각각 수정할 수 있고 다른 저장 위치의 제목은 유지합니다. 기존에 시작한 등록과 폴더는 자동 변경하지 않습니다. 자동 업데이트·재실행을 유지하고 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake"],check=True,timeout=90)
     from updater import restart_target
     print("Frozen post-update GUI readiness:", restart_target(exe,out,VERSION,test=True))
     startup=out/"browser-startup.json"
