@@ -206,5 +206,6 @@ def execute(job,config,store,scope):
         job.setdefault('rollback_history',[]).append(deepcopy(transaction));job['rollback_history']=job['rollback_history'][-20:]
         job.pop('rollback_pending',None)
         job['reason']='파일·폴더 저장 취소 · 구글시트 등록과 번호 유지'
-        store.put_many([job,*[{**job,'hash':file['hash'],'parent':job['hash'],'state':'묶음 처리 완료' if job.get('receipt_done') else '묶음에 포함'} for file in job.get('files',[]) if file['hash']!=job['hash']]])
+        from core import attachment_aliases
+        store.put_many([job,*attachment_aliases(job,store,'묶음 처리 완료' if job.get('receipt_done') else '묶음에 포함')])
     return job
