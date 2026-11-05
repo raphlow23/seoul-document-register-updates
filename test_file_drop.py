@@ -34,10 +34,10 @@ class FileDropTests(unittest.TestCase):
         self.assertEqual(self.drop.receive(self.event(path,self.base)),REFUSE_DROP);self.app.send.assert_not_called()
 
     def test_excel_word_images_and_other_completed_files_are_accepted(self):
-        files=[self.base/name for name in ('붙임.XLSX','양식.xls','안내.docx','사진.jpg','자료.dat','확장자없음')]
+        files=[self.base/name for name in ('붙임.XLSX','양식.xls','안내.docx','안내.html','사진.jpg','자료.dat','확장자없음')]
         for path in files:path.write_bytes(b'copy only')
         self.assertEqual(self.drop.receive(self.event(*files)),COPY)
-        self.app.send.assert_called_once_with('add',[str(p) for p in files])
+        self.app.send.assert_called_once_with('add',[str(p) for p in files[:4]])
 
     def test_busy_rejects_without_losing_files(self):
         path=self.base/"document.hwp";path.write_bytes(b"fixture");self.app.busy=True
