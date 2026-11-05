@@ -5,6 +5,7 @@ from tkinter import ttk, messagebox
 import uuid
 import re
 from folder_naming import AGENCIES, TEMPLATES, agency_for, folder_name, sequence_from_names,child_folders,CHILD_KINDS,ALL_CHILD_KINDS,child_kinds,preferred_template
+import relief_intake as relief
 
 
 class RouteChooser:
@@ -19,6 +20,7 @@ class RouteChooser:
         self.folder_titles={t['relative']:t.get('folder_title') or job.get('routing',{}).get('folder_title') or job['title'] for t in job.get('routing',{}).get('targets',[])}
         self.storage_modes={t['relative']:t.get('storage_mode','case') for t in job.get('routing',{}).get('targets',[])}
         self.year_folders={t['relative']:t.get('year_folder',job['date'][:4]) for t in job.get('routing',{}).get('targets',[])}
+        self.relief_ready=bool(job.get('routing',{}).get('relief',{}).get('defaults_applied')) or bool(job.get('files_started'))
         self.embedded = parent is not None
         self.win = ttk.Frame(parent) if self.embedded else tk.Toplevel(app.root)
         if self.embedded:
@@ -34,7 +36,8 @@ class RouteChooser:
         outer.pack(fill="both", expand=True)
         ttk.Label(outer, text="공문 종류를 고르고 저장할 곳을 모두 체크하세요", font=("맑은 고딕", 16, "bold")).pack(anchor="w")
         title=job["title"] if not self.embedded else job["title"][:75]+("…" if len(job["title"])>75 else "")
-        ttk.Label(outer, text=title, wraplength=950).pack(anchor="w", pady=(5, 8))
+        self.receipt_label=tk.StringVar(value=title)
+        ttk.Label(outer, textvariable=self.receipt_label, wraplength=950).pack(anchor="w", pady=(5, 8))
         self.agency = tk.StringVar(value=job.get("routing",{}).get("agency") or agency_for(job.get("category", "")))
         kind = ttk.Frame(outer)
         kind.pack(fill="x")
@@ -70,6 +73,19 @@ class RouteChooser:
         self.folder_title=tk.StringVar(value=job.get("routing",{}).get("folder_title") or job["title"])
         self.location_label=tk.StringVar(value='설정할 저장 위치를 선택하세요')
         ttk.Label(right,textvariable=self.location_label,foreground='#1c5295',wraplength=550).pack(anchor='w')
+        self.relief_panel=ttk.LabelFrame(right,text='완화신청 기본 제목',padding=5)
+        initial={**relief.source_fields(job),**job.get('routing',{}).get('relief',{})}
+        self.relief_vars={k:tk.StringVar(value=initial.get(k,'')) for k in ('district','subject','suffix')}
+        self.relief_vars['receipt_title']=tk.StringVar(value=initial.get('receipt_title') or relief.receipt_title(initial['subject'],initial['suffix']))
+        self.relief_auto_receipt=relief.receipt_title(initial['subject'],initial['suffix'])
+        self.relief_auto_folder=relief.folder_title(initial['district'],initial['subject'],initial['suffix'])
+        for key,label,row,col,span,width in (('district','구청명',0,0,1,12),('subject','주소·사업명',0,2,1,25),('receipt_title','수신접수 제목',1,0,3,45)):
+            ttk.Label(self.relief_panel,text=label).grid(row=row,column=col,sticky='w',padx=(0,5))
+            entry=ttk.Entry(self.relief_panel,textvariable=self.relief_vars[key],width=width);entry.grid(row=row,column=col+1,columnspan=span,sticky='ew',pady=2)
+            if job.get('files_started') or job.get('sheet_attempted') or job.get('receipt_done'):entry.configure(state='readonly')
+        self.relief_panel.columnconfigure(3,weight=1)
+        for key in ('district','subject'):self.relief_vars[key].trace_add('write',self.relief_changed)
+        self.relief_vars['receipt_title'].trace_add('write',lambda *_:self.redraw_preview() if not self.changing else None)
         ttk.Label(right,text="선택한 위치의 폴더 제목 (대장 제목은 유지)").pack(anchor="w")
         ttk.Entry(right,textvariable=self.folder_title).pack(fill="x",pady=(3,8))
         self.folder_title.trace_add("write",self.title_changed)
@@ -191,10 +207,19 @@ class RouteChooser:
     def focus_folder(self,key):
         self.current=key
         self.changing=True
+        if key==relief.LOCATION:
+            self.relief_panel.pack(fill='x',after=self.relief_panel.master.winfo_children()[0],pady=(3,6))
+            if not self.relief_ready:
+                self.folder_titles[key]=relief.folder_title(*(self.relief_vars[k].get() for k in ('district','subject','suffix')))
+                if key not in self.manual_templates:self.templates[key]=relief.default_template(self.templates[key])
+                self.relief_ready=True
+        else:self.relief_panel.pack_forget()
         self.location_label.set('현재 설정: '+key)
         self.folder_title.set(self.folder_titles.get(key,self.job.get('routing',{}).get('folder_title') or self.job['title']))
         self.folder_titles[key]=self.folder_title.get()
         guideline=self.is_guideline(key)
+        if guideline:self.year_check.pack(anchor='w')
+        else:self.year_check.pack_forget()
         self.year_check.configure(state='normal' if guideline else 'disabled')
         self.year_only.set(self.storage_modes.get(key,'case')=='year')
         self.year_folder.set(self.year_folders.get(key,self.job['date'][:4]))
@@ -203,6 +228,8 @@ class RouteChooser:
             self.year_folder.set(next((n for n in years if n.rstrip('년')==self.job['date'][:4]),self.job['date'][:4]))
             self.year_folders[key]=self.year_folder.get()
         self.year_box.configure(values=years or [self.job['date'][:4]],state='normal' if self.year_only.get() else 'disabled')
+        if self.year_only.get():self.year_box.pack(anchor='w')
+        else:self.year_box.pack_forget()
         self.make_children.set(bool(self.child_sets.get(key,[])) and not self.year_only.get())
         kinds=self.child_sequence(key)
         for box in self.child_boxes.values():box.pack_forget()
@@ -227,6 +254,27 @@ class RouteChooser:
         self.update_child_state()
         self.name_picker.refresh()
 
+    def relief_values(self):
+        return {**{k:v.get().strip() for k,v in self.relief_vars.items()},'defaults_applied':self.relief_ready}
+
+    def registration_title(self):
+        if relief.LOCATION in self.selected and not (self.job.get('files_started') or self.job.get('sheet_attempted') or self.job.get('receipt_done')):return self.relief_vars['receipt_title'].get().strip()
+        return self.job['title']
+
+    def relief_changed(self,*_):
+        if self.changing or self.job.get('files_started') or self.job.get('sheet_attempted'):return
+        values=self.relief_values()
+        self.changing=True
+        new_receipt=relief.receipt_title(values['subject'],values['suffix'])
+        new_folder=relief.folder_title(values['district'],values['subject'],values['suffix'])
+        if values['receipt_title']==self.relief_auto_receipt:self.relief_vars['receipt_title'].set(new_receipt)
+        if self.relief_ready:
+            if self.folder_titles.get(relief.LOCATION)==self.relief_auto_folder:self.folder_titles[relief.LOCATION]=new_folder
+            if self.current==relief.LOCATION:self.folder_title.set(self.folder_titles[relief.LOCATION])
+        self.relief_auto_receipt,self.relief_auto_folder=new_receipt,new_folder
+        self.changing=False
+        self.redraw_preview()
+
     def is_guideline(self,key):
         return '5.보건복지부 및 중앙처리지침' in key and ('중앙지침' in key or '보건복지부 지침' in key)
 
@@ -245,6 +293,8 @@ class RouteChooser:
             self.make_children.set(False);self.child_sets[self.current]=[]
             for var in self.children.values():var.set(False)
         self.year_box.configure(state='normal' if self.year_only.get() else 'disabled')
+        if self.year_only.get():self.year_box.pack(anchor='w')
+        else:self.year_box.pack_forget()
         self.update_child_state();self.redraw_preview()
 
     def update_child_state(self):
@@ -300,6 +350,7 @@ class RouteChooser:
         ChildFolderEditor(self.win,self.agency.get(),self.child_sequence(key),self.child_sets.get(key,[]),applied)
 
     def redraw_preview(self):
+        self.receipt_label.set(self.registration_title())
         if self.current:self.child_sets[self.current]=[k for k in self.child_sequence(self.current) if self.children[k].get()]
         if hasattr(self,'name_picker'):self.name_picker.refresh()
         if self.current and hasattr(self,'name_picker'):
@@ -329,6 +380,7 @@ class RouteChooser:
         self.children_changed()
         targets = self.targets()
         try:
+            if relief.LOCATION in self.selected and not (self.job.get('files_started') or self.job.get('sheet_attempted') or self.job.get('receipt_done')):relief.validate(self.relief_values())
             if not self.folder_title.get().strip():raise ValueError("폴더에 사용할 제목을 입력하세요.")
             from folder_naming import validate_target_mode
             for target in targets:
@@ -336,6 +388,7 @@ class RouteChooser:
                 if target.get('storage_mode')!='year':folder_name(target["template"],target['folder_title'],self.job["date"],sequence_from_names(self.records[target["relative"]]["names"],target["template"]))
             if self.receipt_type.get() not in ("공문","업무연락","처리지침"):raise ValueError("수신 등록대장을 선택해 주세요.")
             self.outgoing["enabled"]=self.outgoing_enabled.get()
+            if self.outgoing.get('title')==self.job['title']:self.outgoing['title']=self.registration_title()
             if execute and self.outgoing["enabled"]:
                 from outgoing import validate
                 probe={**self.job,"outgoing":self.outgoing}
@@ -343,8 +396,8 @@ class RouteChooser:
         except (ValueError,TypeError,KeyError) as error:
             return messagebox.showerror("폴더 이름 확인",str(error),parent=self.win)
         self.app.busy = True
-        self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"folder_title":"","children":[]},
-                                             "fields":{**{k:self.job.get(k,"") for k in ("title","date","recipient","issuer")},"receipt_type":self.receipt_type.get()},
+        self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"folder_title":"","children":[],"relief":self.relief_values()},
+                                             "fields":{**{k:self.job.get(k,"") for k in ("date","recipient","issuer")},"title":self.registration_title(),"receipt_type":self.receipt_type.get()},
                                              "outgoing":self.outgoing,"execute":execute}))
         self.close()
 
