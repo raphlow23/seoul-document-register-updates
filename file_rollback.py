@@ -5,6 +5,7 @@ from datetime import datetime
 import json
 import os
 import re
+from attachment_files import storage_files
 from pathlib import Path
 import uuid
 
@@ -100,11 +101,11 @@ def plan(job,config,scope):
     allowed={checked(f['path']):f['sha256'] for f in job.get('file_artifacts',[]) if f['scope'] in scopes}
     # Legacy receipt copies are provable only inside a case folder carrying this job's marker.
     from core import digest
-    sources={Path(f['path']).name:f['hash'] for f in job.get('files',[])}
+    sources={Path(f['path']).name:f['hash'] for f in storage_files(job)}
     for path in job.get('destinations',[]) if scope=='receipt' else []:
         file=checked(path)
         if any(file.is_relative_to(root) for root in roots):
-            matches=[f['hash'] for f in job['files'] if file.name in (Path(f['path']).name,Path(f['path']).stem+'_'+f['hash'][:12]+Path(f['path']).suffix)]
+            matches=[f['hash'] for f in storage_files(job) if file.name in (Path(f['path']).name,Path(f['path']).stem+'_'+f['hash'][:12]+Path(f['path']).suffix)]
             if len(set(matches))==1:allowed[file]=matches[0]
         elif file.exists() and file not in allowed:raise ValueError('생성 기록이 없는 기존 공용 파일은 보호합니다: '+str(file))
     # Recover an interrupted copy in an owned folder even before destinations were persisted.
@@ -120,7 +121,7 @@ def plan(job,config,scope):
         if hwp.exists():
             if not out.get('hwp_created_sha256'):raise ValueError('이전 버전에서 만든 HWP는 변경 여부를 확인할 수 없어 보호합니다: '+str(hwp))
             allowed[hwp]=out['hwp_created_sha256']
-    protected={checked(f['path']) for f in job.get('files',[])}
+    protected={checked(f['path']) for f in storage_files(job)}
     if any(p==root or p.is_relative_to(root) for p in protected for root in roots):raise ValueError('원본 첨부파일이 들어 있는 폴더는 되돌릴 수 없습니다.')
     targets=list(roots)
     for path in allowed:
@@ -184,7 +185,7 @@ def execute(job,config,store,scope):
         job['file_artifacts']=[f for f in job.get('file_artifacts',[]) if f['scope'] not in scopes]
         if scope=='receipt':
             from core import digest
-            for file in job.get('files',[]):
+            for file in storage_files(job):
                 original=Path(file['path'])
                 if original.is_file() and digest(original)==file['hash']:continue
                 copies=[Path(m['backup'])/rel if m['inventory']['dirs'] else Path(m['backup']) for m in transaction['moves'] for rel,hash_ in m['inventory']['files'].items() if hash_==file['hash']]
