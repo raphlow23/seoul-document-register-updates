@@ -18,6 +18,36 @@ def hwpx(title):
 
 
 class ZipTests(unittest.TestCase):
+    def test_existing_zip_is_queued_when_watch_starts_and_is_visible_as_a_bundle(self):
+        from app import Worker
+        import queue,time
+        path=self.archive('기존 첨부.ZIP');pdf=self.root/'baseline.pdf';pdf.write_bytes(b'old file')
+        commands,events=queue.Queue(),queue.Queue()
+        worker=Worker(commands,events,{'downloads':str(self.root)},self.root/'history.sqlite');worker.start()
+        try:
+            commands.put(('watch',True))
+            while events.get(timeout=10)[0]!='idle':pass
+            self.assertNotIn(str(path),worker.seen);self.assertIn(str(pdf),worker.seen)
+        finally:commands.put(('quit',None));worker.join(timeout=10)
+        local=Worker(queue.Queue(),queue.Queue(),{'downloads':str(self.root)},self.root/'unused.sqlite');local.store=self.store
+        local.seen=local.files();self.assertIn(str(path),local.queue_existing_zips())
+        local.pending[str(path)]=(local.files()[str(path)],time.monotonic()-7);local.scan()
+        job=self.store.get(core.digest(path));self.assertEqual(job['source_archive'],str(path));self.assertEqual(len(job['files']),3)
+        from workflow_ui import WorkflowShell
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        shell=WorkflowShell.__new__(WorkflowShell);shell.row=Mock();tree=Mock();tree.get_children.return_value=()
+        shell.app=SimpleNamespace(tree=tree,jobs={},config={'downloads':str(self.root)});shell.history_tree=Mock();shell.outgoing_list_tree=Mock()
+        shell.update_job(job);self.assertTrue(shell.row.call_args_list[0].args[2]);self.assertIn('[ZIP] 기존 첨부.ZIP',shell.row.call_args_list[0].args[3][2])
+
+    def test_existing_zip_scan_keeps_hidden_and_completed_cases_out_of_the_queue(self):
+        from app import Worker
+        import queue
+        path=self.archive();job,_=core.ingest(path,self.store)
+        worker=Worker(queue.Queue(),queue.Queue(),{'downloads':str(self.root)},self.root/'unused.sqlite');worker.store=self.store;worker.seen=worker.files()
+        for flag in ('list_hidden','receipt_done','sheet_attempted'):
+            original=dict(job);job[flag]=True;self.store.put(job)
+            self.assertEqual(worker.queue_existing_zips(),[]);job=original
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name).resolve();self.store=core.Store(self.root/"history.sqlite");self.addCleanup(self.store.db.close)
