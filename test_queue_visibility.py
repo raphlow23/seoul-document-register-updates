@@ -12,6 +12,32 @@ import os
 
 
 class QueueVisibilityTests(unittest.TestCase):
+    def test_history_list_removal_persists_and_preserves_registration_and_deduplication(self):
+        from copy import deepcopy
+        store=Store(self.root/'history.sqlite');self.addCleanup(store.db.close)
+        job={**self.job,'receipt_done':True,'state':'완료','number':'581','sheet_attempted':True,'outgoing':{'number':'12','complete':True,'stamp':{'complete':True}}}
+        from core import digest
+        job['hash']=digest(self.path);before=deepcopy(job);store.put(job)
+        worker=Worker(queue.Queue(),queue.Queue(),{'downloads':str(self.downloads)},self.root/'history.sqlite');worker.store=store
+        worker.hide_list([job['hash']],history=True)
+        reopened=Store(self.root/'history.sqlite')
+        try:saved=reopened.get(job['hash'])
+        finally:reopened.db.close()
+        self.assertTrue(saved.pop('history_hidden'));self.assertEqual(saved,before)
+        found,new=ingest(self.path,store);self.assertFalse(new);self.assertEqual(found['number'],'581');self.assertTrue(found['history_hidden'])
+        self.assertEqual(self.path.read_bytes(),b'original file');self.assertEqual(len(store.all()),1)
+
+    def test_history_removal_does_not_remove_the_outgoing_source_list(self):
+        from workflow_ui import WorkflowShell
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        tree=Mock();tree.get_children.return_value=()
+        shell=WorkflowShell.__new__(WorkflowShell);shell.row=Mock()
+        shell.history_tree=Mock();shell.outgoing_list_tree=Mock();shell.app=SimpleNamespace(tree=tree,jobs={},config={})
+        job={**self.job,'state':'완료','receipt_done':True,'number':'581','history_hidden':True}
+        shell.update_job(job)
+        self.assertFalse(shell.row.call_args_list[1].args[2]);self.assertTrue(shell.row.call_args_list[2].args[2])
+
     def test_queue_orders_by_file_modification_not_import_order(self):
         from workflow_ui import WorkflowShell
         from types import SimpleNamespace
