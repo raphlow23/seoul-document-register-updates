@@ -18,7 +18,30 @@ def hwpx(title):
 
 
 class ZipTests(unittest.TestCase):
-    def test_existing_zip_is_queued_when_watch_starts_and_is_visible_as_a_bundle(self):
+    def test_zip_without_office_documents_is_skipped_without_an_error_popup(self):
+        from app import Worker
+        import queue
+        worker=Worker(queue.Queue(),queue.Queue(),{'downloads':str(self.root)},self.root/'unused.sqlite');worker.store=self.store
+        path=self.archive('사진만.zip',{'사진.jpg':b'image','설명.txt':b'notes','data.bin':b'other'})
+        worker.add(path)
+        self.assertIsNone(self.store.get(core.digest(path)));self.assertNotIn('error',[kind for kind,_ in worker.events.queue])
+
+    def test_zip_with_office_document_preserves_every_other_file_inside_original_zip(self):
+        path=self.archive('공문과 기타파일.zip',{'공문.hwpx':hwpx('시험 제목'),'사진.jpg':b'private image fixture','자료.bin':b'other file fixture','설명.txt':b'notes'})
+        original=path.read_bytes();job,_=core.ingest(path,self.store)
+        self.assertEqual({Path(f['path']).suffix for f in job['files']},{'.hwpx'})
+        target=self.root/'saved';target.mkdir();copied=core.copy_files(job,target,subfolders=['.'])
+        saved=next(Path(p) for p in copied if Path(p).suffix=='.zip')
+        self.assertEqual(saved.read_bytes(),original);self.assertEqual(path.read_bytes(),original)
+        with zipfile.ZipFile(saved) as archive:self.assertEqual(archive.read('자료.bin'),b'other file fixture');self.assertIn('사진.jpg',archive.namelist())
+
+    def test_supported_office_and_drawing_extensions_qualify_a_zip(self):
+        for extension in ('.hwpx','.pdf','.hwp','.html','.dwg','.dxf','.docx','.xlsx','.pptx'):
+            with self.subTest(extension=extension):
+                content=hwpx('시험 '+extension) if extension=='.hwpx' else ('fixture '+extension).encode()
+                path=self.archive('bundle'+extension+'.zip',{'document'+extension:content,'other.bin':b'other'})
+                job,new=core.ingest(path,self.store);self.assertTrue(new);self.assertTrue(job['archive_files'])
+    def test_existing_zip_is_skipped_and_new_zip_is_visible_as_a_bundle(self):
         from app import Worker
         import queue,time
         path=self.archive('기존 첨부.ZIP');pdf=self.root/'baseline.pdf';pdf.write_bytes(b'old file')
@@ -27,27 +50,31 @@ class ZipTests(unittest.TestCase):
         try:
             commands.put(('watch',True))
             while events.get(timeout=10)[0]!='idle':pass
-            self.assertNotIn(str(path),worker.seen);self.assertIn(str(pdf),worker.seen)
+            self.assertIn(str(path),worker.seen);self.assertIn(str(pdf),worker.seen)
         finally:commands.put(('quit',None));worker.join(timeout=10)
         local=Worker(queue.Queue(),queue.Queue(),{'downloads':str(self.root)},self.root/'unused.sqlite');local.store=self.store
-        local.seen=local.files();self.assertIn(str(path),local.queue_existing_zips())
+        local.seen=local.files();old=path
+        path=self.archive("새 첨부.ZIP",{"수신공문.hwpx":hwpx("새 제목"),"붙임.xlsx":b"new table"})
         local.pending[str(path)]=(local.files()[str(path)],time.monotonic()-7);local.scan()
-        job=self.store.get(core.digest(path));self.assertEqual(job['source_archive'],str(path));self.assertEqual(len(job['files']),3)
+        job=self.store.get(core.digest(path));self.assertEqual(job['source_archive'],str(path));self.assertEqual(len(job['files']),2);self.assertIsNone(self.store.get(core.digest(old)))
         from workflow_ui import WorkflowShell
         from types import SimpleNamespace
         from unittest.mock import Mock
         shell=WorkflowShell.__new__(WorkflowShell);shell.row=Mock();tree=Mock();tree.get_children.return_value=()
         shell.app=SimpleNamespace(tree=tree,jobs={},config={'downloads':str(self.root)});shell.history_tree=Mock();shell.outgoing_list_tree=Mock()
-        shell.update_job(job);self.assertTrue(shell.row.call_args_list[0].args[2]);self.assertIn('[ZIP] 기존 첨부.ZIP',shell.row.call_args_list[0].args[3][2])
+        shell.update_job(job);self.assertTrue(shell.row.call_args_list[0].args[2]);self.assertIn('[ZIP] 새 첨부.ZIP',shell.row.call_args_list[0].args[3][2])
 
-    def test_existing_zip_scan_keeps_hidden_and_completed_cases_out_of_the_queue(self):
+    def test_upgrade_from_old_zip_catchup_policy_does_not_replay_existing_files(self):
         from app import Worker
-        import queue
-        path=self.archive();job,_=core.ingest(path,self.store)
-        worker=Worker(queue.Queue(),queue.Queue(),{'downloads':str(self.root)},self.root/'unused.sqlite');worker.store=self.store;worker.seen=worker.files()
-        for flag in ('list_hidden','receipt_done','sheet_attempted'):
-            original=dict(job);job[flag]=True;self.store.put(job)
-            self.assertEqual(worker.queue_existing_zips(),[]);job=original
+        import queue,time,json
+        path=self.archive();commands,events=queue.Queue(),queue.Queue()
+        (self.root/'watch-resume.json').write_text(json.dumps({'downloads':str(self.root),'time':time.time(),'seen':{}}),encoding='utf-8')
+        worker=Worker(commands,events,{'downloads':str(self.root)},self.root/'history.sqlite');worker.start()
+        try:
+            commands.put(('watch',True))
+            while events.get(timeout=10)[0]!='idle':pass
+            self.assertIn(str(path),worker.seen);self.assertIsNone(self.store.get(core.digest(path)))
+        finally:commands.put(('quit',None));worker.join(timeout=10)
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name).resolve();self.store=core.Store(self.root/"history.sqlite");self.addCleanup(self.store.db.close)
@@ -82,7 +109,7 @@ class ZipTests(unittest.TestCase):
         with zipfile.ZipFile(inner,"w") as z:z.writestr("공문/안내.hwpx",hwpx("안내 제목"))
         path=self.archive(members={"추가첨부.zip":inner.getvalue(),"붙임/설명.txt":"설명".encode()})
         job,_=core.ingest(path,self.store)
-        self.assertEqual({Path(f["path"]).name for f in job["files"]},{"안내.hwpx","설명.txt"})
+        self.assertEqual({Path(f["path"]).name for f in job["files"]},{"안내.hwpx"})
         self.assertIn("안내 제목",job["text"])
 
     def test_import_does_not_rename_extraction_directory_on_windows(self):
@@ -156,8 +183,8 @@ class ZipTests(unittest.TestCase):
         original=path.read_bytes();job,_=core.ingest(path,self.store)
         target=self.root/"shared";target.mkdir();(target/"case").mkdir()
         copied=core.copy_files(job,target,subfolders=["case"])
-        self.assertEqual(len(copied),2);self.assertEqual(len(set(copied)),2)
-        self.assertEqual({core.digest(p) for p in copied},{f["hash"] for f in job["files"]})
+        self.assertEqual(len(copied),3);self.assertEqual(len(set(copied)),3)
+        self.assertEqual({core.digest(p) for p in copied},{f["hash"] for f in [*job["files"],*job['archive_files']]})
         self.assertEqual(path.read_bytes(),original)
 
     def test_corrupt_empty_zip_and_worker_does_not_stop_watch(self):
@@ -171,7 +198,7 @@ class ZipTests(unittest.TestCase):
         worker.store=self.store;worker.watch=True
         worker.add(path)
         self.assertTrue(worker.watch)
-        self.assertIn("error",[kind for kind,_ in list(worker.events.queue)])
+        self.assertNotIn("error",[kind for kind,_ in list(worker.events.queue)])
 
 
 if __name__=="__main__":unittest.main()
