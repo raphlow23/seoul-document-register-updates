@@ -1,4 +1,4 @@
-VERSION = "2.6.0"
+VERSION = "2.6.1"
 # Automatic body review beside the original and concrete destination folder names.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
