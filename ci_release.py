@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 처리 이력 목록 삭제","draft":True,"prerelease":False,"body":"처리 이력에 목록 삭제 버튼을 추가했습니다. Ctrl·Shift로 여러 항목을 선택하거나 Ctrl+A로 모두 선택한 뒤 삭제할 수 있습니다. 프로그램을 다시 실행해도 삭제한 항목은 처리 이력 목록에 다시 나타나지 않습니다. 저장 파일·Google 시트·접수번호·발신번호·직인 등록·중복 접수 방지 기록은 유지합니다. 발신할 수신 문서 목록은 유지하므로 필요할 때 발신 작성을 이어갈 수 있습니다. 기존 자동 업데이트 후 재실행·첨부 필터와 날짜 정렬·저장 폴더 구성을 유지합니다. 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — ZIP 자동 확인·내부 폴더 추가와 순서 변경","draft":True,"prerelease":False,"body":"다운로드 자동 확인을 켜기 전에 받은 ZIP도 아직 확인한 기록이 없으면 자동 확인합니다. 첨부 목록에 원본 ZIP 파일명을 함께 표시하고 ZIP 다시 확인 버튼을 추가했습니다. 이미 처리했거나 목록에서 삭제한 ZIP은 자동으로 되살리지 않습니다. 수신·발신 저장 위치에서 폴더 추가·순서 변경을 열어 내부 폴더 이름을 직접 추가하고 위·아래 버튼으로 순서를 정할 수 있습니다. 기본 폴더는 유지하며 선택한 폴더만 최종 순서에 따라 연속 번호로 만듭니다. 위치별 구성을 기억하고 뒤로가기의 파일 취소에서도 추가 폴더를 처리합니다. 기존 파일·시트 등록·번호·설정·양식은 유지합니다. 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor"],check=True,timeout=90)
     from updater import restart_target
     print("Frozen post-update GUI readiness:", restart_target(exe,out,VERSION,test=True))
     startup=out/"browser-startup.json"
