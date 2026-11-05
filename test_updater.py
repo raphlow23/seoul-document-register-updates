@@ -183,6 +183,15 @@ class UpdateTests(unittest.TestCase):
         self.assertNotIn(str(new), resumed.seen)
         self.assertFalse((self.data / "watch-resume.json").exists())
 
+    def test_new_only_resume_preserves_zips_downloaded_during_future_update_gaps(self):
+        from queue_visibility import resume_downloads
+        old=str(self.root/'old.zip');new=str(self.root/'new.zip')
+        inventory={old:(100,1),new:(200,2)}
+        saved={'seen':{old:[100,1]},'zip_new_only':True}
+        self.assertEqual(resume_downloads(saved,inventory),{old:(100,1)})
+        legacy={'seen':{}}
+        self.assertEqual(resume_downloads(legacy,inventory),inventory)
+
     def test_idle_install_waits_for_unsaved_edits_or_active_work(self):
         from app import App
         class Root:
