@@ -42,6 +42,7 @@ def append(job,additions,config,store):
     additions=[source for source in additions if source['hash']!=job['hash']]
     known={f['hash'] for f in job['files']};extra=[]
     archive_known={f['hash'] for f in job.get('archive_files',[])};archive_extra=[]
+    foreign_aliases=set()
     for source in additions:
         new_archives=[f for f in source.get('archive_files',[]) if f['hash'] not in archive_known]
         if all(file['hash'] in known for file in source['files']) and not new_archives:continue
@@ -55,8 +56,11 @@ def append(job,additions,config,store):
             if file['hash'] in known:continue
             if not Path(file['path']).is_file() or digest(file['path'])!=file['hash']:raise ValueError('추가할 원본 첨부파일이 없거나 변경되었습니다.')
             old=store.get(file['hash'])
-            if old and old.get('parent')!=job['hash'] and (old.get('receipt_done') or old.get('sheet_attempted') or old.get('files_started') or old.get('state') in ('완료','묶음 처리 완료')):raise ValueError('다른 공문에서 이미 처리한 첨부파일입니다.')
-            if old and old.get('parent') not in (None,job['hash'],source['hash']):raise ValueError('다른 묶음의 첨부파일은 보호합니다.')
+            if source.get('archive_hash') and old and old.get('parent') not in (job['hash'],source['hash']) and old.get('id')!=job.get('id') and (old.get('parent') or any(old.get(k) for k in ('receipt_done','sheet_attempted','files_started')) or old.get('state') in ('완료','묶음 처리 완료')):
+                foreign_aliases.add(file['hash'])
+            if not source.get('archive_hash'):
+                if old and old.get('parent')!=job['hash'] and (old.get('receipt_done') or old.get('sheet_attempted') or old.get('files_started') or old.get('state') in ('완료','묶음 처리 완료')):raise ValueError('다른 공문에서 이미 처리한 첨부파일입니다.')
+                if old and old.get('parent') not in (None,job['hash'],source['hash']):raise ValueError('다른 묶음의 첨부파일은 보호합니다.')
             known.add(file['hash']);extra.append(deepcopy(file))
     if not extra and not archive_extra:return job
     # Keep the original sheet transaction's marker set stable, including uncertain writes.
@@ -69,7 +73,10 @@ def append(job,additions,config,store):
     for source in additions:
         updates[source['hash']]={**job,**{key:value for key,value in source.items() if not key.startswith('_zip_')},'parent':job['hash'],'state':'묶음에 포함','archive_alias':bool(source.get('archive_hash'))}
     for file in extra:
+        if file['hash'] in foreign_aliases:continue
         old=updates.get(file['hash']) or store.get(file['hash']) or {}
+        if old and old.get('parent') not in (None,job['hash']) and old.get('id')!=job.get('id'):continue
+        if old.get('receipt_done') and old.get('parent')!=job['hash'] and old.get('id')!=job.get('id'):continue
         updates[file['hash']]={**job,**old,'hash':file['hash'],'files':[file],'parent':job['hash'],'state':'묶음에 포함'}
     store.put_many(list(updates.values()))
     return job
