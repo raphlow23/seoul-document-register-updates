@@ -13,11 +13,11 @@ from tkinter import filedialog, messagebox, ttk
 import webbrowser
 import google_login
 
-from core import CATEGORIES, ROOT, SHEET_ID, TAB, Sheets, Store, ingest, process, digest
+from core import CATEGORIES, ROOT, SHEET_ID, TAB, Sheets, Store, ingest, process
 from attachment_files import eligible,can_extract,FILE_TYPES
 from release_info import VERSION,UPDATE_BASE_URL
 from updater import check_and_stage, launch_helper, helper_main
-from queue_visibility import missing_download_source
+from queue_visibility import missing_download_source,resume_downloads
 
 DATA = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "SeoulDocumentRegister"
 
@@ -59,7 +59,6 @@ class Worker(threading.Thread):
                         if preferences:self.emit("folder_preferences",preferences)
                         if self.watch and previous_downloads!=updated.get("downloads"):
                             self.seen=self.files();self.pending={}
-                            self.queue_existing_zips()
                     elif cmd == "watch":
                         self.watch = bool(data)
                         self.seen = self.files() if self.watch else {}
@@ -68,21 +67,11 @@ class Worker(threading.Thread):
                             try:
                                 saved = json.loads(resume.read_text(encoding="utf-8"))
                                 if self.watch and saved.get("downloads") == self.config["downloads"] and time.time() - saved.get("time", 0) < 600:
-                                    self.seen = {p: tuple(v) for p, v in saved.get("seen", {}).items()}
+                                    self.seen = resume_downloads(saved,self.seen)
                             finally:
                                 resume.unlink(missing_ok=True)
                         self.pending = {}
-                        if self.watch:self.queue_existing_zips()
-                        self.emit("status", "다운로드 감시 중 · 새 파일과 미확인 ZIP을 확인합니다." if self.watch else "다운로드 감시 중지")
-                    elif cmd == 'refresh_zips':
-                        paths=self.queue_existing_zips()
-                        for path in paths:
-                            self.add(path)
-                            try:
-                                stat=Path(path).stat();self.seen[path]=(stat.st_size,stat.st_mtime_ns)
-                                self.pending.pop(path,None)
-                            except OSError:pass
-                        if not paths:self.emit('status','새로 확인할 ZIP이 없습니다. 이미 처리했거나 목록에서 삭제한 ZIP은 다시 추가하지 않습니다.')
+                        self.emit("status", "다운로드 감시 중 · 감시 시작 이후 새로 저장되는 파일만 확인합니다." if self.watch else "다운로드 감시 중지")
                     elif cmd == "startup_baseline":
                         resume = Path(self.dbpath).parent / "watch-resume.json"
                         saved = {}
@@ -92,16 +81,17 @@ class Worker(threading.Thread):
                             except ValueError:
                                 pass
                         valid = saved.get("downloads") == self.config["downloads"] and time.time() - saved.get("time", 0) < 600
-                        self.seen = {p: tuple(v) for p,v in saved.get("seen", {}).items()} if valid else self.files()
+                        inventory=self.files()
+                        self.seen = resume_downloads(saved,inventory) if valid else inventory
                         resume.write_text(json.dumps({"watch": saved.get("watch", True) if valid else True,
-                                                      "downloads": self.config["downloads"], "time": time.time(), "seen": self.seen}, ensure_ascii=False), encoding="utf-8")
+                                                      "downloads": self.config["downloads"], "time": time.time(), "seen": self.seen,"zip_new_only":True}, ensure_ascii=False), encoding="utf-8")
                     elif cmd == "prepare_update":
                         resume = Path(self.dbpath).parent / "watch-resume.json"
                         restart_watch = self.watch
                         if data.get("_startup") and resume.exists():
                             restart_watch = json.loads(resume.read_text(encoding="utf-8")).get("watch", True)
                         resume.write_text(json.dumps({"watch": restart_watch, "downloads": self.config["downloads"],
-                                                      "time": time.time(), "seen": self.seen}, ensure_ascii=False), encoding="utf-8")
+                                                      "time": time.time(), "seen": self.seen,"zip_new_only":True}, ensure_ascii=False), encoding="utf-8")
                         self.watch = False
                         self.emit("update_quiesced", data)
                     elif cmd == "add":
@@ -381,21 +371,6 @@ class Worker(threading.Thread):
                     pass
         return result
 
-    def queue_existing_zips(self):
-        paths=[]
-        for path in self.files():
-            if Path(path).suffix.lower()!='.zip':continue
-            try:
-                old=self.store.get(digest(path))
-                if old:
-                    if old.get('list_hidden') or old.get('parent') or old.get('archive_alias') or old.get('receipt_done') or old.get('sheet_attempted') or old.get('files_started'):continue
-                    source=old.get('source_archive')
-                    if not source or Path(source).is_file():continue
-                self.seen.pop(path,None)
-                paths.append(path)
-            except OSError:continue
-        return paths
-
     def scan(self):
         now = self.files()
         for path, sig in now.items():
@@ -425,6 +400,9 @@ class Worker(threading.Thread):
             job, new = ingest(path, self.store, progress=lambda text: self.emit("status", text))
         except Exception as error:
             if Path(path).suffix.lower()!=".zip":raise
+            from zip_intake import NoDocuments
+            if isinstance(error,NoDocuments):
+                self.emit('status',Path(path).name+': '+str(error));return
             self.emit("error",Path(path).name+": "+str(error))
             return
         if not new and (job["state"] == "제외" or job.get("list_hidden")):
