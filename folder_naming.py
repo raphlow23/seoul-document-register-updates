@@ -287,7 +287,8 @@ def preflight(job, root):
         destination(root, relative)
         folder_name(target["template"], target.get("folder_title") or routing.get("folder_title") or job["title"], job["date"], target.get("folder_number"))
     from core import digest
-    for file in job["files"]:
+    from attachment_files import storage_files
+    for file in storage_files(job):
         if not Path(file["path"]).is_file() or digest(file["path"]) != file["hash"]:
             raise ValueError("원본 첨부파일이 없거나 바뀌었습니다. 다운로드 파일을 확인해 주세요.")
 
