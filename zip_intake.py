@@ -101,7 +101,7 @@ def unpack(path,cache,progress=None):
 
 
 def ingest_zip(path,store,hash_,progress=None):
-    from core import digest,ingest,classify
+    from core import digest,inspect_document,attachment_aliases
     cache=Path(store.db.execute("PRAGMA database_list").fetchone()[2]).parent/"archive-cache"
     paths=unpack(path,cache,progress)
     from attachment_files import ZIP_DOCUMENTS
@@ -113,34 +113,14 @@ def ingest_zip(path,store,hash_,progress=None):
     for p in sorted(documents,key=lambda p:(p.suffix.lower() not in DOCUMENTS,str(p))):
         value={"path":str(p),"hash":digest(p)}
         if value["hash"] not in {f["hash"] for f in files}:files.append(value)
-    prior=[store.get(f["hash"]) for f in files]
-    owners={j.get("parent") or j.get("archive_hash") or j["hash"] for j in prior if j}
-    if all(prior) and len(owners)==1:
-        old=store.get(next(iter(owners)))
-        if old and {f["hash"] for f in old["files"]}=={f["hash"] for f in files}:
-            if not any(old.get(k) for k in ('receipt_done','sheet_attempted','files_started','parent','list_hidden')):
-                archives=old.setdefault('archive_files',[])
-                if hash_ not in {f['hash'] for f in archives}:archives.append({'path':str(path),'hash':hash_})
-                old.setdefault('source_archive',str(path));store.put(old)
-            store.put({**old,"hash":hash_,"state":"묶음에 포함","parent":old["hash"],"archive_alias":True})
-            discard_extraction(paths,cache)
-            return old,False
-    if any(j and (j.get("files_started") or j.get("sheet_attempted") or j.get("receipt_done") or j.get("parent") or j.get("archive_hash") or j.get("state") in ("완료","묶음 처리 완료","저장 완료·등록 대기")) for j in prior):
-        discard_extraction(paths,cache)
-        raise ValueError("ZIP에 기존 묶음 또는 이미 저장·등록한 첨부파일이 섞여 있습니다. 기존 처리 이력을 확인하고 새 공문 파일만 따로 추가해 주세요.")
     primary=next((f for f in files if Path(f["path"]).suffix.lower() in DOCUMENTS),files[0])
-    if Path(primary["path"]).suffix.lower() in DOCUMENTS:
-        base,_=ingest(primary["path"],store,progress)
-        job={**base}
-    else:
-        job={"text":"","ocr":{},"number":"","destinations":[],"receipt_type":"공문",**classify("",Path(path).name)}
+    text,metadata,info=inspect_document(primary['path'],progress)
+    job={"text":text,"ocr":metadata,"number":"","destinations":[],"receipt_type":"공문",**info}
     job.update(hash=hash_,id=uuid.uuid4().hex,files=files,archive_hash=hash_,source_archive=str(path),
                archive_files=[{'path':str(path),'hash':hash_}],
                text_file_hash=primary["hash"],state="확인 필요",ready=False,
                reason=f"ZIP 첨부 {len(files)}개 · 제목 출처 파일과 저장 위치를 선택해 주세요.")
     job.pop("parent",None)
     store.put(job)
-    for f,old in zip(files,prior):
-        alias=old or {**job,"text":job.get("text","") if f["hash"]==primary["hash"] else ""}
-        store.put({**alias,"hash":f["hash"],"files":[f],"state":"묶음에 포함","parent":hash_})
+    store.put_many(attachment_aliases(job,store,'묶음에 포함'))
     return job,True
