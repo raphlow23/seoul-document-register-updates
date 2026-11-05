@@ -23,15 +23,19 @@ def child_kinds(location):
 
 
 def receipt_children(routing,target):
-    return child_folders(routing['agency'],target.get('children',routing.get('children',[])))
+    return child_folders(routing['agency'],target.get('children',routing.get('children',[])),target.get('child_order'))
 AGENCY_SUFFIX=re.compile(r"(\s*\((?:[^()\r\n]*(?:센터|시청|중앙|기초|서울시)[^()\r\n]*(?:발송|제출|회신|협의|접수)|시청|중앙|센터|기초센터|25개구)\))$")
 
 
-def child_folders(agency,selected):
-    if any(k not in ALL_CHILD_KINDS for k in selected):raise ValueError("하위 폴더 선택이 올바르지 않습니다.")
+def child_folders(agency,selected,order=None):
+    keys=list(dict.fromkeys([*selected,*(order or [])]))
+    if any(k not in ALL_CHILD_KINDS and not (isinstance(k,str) and k.startswith('custom:') and k[7:].strip()) for k in keys):raise ValueError("하위 폴더 선택이 올바르지 않습니다.")
     prefix={"기초센터 공문":"기초","중앙센터 공문":"중앙","서울시청 공문":"시청"}[agency]
     labels={"incoming":prefix+"공문","outgoing":"센터발송","drawings":"협의도면","photos":"현장사진","reply":prefix+"회신"}
-    return {key:f"{i}.{labels[key]}" for i,key in enumerate((k for k in ALL_CHILD_KINDS if k in selected),1)}
+    labels.update({k:safe_component(k[7:]) for k in keys if k.startswith('custom:')})
+    sequence=list(order) if order is not None else [*ALL_CHILD_KINDS,*[k for k in selected if k.startswith('custom:')]]
+    if len(sequence)!=len(set(sequence)) or any(k not in sequence for k in selected):raise ValueError('하위 폴더 순서를 확인해 주세요.')
+    return {key:f"{i}.{labels[key]}" for i,key in enumerate((k for k in sequence if k in selected),1)}
 
 
 def agency_for(category):
@@ -160,8 +164,9 @@ def preferred_template(record,config,slot):
     return saved.get("template") or config.get("route_templates",{}).get(slot.removeprefix("incoming:")) or config.get("folder_defaults",{}).get("template") or "{title}"
 
 
-def remember_profile(config,slot,path,template,agency,children,save_in="outgoing"):
+def remember_profile(config,slot,path,template,agency,children,save_in="outgoing",child_order=None):
     profile={"path":str(Path(path).resolve()),"template":template,"agency":agency,"children":list(children),"save_in":save_in}
+    if child_order is not None:profile['child_order']=list(child_order)
     config.setdefault("folder_profiles",{})[slot]=profile
     config["folder_defaults"]=profile.copy()
     config.setdefault("folder_children",{})[agency]=list(children)
@@ -182,6 +187,7 @@ def preserve_changed_profiles(previous,updated):
             template=preferred_template(record,previous,slot)
             children=old.get("children",previous.get("folder_children",{}).get(agency,previous.get("folder_defaults",{}).get("children",CHILD_KINDS)))
             profile={"path":record["path"],"template":template,"agency":agency,"children":list(children),"save_in":old.get("save_in",save_in)}
+            if 'child_order' in old:profile['child_order']=list(old['child_order'])
             updated.setdefault("folder_profiles",{})[slot]=profile
             updated.setdefault("folder_defaults",profile.copy())
             updated.setdefault("folder_children",{}).setdefault(agency,list(children))
