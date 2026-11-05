@@ -41,6 +41,12 @@ class ZipTests(unittest.TestCase):
         again,new=core.ingest(path,self.store)
         self.assertFalse(new);self.assertEqual(again["id"],job["id"])
 
+    def test_documents_html_drawings_retained_and_images_excluded_from_bundle(self):
+        path=self.archive(members={'공문.hwpx':hwpx('시험 공문'),'설명.html':b'html','도면.dwg':b'dwg','도면.dxf':b'dxf','사진.jpg':b'jpg','로고.png':b'png'})
+        original=path.read_bytes();job,_=core.ingest(path,self.store)
+        self.assertEqual({Path(f['path']).name for f in job['files']},{'공문.hwpx','설명.html','도면.dwg','도면.dxf'})
+        self.assertEqual(path.read_bytes(),original)
+
     def test_nested_zip_and_korean_file_names(self):
         inner=io.BytesIO()
         with zipfile.ZipFile(inner,"w") as z:z.writestr("공문/안내.hwpx",hwpx("안내 제목"))
