@@ -69,7 +69,7 @@ class WorkflowShell:
                     self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current()}
                 elif name=="route_dialog" and editor.records:
                     editor.children_changed()
-                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":editor.targets(),"folder_title":"","children":[]}
+                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":editor.targets(),"folder_title":"","children":[],"relief":editor.relief_values()}
                 editor.close()
 
     def show(self,page,section,step=1):
