@@ -9,6 +9,14 @@ from folder_naming import AGENCIES
 
 
 class FileRollbackTests(unittest.TestCase):
+    def test_original_zip_copy_and_rollback_preserve_all_contents_and_receipt_number(self):
+        import zipfile
+        archive=self.base/'bundle.zip'
+        with zipfile.ZipFile(archive,'w') as zipped:zipped.writestr('공문.pdf',b'document');zipped.writestr('사진.jpg',b'original picture')
+        original=archive.read_bytes();self.job['archive_files']=[{'path':str(archive),'hash':core.digest(archive)}]
+        folder=self.save();saved=folder/'1.중앙공문'/'bundle.zip';self.assertEqual(saved.read_bytes(),original)
+        rollback.execute(self.job,self.config,self.store,'receipt')
+        self.assertFalse(folder.exists());self.assertEqual(archive.read_bytes(),original);self.assertEqual(self.job['number'],'581')
     def test_reordered_custom_child_folder_is_copied_and_rolled_back_with_number_preserved(self):
         target=self.job['routing']['targets'][0]
         target['children']=['reply','custom:검토자료','incoming']
