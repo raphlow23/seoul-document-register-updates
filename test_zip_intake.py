@@ -127,24 +127,28 @@ class ZipTests(unittest.TestCase):
         job,_=core.ingest(path,self.store)
         self.assertEqual(Path(job["files"][0]["path"]).name,"한글.hwpx")
 
-    def test_different_zip_same_contents_reuses_group_and_edited_title(self):
+    def test_different_zip_is_reviewed_as_a_new_case_without_inheriting_an_edited_title(self):
         first,_=core.ingest(self.archive(),self.store)
         first["title"]="사용자가 수정한 제목";self.store.put(first)
         other=self.archive("다른 압축.zip")
         # Change the archive wrapper without changing any attachment bytes.
         with zipfile.ZipFile(other,"a") as z:z.comment=b"different download"
         again,new=core.ingest(other,self.store)
-        self.assertFalse(new);self.assertEqual(again["id"],first["id"])
-        self.assertEqual(again["title"],first["title"])
-        self.assertEqual(len(list((self.root/"archive-cache").iterdir())),1)
+        self.assertTrue(new);self.assertNotEqual(again["id"],first["id"])
+        self.assertNotEqual(again["title"],first["title"])
+        self.assertEqual(again["number"],"")
+        self.assertEqual(self.store.get(first["hash"])["title"],"사용자가 수정한 제목")
+        self.assertEqual(len(list((self.root/"archive-cache").iterdir())),2)
         again,_=core.ingest(other,self.store)
-        self.assertEqual(again["hash"],first["hash"])
+        self.assertEqual(again["hash"],core.digest(other))
 
-    def test_partial_already_processed_content_is_not_silently_re_registered(self):
+    def test_shared_attachment_does_not_make_a_new_zip_an_already_processed_case(self):
         path=self.archive(members={"공문.hwpx":hwpx("기존 제목")})
         old,_=core.ingest(path,self.store);old["files_started"]=True;self.store.put(old)
         new=self.archive("새 묶음.zip",{"공문.hwpx":hwpx("기존 제목"),"새문서.hwpx":hwpx("새 제목")})
-        with self.assertRaisesRegex(ValueError,"기존 묶음"):core.ingest(new,self.store)
+        new_job,created=core.ingest(new,self.store)
+        self.assertTrue(created);self.assertEqual(new_job["number"],"");self.assertNotIn("receipt_done",new_job)
+        self.assertTrue(self.store.get(old["hash"])["files_started"])
         self.assertEqual(self.store.get(old["hash"])["id"],old["id"])
 
     def test_cached_text_identifies_correct_title_source(self):
