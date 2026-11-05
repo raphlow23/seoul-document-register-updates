@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 저장 위치별 폴더 설정·지침 연도별 저장·수신 머리글 인식","draft":True,"prerelease":False,"body":"저장 위치마다 공문폴더 제목과 내부폴더 생성 여부를 따로 선택합니다. 중앙공문에는 공문/센터발송/회신을 만들고 중앙지침에는 내부폴더를 만들지 않는 조합도 지원합니다. 중앙지침과 보건복지부지침은 기존 연도 폴더를 선택해 수신 파일만 저장할 수 있습니다. 연도 폴더의 기존 파일은 보호하며 새 복사본만 파일 되돌리기 대상입니다. 대장 제목은 폴더 제목과 별도로 유지합니다. 처리지침·업무연락 번호 머리글과 이동한 수신대장 머리글을 인식하고, 입력 열이 다르면 쓰기 전에 중단합니다. 기존 저장과 번호를 유지하며 재시도합니다. 자동 업데이트·재실행을 유지하고 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 완화신청 수신 저장 위치 추가","draft":True,"prerelease":False,"body":"서울시청 공문 수신 접수의 저장 위치에 3.완화신청을 추가합니다. 다른 위치와 중복 선택할 수 있고 기존 폴더 형식에 맞춘 제목, 위치별 내부 폴더 생성 여부와 순서 설정을 그대로 사용합니다. 자동 업데이트·재실행을 유지하고 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
