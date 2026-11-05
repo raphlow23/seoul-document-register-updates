@@ -68,7 +68,9 @@ def run():
                 flow.resume_receipt(app.jobs[key])
                 wait(lambda:getattr(app,'route_dialog',None) is not None and bool(app.route_dialog.records));idle()
                 app.route_dialog.apply(True);wait(lambda:flow.step==4);idle()
-                assert len(app.jobs[key]['destinations'])==3 and app.jobs[key]['number']=='581'
+                assert len(app.jobs[key]['destinations'])==4 and app.jobs[key]['number']=='581'
+                saved_zip=next(Path(p) for p in app.jobs[key]['destinations'] if Path(p).suffix.lower()=='.zip')
+                assert saved_zip.read_bytes()==packet.read_bytes()
                 assert next(Path(p) for p in app.jobs[key]['destinations'] if p.endswith('.xlsx')).read_bytes()==excel.read_bytes()
                 assert source.read_bytes()==b'original fixture'
                 # A real generated output is removed independently of receipt copies.
