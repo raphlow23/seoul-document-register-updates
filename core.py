@@ -209,6 +209,16 @@ def ingest(path, store, progress=None):
     if path.suffix.lower()==".zip":
         from zip_intake import ingest_zip
         return ingest_zip(path,store,hash_,progress)
+    text, metadata, info = inspect_document(path,progress)
+    job = {"hash": hash_, "id": uuid.uuid4().hex, "files": [{"path": str(path), "hash": hash_}],
+           "text": text, "text_file_hash":hash_, "ocr": metadata, "state": "확인 필요", "number": "", "destinations": [], "receipt_type":"공문", **info}
+    store.put(job)
+    return job, True
+
+
+
+def inspect_document(path,progress=None):
+    path=Path(path)
     try:
         from attachment_files import can_extract
         if can_extract(path):text, metadata = extract(path, with_meta=True, progress=progress)
@@ -225,10 +235,29 @@ def ingest(path, store, progress=None):
         metadata = {}
         text, info = "", classify("", path.name)
         info["reason"] = str(e)
-    job = {"hash": hash_, "id": uuid.uuid4().hex, "files": [{"path": str(path), "hash": hash_}],
-           "text": text, "text_file_hash":hash_, "ocr": metadata, "state": "확인 필요", "number": "", "destinations": [], "receipt_type":"공문", **info}
-    store.put(job)
-    return job, True
+    return text,metadata,info
+
+
+def attachment_aliases(job,store,state):
+    result=[]
+    for file in job.get("files",[]):
+        if file["hash"]==job["hash"]:continue
+        old=store.get(file["hash"])
+        if old and old.get("parent")!=job["hash"] and not (old.get('id') and old.get("id")==job.get("id")):continue
+        text=job.get("text","") if file["hash"]==job.get("text_file_hash") else ""
+        result.append({**job,"hash":file["hash"],"files":[file],"parent":job["hash"],"state":state,"text":text})
+    return result
+
+
+def receipt_markers(job):
+    if job.get("receipt_registration_markers") and (job.get('sheet_attempted') or job.get('receipt_done')):return list(job["receipt_registration_markers"])
+    files=job.get("receipt_marker_files") or job["files"]
+    if job.get("sheet_attempted") or job.get("receipt_done"):
+        return ["SDR:"+file["hash"] for file in files]
+    identity={"files":sorted({file["hash"] for file in files}),"archives":sorted({file["hash"] for file in job.get("archive_files",[])})}
+    marker="SDR:group:"+hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()
+    job["receipt_registration_markers"]=[marker]
+    return [marker]
 
 
 def copy_files(job, root, subfolders=None,on_progress=None):
@@ -391,6 +420,7 @@ class Sheets:
             raise ValueError("시트가 너무 큽니다. 접수대장 설정을 확인해 주세요.")
         rows = self.request("GET", "/values/" + __import__("urllib.parse", fromlist=["quote"]).quote(f"{q}!A1:{self.last_column}{n}", safe=""),
                             params={"valueRenderOption": "FORMATTED_VALUE"}).get("values", [])
+        if hasattr(self,'validate_header'):self.validate_header(rows)
         # F notes are durable transaction markers for uncertain HTTP outcomes / lost local state.
         notes = self.request("GET", params={"ranges": f"{q}!{self.note_column}{self.notes_start}:{self.note_column}{n}", "fields": "sheets.data(startRow,rowData.values.note)"})
         found = {}
@@ -404,7 +434,7 @@ class Sheets:
                             if mark.startswith(self.marker_prefix):
                                 found[mark] = block.get("startRow", 0) + i + 1
         header=rows[self.header_row] if len(rows)>self.header_row else []
-        if len(header) <= self.title_column or "제" not in header[self.title_column] or self.header_word not in header[2]:
+        if not hasattr(self,'validate_header') and (len(header) <= self.title_column or "제" not in header[self.title_column] or self.header_word not in header[2]):
             raise ValueError("접수대장 열 구성이 예상과 다릅니다. 자동 등록을 중단했습니다.")
         return prop, rows, found
 
@@ -415,10 +445,9 @@ class Sheets:
             except Exception:pass
 
     def register(self, job, store):
-        receipt_files=job.get('receipt_marker_files') or job['files']
-        if getattr(self,"browser",None):self.browser.recover(["SDR:"+f["hash"] for f in receipt_files])
+        markers=receipt_markers(job)
+        if getattr(self,"browser",None):self.browser.recover(markers)
         prop, rows, found = self.snapshot()
-        markers = ["SDR:" + f["hash"] for f in receipt_files]
         existing = {found[m] for m in markers if m in found}
         if len(existing) > 1:
             raise ValueError("묶음 파일이 서로 다른 등록 행에 존재합니다. 확인해 주세요.")
@@ -492,6 +521,8 @@ def apply_title_choice(data, store):
     primary.update({k:v for k,v in data.get("fields", {}).items() if k in ("category", "date", "recipient", "issuer", "receipt_type")})
     primary.update(title=data["title"].strip(), title_source=data["source"], files=files, ready=False,
                    state="확인 필요", reason=f"제목 선택 완료 · 첨부 {len(files)}개를 한 공문으로 등록")
+    archives={file['hash']:file for job in jobs for file in job.get('archive_files',[])}
+    if archives:primary['archive_files']=list(archives.values())
     grouped = []
     for job in jobs:
         if job["hash"] != primary["hash"]:
@@ -538,7 +569,7 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
             out=job.get('outgoing',{})
             job['state']='수신 완료·발신 등록 대기' if out.get('enabled') and not (out.get('complete') and out.get('stamp',{}).get('complete')) else '완료'
             job['reason']='파일만 다시 저장 완료 · 기존 구글시트 등록·번호 유지'
-            store.put_many([job,*[{**job,'hash':file['hash'],'parent':job['hash'],'state':'묶음 처리 완료'} for file in job['files'] if file['hash']!=job['hash']]])
+            store.put_many([job,*attachment_aliases(job,store,'묶음 처리 완료')])
             return job
         store.put(job)
     out=validate_outgoing(job,config)
@@ -549,8 +580,7 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
         job["state"]="완료"
         job["reason"]="수신·발신등록 완료" if out["enabled"] else "저장·수신등록 완료"
         store.put(job)
-        for file in job["files"]:
-            if file["hash"]!=job["hash"]:store.put({**job,"hash":file["hash"],"state":"묶음 처리 완료"})
+        store.put_many(attachment_aliases(job,store,'묶음 처리 완료'))
         return job
     receipt_type=job.get("receipt_type") or "공문"
     if receipt_type not in RECEIPT_TABS: raise ValueError("수신 등록 유형을 선택해 주세요.")
@@ -584,7 +614,5 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
     job.update(state="완료",reason="수신·발신등록 완료" if out["enabled"] else "저장·수신등록 완료")
     store.put(job)
     # Each bundled attachment is also recorded so downloading it separately is not a new job.
-    for f in job["files"]:
-        if f["hash"] != job["hash"]:
-            store.put({**job, "hash": f["hash"], "state": "묶음 처리 완료"})
+    store.put_many(attachment_aliases(job,store,'묶음 처리 완료'))
     return job
