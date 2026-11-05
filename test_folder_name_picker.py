@@ -11,6 +11,27 @@ from route_chooser import RouteChooser
 
 
 class FolderNamePickerTests(unittest.TestCase):
+    def test_each_location_retains_its_title_children_and_year_only_choice(self):
+        app=SimpleNamespace(root=self.root,config={'root':str(self.base)},commands=queue.Queue(),busy=False)
+        job={'hash':'fixture','title':'대장 제목','date':'2026-11-05','category':'중앙센터 공문','files':[]}
+        central='0.중앙센터 공문';guideline=str(Path('5.보건복지부 및 중앙처리지침')/'1. 중앙지침(처리지침, 업무연락 등)')
+        location=self.base/guideline;location.mkdir(parents=True);(location/'2026년').mkdir()
+        dialog=RouteChooser(app,job);dialog.win.after_cancel(dialog.initial_after);dialog.request='fixture'
+        records=[{**describe_directory(self.base/p),'relative':p} for p in (central,guideline)]
+        dialog.deliver({'owner':dialog.owner,'request':'fixture','records':records});dialog.selected.update((central,guideline))
+        dialog.focus_folder(central);dialog.folder_title.set('중앙공문용 제목')
+        dialog.make_children.set(True);dialog.toggle_children()
+        dialog.focus_folder(guideline);dialog.folder_title.set('지침용 제목')
+        dialog.make_children.set(False);dialog.toggle_children()
+        dialog.focus_folder(central);self.assertEqual(dialog.folder_title.get(),'중앙공문용 제목');self.assertEqual(len(dialog.child_sets[central]),3)
+        dialog.focus_folder(guideline);self.assertEqual(dialog.folder_title.get(),'지침용 제목');self.assertFalse(dialog.make_children.get())
+        dialog.year_only.set(True);dialog.mode_changed();self.assertEqual(dialog.year_folder.get(),'2026년')
+        dialog.focus_folder(central);dialog.redraw_preview();self.assertTrue(dialog.make_children.get())
+        targets={t['relative']:t for t in dialog.targets()}
+        self.assertEqual(targets[guideline]['storage_mode'],'year');self.assertEqual(targets[guideline]['children'],[])
+        self.assertEqual(targets[central]['folder_title'],'중앙공문용 제목');self.assertEqual(job['title'],'대장 제목')
+        preview=dialog.preview.get('1.0','end');self.assertIn('2026년',preview);self.assertIn('중앙공문용 제목',preview)
+        dialog.close()
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.base=Path(self.temp.name).resolve()
