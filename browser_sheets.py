@@ -271,8 +271,9 @@ class BrowserSession:
             if entry["sid"]!=self.sid or entry["tab"]!=self.owner.tab:continue
             entries.append(entry)
         rows=self.getrows(f"A:{self.owner.last_column}")
+        if hasattr(self.owner,'validate_header'):self.owner.validate_header(rows)
         header=rows[self.owner.header_row] if len(rows)>self.owner.header_row else []
-        if len(header)<=self.owner.title_column or "제" not in header[self.owner.title_column] or self.owner.header_word not in header[2]:
+        if not hasattr(self.owner,'validate_header') and (len(header)<=self.owner.title_column or "제" not in header[self.owner.title_column] or self.owner.header_word not in header[2]):
             raise ValueError(f"{self.owner.tab}의 {self.owner.header_row+1}행에서 제목·문서분류 열을 확인하지 못했습니다. 선택 범위와 숨김·필터 상태를 확인해 주세요. 등록하지 않았습니다.")
         # Identity fields prove matches; handwritten stamp-person and other later edits stay editable.
         identity={0,self.owner.title_column,5 if self.owner.marker_prefix=="SDS:" else getattr(self.owner,"number_col",3)}
