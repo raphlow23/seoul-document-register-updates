@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 새 공문 구분·수신 폴더에서 발신·직인대장 머리글","draft":True,"prerelease":False,"body":"제목이나 공통 붙임파일만으로 이전 공문이라고 판단하지 않습니다. 새 접수는 공문 묶음 전체의 내용으로 구분하고, 같은 제목이라도 내용이 다른 공문과 서로 다른 ZIP은 새 접수 대상으로 표시합니다. 다른 공문의 처리 기록과 번호는 보존하며 실제 진행한 접수의 재시도만 기존 등록을 복구합니다. 수신 후 이어서 발신을 작성하면 이미 만든 센터발송 폴더에 HWP만 저장하고 새 공문폴더를 다시 만들지 않습니다. 양식을 변경해도 기존 저장 위치를 유지합니다. 직인날인대장의 두 줄 병합 머리글을 행 위치와 관계없이 확인하고 공문·업무연락·처리지침 표시 및 문서번호·제목·신청부서·신청자·날인자 열을 검증한 뒤 등록합니다. 구글시트의 숨김·병합·서식은 바꾸지 않습니다. 새 ZIP만 확인하고 원본 ZIP을 함께 저장하는 기능과 자동 업데이트·재실행을 유지합니다. 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 저장 위치별 폴더 설정·지침 연도별 저장·수신 머리글 인식","draft":True,"prerelease":False,"body":"저장 위치마다 공문폴더 제목과 내부폴더 생성 여부를 따로 선택합니다. 중앙공문에는 공문/센터발송/회신을 만들고 중앙지침에는 내부폴더를 만들지 않는 조합도 지원합니다. 중앙지침과 보건복지부지침은 기존 연도 폴더를 선택해 수신 파일만 저장할 수 있습니다. 연도 폴더의 기존 파일은 보호하며 새 복사본만 파일 되돌리기 대상입니다. 대장 제목은 폴더 제목과 별도로 유지합니다. 처리지침·업무연락 번호 머리글과 이동한 수신대장 머리글을 인식하고, 입력 열이 다르면 쓰기 전에 중단합니다. 기존 저장과 번호를 유지하며 재시도합니다. 자동 업데이트·재실행을 유지하고 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -66,7 +66,7 @@ def build():
     print("Public executable check:",verify(exe,seed));seed.unlink()
     subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations"],check=True,timeout=90)
     from updater import restart_target
     print("Frozen post-update GUI readiness:", restart_target(exe,out,VERSION,test=True))
     startup=out/"browser-startup.json"
