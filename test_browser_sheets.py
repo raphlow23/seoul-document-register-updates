@@ -31,6 +31,14 @@ class UI:
 
 
 class BrowserTests(unittest.TestCase):
+    def test_same_title_and_shared_attachment_get_a_new_row_then_retry_keeps_that_row(self):
+        self.job.update(title='같은 공문 제목',files=[{'hash':'body-one','path':'first.pdf'},{'hash':'shared','path':'common.xlsx'}])
+        self.assertEqual(self.owner.register(self.job,self.store),(6,'21'))
+        second={'hash':'new-case','files':[{'hash':'body-two','path':'second.pdf'},{'hash':'shared','path':'common.xlsx'}],'date':self.job['date'],'title':self.job['title'],'issuer':'중앙센터','recipient':'담당자','state':'확인 필요'}
+        self.assertEqual(self.owner.register(second,self.store),(7,'22'))
+        self.assertEqual(self.ui.rows[5][3],'21');count=len(self.ui.writes)
+        self.assertEqual(self.owner.register(second,self.store),(7,'22'));self.assertEqual(len(self.ui.writes),count)
+        self.assertNotEqual(self.job['receipt_registration_markers'],second['receipt_registration_markers'])
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.base=Path(self.tmp.name)
