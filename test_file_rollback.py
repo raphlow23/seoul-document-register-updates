@@ -9,6 +9,15 @@ from folder_naming import AGENCIES
 
 
 class FileRollbackTests(unittest.TestCase):
+    def test_reordered_custom_child_folder_is_copied_and_rolled_back_with_number_preserved(self):
+        target=self.job['routing']['targets'][0]
+        target['children']=['reply','custom:검토자료','incoming']
+        target['child_order']=['reply','custom:검토자료','incoming','outgoing']
+        folder=self.save()
+        self.assertTrue((folder/'1.중앙회신').is_dir());self.assertTrue((folder/'2.검토자료').is_dir())
+        self.assertIn('3.중앙공문',self.job['destinations'][0])
+        rollback.execute(self.job,self.config,self.store,'receipt')
+        self.assertFalse(folder.exists());self.assertEqual(self.job['number'],'581');self.assertTrue(self.source.is_file())
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.base=Path(self.tmp.name).resolve();self.root=self.base/'shared';self.root.mkdir()
