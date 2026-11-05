@@ -69,7 +69,7 @@ class WorkflowShell:
                     self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current()}
                 elif name=="route_dialog" and editor.records:
                     editor.children_changed()
-                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":[{"relative":p,"template":editor.templates[p],'template_manual':p in editor.manual_templates,'children':editor.child_sets.get(p,[]),**({'child_order':editor.child_orders[p]} if p in editor.child_orders else {})} for p in sorted(editor.selected)],"folder_title":editor.folder_title.get(),"children":[k for k,v in editor.children.items() if v.get()]}
+                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":editor.targets(),"folder_title":"","children":[]}
                 editor.close()
 
     def show(self,page,section,step=1):
