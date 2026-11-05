@@ -1,5 +1,6 @@
 """Stamp ledger entry linked to a verified outgoing number; no physical stamping."""
 from datetime import date
+import re
 from urllib.parse import quote
 from core import Sheets, RejectedWrite, value
 
@@ -39,12 +40,27 @@ class StampSheets(Sheets):
     def __init__(self,config):
         super().__init__({**config,"tab":STAMP_TAB})
 
+    def validate_header(self,rows):
+        compact=lambda value:re.sub(r'\s+','',str(value))
+        matches=[]
+        for index,row in enumerate(rows[:50]):
+            values=[compact(v) for v in row]+['']*11
+            if not all(word in values[col] for col,word in ((2,'공문'),(3,'업무연락'),(4,'처리지침'))):continue
+            columns=[''.join(compact(r[col]) if col<len(r) else '' for r in rows[max(0,index-2):index+1]) for col in range(11)]
+            if not all(word in columns[col] for col,word in ((0,'연번'),(1,'날인'),(5,'문서번호'),(7,'수신처'),(8,'신청부서'),(9,'신청자'),(10,'날인자'))):continue
+            if '제목' not in columns[6] and '사용용도' not in columns[6]:continue
+            matches.append(index)
+        if len(matches)!=1:raise ValueError('직인날인대장의 머리글을 확인하지 못했습니다. 연번·날인일자·공문/업무연락/처리지침·문서번호·사용용도(문서제목)·수신처·신청부서·신청자·날인자 열을 확인하세요. 등록하지 않았습니다.')
+        self.header_row=matches[0];self.notes_start=self.header_row+2
+
     def register(self,job,store):
         out=job["outgoing"]
         stamp=out["stamp"]
         if not out.get("complete") or not out.get("document_number"):
             raise ValueError("발신번호를 확인한 뒤 직인날인대장을 등록해야 합니다.")
-        if getattr(self,"browser",None):self.browser.recover(["SDS:"+out["id"]])
+        if getattr(self,"browser",None):
+            self.browser.snapshot()
+            self.browser.recover(["SDS:"+out["id"]])
         prop,rows,found=self.snapshot()
         marker="SDS:"+out["id"]
         if marker in found:
@@ -52,7 +68,7 @@ class StampSheets(Sheets):
         else:
             if stamp.get("sheet_attempted"):
                 raise ValueError("직인날인대장 등록 결과가 불확실합니다. 대장에서 먼저 확인해 주세요.")
-            occupied=[i+1 for i,r in enumerate(rows) if i>=3 and len(r)>6 and str(r[6]).strip()]
+            occupied=[i+1 for i,r in enumerate(rows) if i>self.header_row and len(r)>6 and str(r[6]).strip()]
             if not occupied: raise ValueError("직인날인대장 기존 기준 행을 찾지 못했습니다.")
             row=max(occupied)+1
             if row>prop["gridProperties"]["rowCount"]: raise ValueError("직인날인대장에 빈 행을 추가해 주세요.")
