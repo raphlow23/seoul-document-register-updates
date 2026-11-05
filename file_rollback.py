@@ -67,6 +67,9 @@ def _roots(job,config,scope):
             if linked(marker) or json.loads(marker.read_text(encoding='utf-8')).get('id')!=owner or not owner:raise ValueError('다른 문서의 폴더이므로 보호합니다: '+str(path))
             matched=True;markers[marker]=owner;allowed_dirs.add(path)
             setting=job.get('routing',{}) if kind=='receipt' else plan
+            if kind=='receipt':
+                target=next((t for t in setting.get('targets',[]) if t.get('folder_name') and checked(Path(config['root'])/t['relative']/t['folder_name'])==path),{})
+                setting={**setting,'children':target.get('children',setting.get('children',[]))}
             if setting.get('agency'):
                 allowed_dirs.update(path/name for name in child_folders(setting['agency'],setting.get('children',[])).values())
         if not matched:raise ValueError('프로그램이 만든 공문폴더임을 확인하지 못했습니다: '+str(path))
