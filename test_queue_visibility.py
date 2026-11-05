@@ -7,9 +7,29 @@ from unittest.mock import patch
 from app import Worker
 from core import Store,ingest
 from queue_visibility import missing_download_source
+from queue_visibility import source_modified
+import os
 
 
 class QueueVisibilityTests(unittest.TestCase):
+    def test_queue_orders_by_file_modification_not_import_order(self):
+        from workflow_ui import WorkflowShell
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        other=self.downloads/'new.xlsx';other.write_bytes(b'fixture')
+        os.utime(self.path,ns=(1000000000000000000,1000000000000000000));os.utime(other,ns=(1000000200000000000,1000000200000000000))
+        tree=Mock();tree.get_children.return_value=('old','new')
+        shell=WorkflowShell.__new__(WorkflowShell);shell.app=SimpleNamespace(tree=tree,jobs={'old':self.job,'new':{'files':[{'path':str(other)}]}})
+        shell.sort_queue();self.assertEqual([c.args for c in tree.move.call_args_list],[('new','',0),('old','',1)])
+        os.utime(self.path,ns=(1000000300000000000,1000000300000000000));tree.move.reset_mock();shell.sort_queue()
+        self.assertEqual(tree.move.call_args_list[0].args,('old','',0))
+
+    def test_zip_sort_date_comes_from_original_archive_not_extraction(self):
+        archive=self.downloads/'bundle.zip';archive.write_bytes(b'zip')
+        os.utime(archive,ns=(1000000000000000000,1000000000000000000))
+        job={**self.job,'source_archive':str(archive)}
+        self.assertEqual(source_modified(job),1000000000000000000)
+
     def setUp(self):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         self.root=Path(temporary.name);self.downloads=self.root/"Downloads";self.downloads.mkdir()
