@@ -232,6 +232,7 @@ def ingest(path, store, progress=None):
 
 
 def copy_files(job, root, subfolders=None,on_progress=None):
+    from attachment_files import storage_files
     root = Path(root)
     if not root.is_dir():
         raise ValueError("공유폴더에 접근할 수 없습니다. 탐색기에서 연결을 확인해 주세요.")
@@ -243,7 +244,7 @@ def copy_files(job, root, subfolders=None,on_progress=None):
         folder = root / sub
         if not folder.is_dir():
             raise ValueError(f"저장 폴더가 없습니다: {folder}")
-        for f in job["files"]:
+        for f in storage_files(job):
             source = Path(f["path"])
             if not source.is_file() or digest(source) != f["hash"]:
                 raise ValueError(f"원본이 없거나 내용이 바뀌었습니다: {source.name}")
