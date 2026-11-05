@@ -205,16 +205,26 @@ def run():
                 with patch('child_folder_editor.simpledialog.askstring',return_value='검토자료'):children.add()
                 children.move(-1);children.move(-1);children.move(-1);children.apply()
                 assert child_results[0][0][0]=='custom:검토자료' and 'outgoing' not in child_results[0][1]
-                # A ZIP downloaded before enabling the watcher is still discovered.
+                # Ignore pre-existing ZIPs; only a ZIP saved after watching appears.
                 import zipfile
-                archive=downloads/'automatic-before-watch.ZIP'
+                old_archive=downloads/'old-before-watch.ZIP'
+                with zipfile.ZipFile(old_archive,'w') as zipped:zipped.writestr('옛날자료.csv',b'old table')
+                app.send('watch',True);idle()
+                assert str(old_archive) in app.worker.seen
+                assert not any(j.get('source_archive')==str(old_archive) for j in app.jobs.values())
+                archive=downloads/'new-after-watch.ZIP'
                 with zipfile.ZipFile(archive,'w') as zipped:
-                    zipped.writestr('붙임.csv',b'fixture table');zipped.writestr('도면.dwg',b'fixture drawing')
-                app.send('watch',True)
+                    zipped.writestr('붙임.csv',b'fixture table');zipped.writestr('도면.dwg',b'fixture drawing');zipped.writestr('other.bin',b'keep inside zip')
                 wait(lambda:any(j.get('source_archive')==str(archive) for j in app.jobs.values()));idle()
                 zip_job=next(j for j in app.jobs.values() if j.get('source_archive')==str(archive) and not j.get('parent'))
-                assert app.tree.exists(zip_job['hash']) and '[ZIP] automatic-before-watch.ZIP' in app.tree.item(zip_job['hash'],'values')[2]
+                assert app.tree.exists(zip_job['hash']) and '[ZIP] new-after-watch.ZIP' in app.tree.item(zip_job['hash'],'values')[2]
                 app.send('watch',False);idle()
+                from core import copy_files
+                zip_saved=base/'zip-copy-fixture';zip_saved.mkdir()
+                copied=copy_files(zip_job,zip_saved,subfolders=['.'])
+                saved_archive=next(Path(p) for p in copied if Path(p).suffix.lower()=='.zip')
+                assert saved_archive.read_bytes()==archive.read_bytes()
+                with zipfile.ZipFile(saved_archive) as saved:assert saved.read('other.bin')==b'keep inside zip'
                 # Original PDF and automatic 2-to-attachments review use the real worker/UI.
                 from pypdf import PdfWriter
                 original=base/'source-preview.pdf';writer=PdfWriter();writer.add_blank_page(width=72,height=72)
