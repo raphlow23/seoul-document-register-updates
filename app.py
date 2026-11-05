@@ -13,7 +13,7 @@ from tkinter import filedialog, messagebox, ttk
 import webbrowser
 import google_login
 
-from core import CATEGORIES, ROOT, SHEET_ID, TAB, Sheets, Store, ingest, process
+from core import CATEGORIES, ROOT, SHEET_ID, TAB, Sheets, Store, ingest, process, digest
 from attachment_files import eligible,can_extract,FILE_TYPES
 from release_info import VERSION,UPDATE_BASE_URL
 from updater import check_and_stage, launch_helper, helper_main
@@ -59,6 +59,7 @@ class Worker(threading.Thread):
                         if preferences:self.emit("folder_preferences",preferences)
                         if self.watch and previous_downloads!=updated.get("downloads"):
                             self.seen=self.files();self.pending={}
+                            self.queue_existing_zips()
                     elif cmd == "watch":
                         self.watch = bool(data)
                         self.seen = self.files() if self.watch else {}
@@ -71,7 +72,17 @@ class Worker(threading.Thread):
                             finally:
                                 resume.unlink(missing_ok=True)
                         self.pending = {}
-                        self.emit("status", "다운로드 감시 중 · 새로 저장되는 파일부터 확인합니다." if self.watch else "다운로드 감시 중지")
+                        if self.watch:self.queue_existing_zips()
+                        self.emit("status", "다운로드 감시 중 · 새 파일과 미확인 ZIP을 확인합니다." if self.watch else "다운로드 감시 중지")
+                    elif cmd == 'refresh_zips':
+                        paths=self.queue_existing_zips()
+                        for path in paths:
+                            self.add(path)
+                            try:
+                                stat=Path(path).stat();self.seen[path]=(stat.st_size,stat.st_mtime_ns)
+                                self.pending.pop(path,None)
+                            except OSError:pass
+                        if not paths:self.emit('status','새로 확인할 ZIP이 없습니다. 이미 처리했거나 목록에서 삭제한 ZIP은 다시 추가하지 않습니다.')
                     elif cmd == "startup_baseline":
                         resume = Path(self.dbpath).parent / "watch-resume.json"
                         saved = {}
@@ -162,7 +173,7 @@ class Worker(threading.Thread):
                         plan=job["outgoing"].get("folder_plan")
                         if plan:
                             from folder_naming import remember_profile
-                            prefs=remember_profile(self.config,"outgoing:"+job["outgoing"]["template_id"],plan["base"],plan["template"],plan["agency"],plan["children"],plan["save_in"])
+                            prefs=remember_profile(self.config,"outgoing:"+job["outgoing"]["template_id"],plan["base"],plan["template"],plan["agency"],plan["children"],plan["save_in"],plan.get("child_order"))
                             self.emit("folder_preferences",prefs)
                         self.store.put(job)
                         self.emit("job",job)
@@ -264,8 +275,8 @@ class Worker(threading.Thread):
                             raise ValueError("완료된 공문의 저장 위치는 여기서 변경할 수 없습니다.")
                         old_targets = {t["relative"]:t for t in job.get("routing",{}).get("targets",[])}
                         if job.get("files_started"):
-                            before = {(t["relative"],t["template"],tuple(t.get('children',job['routing'].get('children',[])))) for t in old_targets.values()}
-                            after = {(t["relative"],t["template"],tuple(t.get('children',data['routing'].get('children',[])))) for t in data["routing"]["targets"]}
+                            before = {(t["relative"],t["template"],tuple(t.get('children',job['routing'].get('children',[]))),tuple(t.get("child_order") or [])) for t in old_targets.values()}
+                            after = {(t["relative"],t["template"],tuple(t.get('children',data['routing'].get('children',[]))),tuple(t.get("child_order") or [])) for t in data["routing"]["targets"]}
                             same_title=(job.get("routing",{}).get("folder_title") or job["title"])==(data["routing"].get("folder_title") or data["fields"].get("title",job["title"]))
                             if not same_title or before != after or job.get("routing",{}).get("children",[])!=data["routing"].get("children",[]) or job.get("routing",{}).get("agency")!=data["routing"]["agency"]:
                                 raise ValueError("이미 파일 저장을 시작한 공문입니다. 기존 위치·이름으로 재시도해 주세요.")
@@ -291,7 +302,7 @@ class Worker(threading.Thread):
                         self.config.setdefault("route_templates",{}).update({t["relative"]:t["template"] for t in job["routing"]["targets"]})
                         from folder_naming import remember_profile,destination
                         for target in job["routing"]["targets"]:
-                            prefs=remember_profile(self.config,"incoming:"+target["relative"],destination(self.config["root"],target["relative"]),target["template"],job["routing"]["agency"],target.get('children',job["routing"].get("children",[])),"incoming")
+                            prefs=remember_profile(self.config,"incoming:"+target["relative"],destination(self.config["root"],target["relative"]),target["template"],job["routing"]["agency"],target.get('children',job["routing"].get("children",[])),"incoming",target.get("child_order"))
                         self.emit("folder_preferences",prefs)
                         self.emit("route_applied",{"hash":job["hash"],"templates":self.config["route_templates"],"document_template":job.get("outgoing",{}).get("template_path","")})
                         if data["execute"]:
@@ -369,6 +380,21 @@ class Worker(threading.Thread):
                 except OSError:
                     pass
         return result
+
+    def queue_existing_zips(self):
+        paths=[]
+        for path in self.files():
+            if Path(path).suffix.lower()!='.zip':continue
+            try:
+                old=self.store.get(digest(path))
+                if old:
+                    if old.get('list_hidden') or old.get('parent') or old.get('archive_alias') or old.get('receipt_done') or old.get('sheet_attempted') or old.get('files_started'):continue
+                    source=old.get('source_archive')
+                    if not source or Path(source).is_file():continue
+                self.seen.pop(path,None)
+                paths.append(path)
+            except OSError:continue
+        return paths
 
     def scan(self):
         now = self.files()
