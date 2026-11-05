@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — ZIP 자동 확인·내부 폴더 추가와 순서 변경","draft":True,"prerelease":False,"body":"다운로드 자동 확인을 켜기 전에 받은 ZIP도 아직 확인한 기록이 없으면 자동 확인합니다. 첨부 목록에 원본 ZIP 파일명을 함께 표시하고 ZIP 다시 확인 버튼을 추가했습니다. 이미 처리했거나 목록에서 삭제한 ZIP은 자동으로 되살리지 않습니다. 수신·발신 저장 위치에서 폴더 추가·순서 변경을 열어 내부 폴더 이름을 직접 추가하고 위·아래 버튼으로 순서를 정할 수 있습니다. 기본 폴더는 유지하며 선택한 폴더만 최종 순서에 따라 연속 번호로 만듭니다. 위치별 구성을 기억하고 뒤로가기의 파일 취소에서도 추가 폴더를 처리합니다. 기존 파일·시트 등록·번호·설정·양식은 유지합니다. 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 새 ZIP만 자동 확인·원본 ZIP 함께 저장","draft":True,"prerelease":False,"body":"ZIP은 감시 시작 이후 새로 저장되는 파일만 자동 확인합니다. 이전 ZIP을 찾아오는 동작과 ZIP 다시 확인 버튼을 제거했습니다. v2.7.0의 감시 재개 기록에 빠진 옛 ZIP도 다시 가져오지 않도록 전환 처리합니다. 새 ZIP 안에 PDF·HWP/HWPX·HTML·DWG/DXF·워드·엑셀·PPT 등 문서·도면·오피스 파일이 있을 때만 목록에 추가합니다. 사진·기타 파일·일반 텍스트만 있는 ZIP은 자동 목록에 넣지 않습니다. 접수 저장 시 원본 ZIP도 함께 복사해 다른 확장자의 파일을 ZIP 안에서 그대로 확인할 수 있습니다. 기존 ZIP은 파일 추가로 직접 선택할 수 있습니다. 시트 등록·번호와 내부 폴더 추가·순서 변경·자동 재실행 기능을 유지합니다. 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
