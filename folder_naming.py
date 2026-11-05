@@ -8,7 +8,7 @@ import string
 AGENCIES = {
     "기초센터 공문": ["00.기초센터 공문"],
     "중앙센터 공문": ["0.중앙센터 공문", "5.보건복지부 및 중앙처리지침", "8.실태조사"],
-    "서울시청 공문": ["0.시청공문", "1.건축허가&사업계획승인", "2.사용승인&사용검사", "8.실태조사"],
+    "서울시청 공문": ["0.시청공문", "1.건축허가&사업계획승인", "2.사용승인&사용검사", "3.완화신청", "8.실태조사"],
 }
 TEMPLATES = ("{date}_{title}", "{ymd}_{title}", "{dotdate} {title}", "{year}-{number:03d} {title}", "{number:03d}. {title}", "{title}")
 CHILD_KINDS=("incoming","outgoing","reply")
