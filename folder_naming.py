@@ -23,7 +23,17 @@ def child_kinds(location):
 
 
 def receipt_children(routing,target):
+    if target.get('storage_mode')=='year':return {}
     return child_folders(routing['agency'],target.get('children',routing.get('children',[])),target.get('child_order'))
+
+
+def validate_target_mode(target):
+    mode=target.get('storage_mode','case')
+    if mode not in ('case','year'):raise ValueError('저장 방식을 확인하세요.')
+    if mode=='year':
+        relative=target['relative']
+        if '5.보건복지부 및 중앙처리지침' not in relative or not any(s in relative for s in ('중앙지침','보건복지부 지침')):raise ValueError('연도별 파일 저장은 중앙지침·보건복지부지침에서 선택하세요.')
+        if not re.fullmatch(r'20\d{2}년?',target.get('year_folder','')):raise ValueError('연도 폴더는 2026 또는 2026년 형식으로 입력하세요.')
 AGENCY_SUFFIX=re.compile(r"(\s*\((?:[^()\r\n]*(?:센터|시청|중앙|기초|서울시)[^()\r\n]*(?:발송|제출|회신|협의|접수)|시청|중앙|센터|기초센터|25개구)\))$")
 
 
@@ -188,6 +198,7 @@ def preserve_changed_profiles(previous,updated):
             children=old.get("children",previous.get("folder_children",{}).get(agency,previous.get("folder_defaults",{}).get("children",CHILD_KINDS)))
             profile={"path":record["path"],"template":template,"agency":agency,"children":list(children),"save_in":old.get("save_in",save_in)}
             if 'child_order' in old:profile['child_order']=list(old['child_order'])
+            if 'storage_mode' in old:profile['storage_mode']=old['storage_mode']
             updated.setdefault("folder_profiles",{})[slot]=profile
             updated.setdefault("folder_defaults",profile.copy())
             updated.setdefault("folder_children",{}).setdefault(agency,list(children))
@@ -250,6 +261,8 @@ def next_sequence(directory,selected_template=None):
 def plan_folders(job, root):
     preflight(job,root)
     for target in job["routing"]["targets"]:
+        if target.get('storage_mode')=='year':
+            target['folder_name']=target['year_folder'];continue
         if target.get("folder_number") is None and any(f=="number" for _,f,_,_ in string.Formatter().parse(target["template"])):
             target["folder_number"] = next_sequence(destination(root,target["relative"]),target["template"])
         target["folder_name"] = folder_name(target["template"],target.get("folder_title") or job["routing"].get("folder_title") or job["title"],job["date"],target.get("folder_number"))
@@ -278,6 +291,7 @@ def preflight(job, root):
     child_folders(agency,routing.get("children",[]))
     seen = set()
     for target in targets:
+        validate_target_mode(target)
         receipt_children(routing,target)
         relative = target["relative"]
         if relative in seen: raise ValueError("같은 저장 위치를 두 번 선택했습니다.")
@@ -285,7 +299,7 @@ def preflight(job, root):
         if not any(relative == p or PureWindowsPath(relative).is_relative_to(PureWindowsPath(p)) for p in AGENCIES[agency]):
             raise ValueError("선택한 공문 종류에 포함된 저장 폴더를 선택해 주세요.")
         destination(root, relative)
-        folder_name(target["template"], target.get("folder_title") or routing.get("folder_title") or job["title"], job["date"], target.get("folder_number"))
+        if target.get('storage_mode')!='year':folder_name(target["template"], target.get("folder_title") or routing.get("folder_title") or job["title"], job["date"], target.get("folder_number"))
     from core import digest
     from attachment_files import storage_files
     for file in storage_files(job):
@@ -302,6 +316,18 @@ def copy_to_subfolders(job, root, on_progress=None):
         parent = destination(root, target["relative"])
         name = target["folder_name"]
         folder = parent / name
+        if target.get('storage_mode')=='year':
+            # A shared year folder is never owned by a single receipt. Track only new files.
+            destination(root,str(Path(target['relative'])/name))
+            folder.mkdir(exist_ok=True)
+            job['files_started']=True
+            if on_progress:on_progress()
+            copied=copy_files(job,parent,subfolders=[name],on_progress=on_progress)
+            owned={f['path'] for f in job.get('file_artifacts',[]) if f['scope']=='receipt'}
+            for file in copied:
+                if str(Path(file).resolve()) not in owned and file not in job.setdefault('receipt_shared_files',[]):job['receipt_shared_files'].append(file)
+            results.extend(copied)
+            continue
         marker = folder / ".수신등록.json"
         if folder.exists():
             if not marker.is_file() or json.loads(marker.read_text(encoding="utf-8")).get("id") != job["id"]:
