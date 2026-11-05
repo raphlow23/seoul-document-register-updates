@@ -20,10 +20,16 @@ class OutgoingFolderChooser:
         self.template=tk.StringVar(value=plan.get("template") or "")
         self.manual_template=bool(plan.get('template_manual') or plan.get('folder_name') or plan.get('created'));self.changing_template=False
         self.kinds=child_kinds(self.base)
+        self.layout_kinds=self.kinds
         if self.kinds!=CHILD_KINDS:self.agency.set('서울시청 공문')
         children=plan.get('children',self.kinds if self.kinds!=CHILD_KINDS else saved.get("children",app.config.get("folder_children",{}).get(self.agency.get(),CHILD_KINDS)))
+        self.child_order=plan.get('child_order') if plan else saved.get('child_order')
+        if not plan and self.child_order is not None:
+            self.child_order=[k for k in self.child_order if k in self.layout_kinds or k.startswith('custom:')]
+            self.child_order.extend(k for k in self.layout_kinds if k not in self.child_order)
+        self.kinds=tuple(self.child_order or [*self.kinds,*[k for k in children if k.startswith('custom:')]])
         self.children={key:tk.BooleanVar(value=key in children) for key in self.kinds}
-        self.save_in=tk.StringVar(value=plan.get("save_in",'reply' if self.kinds!=CHILD_KINDS else app.config.get("folder_profiles",{}).get(self.slot,{}).get("save_in","outgoing")))
+        self.save_in=tk.StringVar(value=plan.get("save_in",'reply' if self.layout_kinds!=CHILD_KINDS else app.config.get("folder_profiles",{}).get(self.slot,{}).get("save_in","outgoing")))
         self.enabled=tk.BooleanVar(value=True)
         self.win=tk.Toplevel(app.root);self.win.title("발신 공문폴더 이름 · 내부 구성")
         self.win.geometry(f"970x{min(730,self.win.winfo_screenheight()-100)}");self.win.transient(app.root);self.win.grab_set();self.win.protocol("WM_DELETE_WINDOW",self.close)
@@ -38,11 +44,13 @@ class OutgoingFolderChooser:
         top=ttk.Frame(outer);top.pack(fill="x",pady=6)
         ttk.Label(top,text="기관").pack(side="left")
         agency=ttk.Combobox(top,textvariable=self.agency,values=list(AGENCIES),state="readonly",width=20);agency.pack(side="left",padx=8);agency.bind("<<ComboboxSelected>>",self.redraw)
-        if self.kinds!=CHILD_KINDS:agency.configure(state='disabled')
+        if self.layout_kinds!=CHILD_KINDS:agency.configure(state='disabled')
         self.names={};self.boxes={}
+        self.childbar=top
         for key in self.kinds:
             self.boxes[key]=ttk.Checkbutton(top,variable=self.children[key],command=self.redraw)
-            self.boxes[key].pack(side="left",padx=8)
+            if not key.startswith('custom:'):self.boxes[key].pack(side="left",padx=8)
+        ttk.Button(outer,text='폴더 추가 · 순서 변경',command=self.edit_children).pack(anchor='w',pady=4)
         middle=ttk.PanedWindow(outer,orient="horizontal");middle.pack(fill="both",expand=True,pady=8)
         left,right=ttk.Frame(middle),ttk.Frame(middle,padding=(15,0,0,0));middle.add(left,weight=1);middle.add(right,weight=2)
         ttk.Label(left,text="기존 폴더 이름 — 선택해서 같은 형식 사용").pack(anchor="w")
@@ -95,14 +103,26 @@ class OutgoingFolderChooser:
 
     def plan(self):
         old=self.out.get("folder_plan") or {}
-        return {**old,"base":self.base,"template":self.template.get().strip(),'template_manual':self.manual_template,"folder_title":self.title.get().strip(),"title_same":self.title.get().strip()==self.out["title"],"agency":self.agency.get(),"children":[k for k,v in self.children.items() if v.get()],"save_in":self.save_in.get(),"date":self.out.get("date") or date.today().isoformat()}
+        return {**old,"base":self.base,"template":self.template.get().strip(),'template_manual':self.manual_template,"folder_title":self.title.get().strip(),"title_same":self.title.get().strip()==self.out["title"],"agency":self.agency.get(),"children":[k for k in self.kinds if self.children[k].get()],**({'child_order':list(self.child_order)} if self.child_order is not None else {}),"save_in":self.save_in.get(),"date":self.out.get("date") or date.today().isoformat()}
+
+    def edit_children(self):
+        from child_folder_editor import ChildFolderEditor
+        def applied(order,selected):
+            self.child_order=list(order);self.kinds=tuple(order)
+            for box in self.boxes.values():box.destroy()
+            self.children={k:tk.BooleanVar(value=k in selected) for k in order};self.boxes={}
+            for key in order:
+                self.boxes[key]=ttk.Checkbutton(self.childbar,variable=self.children[key],command=self.redraw)
+                if not key.startswith('custom:'):self.boxes[key].pack(side='left',padx=8)
+            self.redraw()
+        ChildFolderEditor(self.win,self.agency.get(),list(self.kinds),[k for k in self.kinds if self.children[k].get()],applied)
 
     def redraw(self,_=None):
         if not hasattr(self,"preview"):return
         self.name_picker.refresh()
-        labels=child_folders(self.agency.get(),self.kinds)
+        labels=child_folders(self.agency.get(),self.kinds,self.child_order)
         for key,widget in self.boxes.items():widget.configure(text=labels[key].split(".",1)[1])
-        children=child_folders(self.agency.get(),[k for k,v in self.children.items() if v.get()])
+        children=child_folders(self.agency.get(),[k for k,v in self.children.items() if v.get()],self.child_order)
         self.names={"root":"상위 공문폴더",**children}
         if self.save_in.get() not in self.names:self.save_in.set("outgoing" if "outgoing" in self.names else "root")
         self.location.configure(values=list(self.names.values()));self.location.current(list(self.names).index(self.save_in.get()))
