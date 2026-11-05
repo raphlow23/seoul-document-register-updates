@@ -69,9 +69,9 @@ def _roots(job,config,scope):
             setting=job.get('routing',{}) if kind=='receipt' else plan
             if kind=='receipt':
                 target=next((t for t in setting.get('targets',[]) if t.get('folder_name') and checked(Path(config['root'])/t['relative']/t['folder_name'])==path),{})
-                setting={**setting,'children':target.get('children',setting.get('children',[]))}
+                setting={**setting,'children':target.get('children',setting.get('children',[])),'child_order':target.get('child_order')}
             if setting.get('agency'):
-                allowed_dirs.update(path/name for name in child_folders(setting['agency'],setting.get('children',[])).values())
+                allowed_dirs.update(path/name for name in child_folders(setting['agency'],setting.get('children',[]),setting.get('child_order')).values())
         if not matched:raise ValueError('프로그램이 만든 공문폴더임을 확인하지 못했습니다: '+str(path))
         if path not in roots:roots.append(path)
     # Moving an outer owned folder also includes a nested outgoing folder.
