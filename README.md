@@ -1,3 +1,5 @@
+[사용설명서 PDF 다운로드 · v2.7.9 · 16쪽](https://github.com/raphlow23/seoul-document-register-updates/raw/refs/heads/main/docs/SeoulDocumentRegister-UserGuide-v2.7.9.pdf?download=1)
+
 ## v2.7.9
 
 작업표시줄에서 아이콘이 작게 보이던 여백을 줄였습니다. 기존 파란 문서·흰 선·민트색 및 파란색 화살표는 유지하고 각 Windows 아이콘 크기의 캔버스를 실제 그림으로 채웁니다. 작은 크기에서 그림의 너비가 16픽셀은 12→16, 24픽셀은 18→24, 32픽셀은 24→32로 커집니다. 새 아이콘 해시로 보관 파일과 이 프로그램의 바로가기도 갱신합니다.
