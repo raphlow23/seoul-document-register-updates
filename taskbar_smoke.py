@@ -29,7 +29,7 @@ def run(output):
         link.SetPath(str(target));link.SetArguments('--fixture-argument')
         link.QueryInterface(pythoncom.IID_IPersistFile).Save(str(path),1)
     before=other.read_bytes();repaired=repair_shortcuts(sys.executable,ico,[own,other])
-    assert repaired['updated']==[str(own)] and not repaired['errors'] and other.read_bytes()==before
+    assert repaired['updated']==[str(own)] and not repaired['errors'] and other.read_bytes()==before, repr(repaired)
     link=pythoncom.CoCreateInstance(shell.CLSID_ShellLink,None,pythoncom.CLSCTX_INPROC_SERVER,shell.IID_IShellLink)
     link.QueryInterface(pythoncom.IID_IPersistFile).Load(str(own))
     assert link.QueryInterface(propsys.IID_IPropertyStore).GetValue(pscon.PKEY_AppUserModel_ID).GetValue()==APP_ID

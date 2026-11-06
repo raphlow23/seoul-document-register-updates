@@ -1,5 +1,5 @@
 VERSION = "2.7.8"
-# Native taskbar identity and fixed settings actions; explicit Windows property-system imports.
+# Native taskbar identity and fixed settings actions; include Windows COM timezone conversion.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
 UPDATE_REPOSITORY = "raphlow23/seoul-document-register-updates"
