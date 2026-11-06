@@ -37,13 +37,13 @@ def info(create=False):
     else:
         response=requests.get(f"{API}/releases",params={"per_page":100},headers=headers(),timeout=30)
         response.raise_for_status()
-        result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
+        result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION or (r.get('draft') and r.get('name','').startswith('v'+VERSION+' — '))),None)
     if result is None and create:
         response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — "+RELEASE_TITLE,"draft":True,"prerelease":False,"body":RELEASE_BODY},timeout=30)
         response.raise_for_status();result=response.json()
     elif result is not None and create:
         assert result['draft'], 'Published releases must not be rebuilt'
-        response=requests.patch(f"{API}/releases/{result['id']}",headers=headers(),json={'name':'v'+VERSION+' — '+RELEASE_TITLE,'body':RELEASE_BODY},timeout=30)
+        response=requests.patch(f"{API}/releases/{result['id']}",headers=headers(),json={'tag_name':'v'+VERSION,'target_commitish':'main','name':'v'+VERSION+' — '+RELEASE_TITLE,'body':RELEASE_BODY,'draft':True,'prerelease':False},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
