@@ -11,6 +11,25 @@ from route_chooser import RouteChooser
 
 
 class ReliefIntakeTests(unittest.TestCase):
+    def test_relief_category_uses_regular_receipt_and_relief_materials_folder(self):
+        import core
+        import folder_naming as naming
+        app,job,dialog=self.fixture()
+        self.assertIn('완화공문',naming.AGENCIES);self.assertIn('완화공문',core.CATEGORIES)
+        self.assertNotIn(relief.LOCATION,naming.AGENCIES['서울시청 공문'])
+        dialog.agency.set('완화공문');dialog.receipt_type.set('처리지침');dialog.load()
+        self.assertEqual(dialog.receipt_type.get(),'공문')
+        record=dialog.records.copy()
+        # load clears the old tree; deliver the selected agency's own destination.
+        folder=Path(app.config['root'])/relief.LOCATION
+        dialog.deliver({'owner':dialog.owner,'request':dialog.request,'records':[{**describe_directory(folder),'relative':relief.LOCATION}]})
+        self.assertEqual(dialog.selected,{relief.LOCATION})
+        self.assertEqual(dialog.child_sets[relief.LOCATION],['relief'])
+        self.assertEqual(naming.child_folders('완화공문',['relief']),{'relief':'1.완화신청자료'})
+        dialog.relief_vars['district'].set('서대문구청');dialog.apply(False)
+        _,data=list(app.commands.queue)[-1]
+        self.assertEqual(data['fields']['receipt_type'],'공문');self.assertEqual(data['routing']['agency'],'완화공문')
+
     def test_title_variants_keep_address_and_additional_case_suffix(self):
         values=relief.source_fields({'title':'다른 제목 (예시동 1-1)외1','issuer':'서대문구청장'})
         self.assertEqual(values,{'district':'서대문구청','subject':'예시동 1-1','suffix':'외1'})
