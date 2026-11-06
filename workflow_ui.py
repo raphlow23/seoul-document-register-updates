@@ -33,10 +33,10 @@ class WorkflowShell:
         self.pending_register=None;self.pending_open=None;self.draft_active=False;self.drafts={}
         self.excerpt_request=None;self.receipt_drafts={};self.route_drafts={}
         self.continue_outgoing=tk.BooleanVar(value=False)
-        header=ttk.Frame(outer);header.pack(fill="x")
-        ttk.Label(header,text="서울센터 공문 업무",font=("맑은 고딕",22,"bold")).pack(side="left")
+        header=ttk.Frame(outer,style='App.TFrame');header.pack(fill="x")
+        ttk.Label(header,text="서울센터 공문 업무",font=("맑은 고딕",22,"bold"),style='App.TLabel').pack(side="left")
         ttk.Button(header,text="설정 · 연결",command=app.settings).pack(side="right")
-        nav=ttk.Frame(outer);nav.pack(fill="x",pady=14)
+        nav=ttk.Frame(outer,style='Card.TFrame',padding=10);nav.pack(fill="x",pady=14)
         self.nav={}
         for key,label,fn in (("receipt","수신 접수",self.receipt_home),("outgoing","발신 작성",self.outgoing_home),("history","처리 이력",self.history_home)):
             button=ttk.Button(nav,text=label,command=fn);button.pack(side="left",padx=(0,8));self.nav[key]=button
@@ -44,8 +44,8 @@ class WorkflowShell:
         ttk.Button(nav,text="선택 내용 다시 확인",command=self.reconfigure).pack(side="left",padx=4)
         app.watching=tk.BooleanVar(value=False)
         ttk.Checkbutton(nav,text="다운로드 자동 확인",variable=app.watching,command=app.toggle_watch).pack(side="right")
-        self.steps=tk.StringVar();ttk.Label(outer,textvariable=self.steps,foreground="#1c5295",font=("맑은 고딕",11,"bold")).pack(anchor="w",pady=(0,8))
-        self.content=ttk.Frame(outer);self.content.pack(fill="both",expand=True)
+        self.steps=tk.StringVar();ttk.Label(outer,textvariable=self.steps,foreground="#1c5295",font=("맑은 고딕",11,"bold"),style='App.TLabel').pack(anchor="w",pady=(0,8))
+        self.content=ttk.Frame(outer,style='Card.TFrame',padding=16);self.content.pack(fill="both",expand=True)
         self.pages={key:ttk.Frame(self.content) for key in ("queue","title","route","receipt_result","outgoing_list","outgoing_types","outgoing_form","outgoing_result","history")}
         app.fields={k:tk.StringVar() for k in ("title","category","recipient","date","issuer","receipt_type")}
         app.outgoing_enabled=tk.BooleanVar(value=False);app.detail=tk.StringVar()
@@ -69,7 +69,7 @@ class WorkflowShell:
                     self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current()}
                 elif name=="route_dialog" and editor.records:
                     editor.children_changed()
-                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":editor.targets(),"folder_title":"","children":[],"relief":editor.relief_values()}
+                    self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":editor.targets(),"folder_title":"","children":[],"relief":editor.relief_values(),'relief_category':editor.agency.get()=='완화공문'}
                 editor.close()
 
     def show(self,page,section,step=1):
@@ -78,7 +78,7 @@ class WorkflowShell:
         self.section,self.step=section,step
         labels=("첨부파일","제목 확인","저장 위치","접수 완료") if section=="receipt" else ("수신 문서","양식 선택","발신 정보","등록 · HWP 저장")
         self.steps.set("   →   ".join(("● " if i==step else "")+label for i,label in enumerate(labels,1)) if section!="history" else "등록된 문서와 저장 결과")
-        for key,button in self.nav.items():button.configure(state="disabled" if key==section else "normal")
+        for key,button in self.nav.items():button.configure(state="disabled" if key==section else "normal",style='NavSelected.TButton' if key==section else 'TButton')
         self.back_button.configure(state="disabled" if section=="history" or step==1 else "normal")
         self.draft_active=page in ("title","route","outgoing_types","outgoing_form")
 
@@ -93,7 +93,7 @@ class WorkflowShell:
         ttk.Button(bar,text="파일 추가",command=self.app.add_files).pack(side="left")
         ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=5)
         ttk.Button(bar,text="목록 삭제",command=self.app.ignore).pack(side="left",padx=8)
-        self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · ZIP·PDF·한글·엑셀·HTML·DWG·DXF 등 · 이미지 제외",padding=12,foreground="#1c5295",anchor="center",relief="groove")
+        self.drop_zone=ttk.Label(page,text="파일을 여기로 끌어다 놓으세요 · ZIP·PDF·한글·엑셀·HTML·DWG·DXF 등 · 이미지 제외",style='Drop.TLabel')
         self.drop_zone.pack(fill="x",pady=(0,10))
         self.app.tree=table(page,[("state","상태",145),("category","분류",130),("title","공문 제목 / 파일명",420),("modified","수정 날짜 ▼",145),("number","접수번호",90)],True)
         def refresh_order():
@@ -105,7 +105,7 @@ class WorkflowShell:
         bottom=ttk.Frame(page);bottom.pack(fill="x",pady=(12,0))
         bottom.pack_configure(side="bottom",before=self.app.tree.master)
         ttk.Label(bottom,text="목록 삭제는 파일을 지우지 않습니다. 이동·삭제된 다운로드는 목록에서 자동 제외됩니다.",foreground="#667085").pack(side="left")
-        ttk.Button(bottom,text="다음: 제목 확인",command=self.start_receipt).pack(side="right")
+        ttk.Button(bottom,text="다음: 제목 확인",command=self.start_receipt,style='Accent.TButton').pack(side="right")
 
     def build_history(self):
         for name in ("history","outgoing_list"):
@@ -543,7 +543,7 @@ class SimpleOutgoing(OutgoingEditor):
         self.win=ttk.Frame(parent,padding=12);self.win.pack(fill="both",expand=True)
         actions=ttk.Frame(self.win);actions.pack(side="bottom",fill="x",pady=10)
         viewport=ttk.Frame(self.win);viewport.pack(fill="both",expand=True)
-        canvas=tk.Canvas(viewport,highlightthickness=0,bg="#dcdad5")
+        canvas=tk.Canvas(viewport,highlightthickness=0,bg="#F3F6FB")
         scroll=ttk.Scrollbar(viewport,orient="vertical",command=canvas.yview)
         canvas.configure(yscrollcommand=scroll.set)
         canvas.pack(side="left",fill="both",expand=True);scroll.pack(side="right",fill="y")
