@@ -10,8 +10,11 @@ import sys
 import tempfile
 
 
-def runtime_path():
-    return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "ocr-runtime"
+def runtime_path(prepare=True):
+    bundled=Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "ocr-runtime"
+    if not getattr(sys,'frozen',False) and (bundled/'tesseract.exe').is_file():return bundled
+    from ocr_runtime import ensure,installed
+    return ensure() if prepare else installed()
 
 
 def run_engine(image, mode, timeout=120):
