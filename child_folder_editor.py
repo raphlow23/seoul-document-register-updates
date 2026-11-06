@@ -13,7 +13,8 @@ class ChildFolderEditor:
         outer=ttk.Frame(self.win,padding=16);outer.pack(fill='both',expand=True)
         ttk.Label(outer,text='기본 폴더는 유지하고 필요한 폴더를 추가하세요.\n체크한 폴더만 위에서부터 1번, 2번 순서로 만듭니다.',wraplength=530).pack(anchor='w',pady=(0,10))
         area=ttk.Frame(outer);area.pack(fill='both',expand=True)
-        self.tree=ttk.Treeview(area,columns=('name',),show='tree headings',selectmode='browse',height=10)
+        from modern_ui import CheckboxTree
+        self.tree=CheckboxTree(area,columns=('name',),show='tree headings',selectmode='browse',height=10)
         self.tree.heading('#0',text='생성');self.tree.column('#0',width=60,stretch=False)
         self.tree.heading('name',text='내부 폴더 이름 · 위에서부터 생성 순서');self.tree.column('name',width=360)
         scroll=ttk.Scrollbar(area,command=self.tree.yview);self.tree.configure(yscrollcommand=scroll.set)
