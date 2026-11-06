@@ -75,7 +75,7 @@ def validate_anchors(text,anchors):
         chosen.append(token)
 
 
-def add(source,settings,storage=None):
+def add(source,settings,storage=None,replace_id=None):
     """Validate before copying, then atomically publish the catalog. Never overwrite a form."""
     source=Path(source)
     text=inspect(source)
@@ -95,6 +95,7 @@ def add(source,settings,storage=None):
     family=settings.get("family","공문")
     if not label:raise ValueError("양식 이름을 입력하세요.")
     if family not in ("공문","업무연락","처리지침"):raise ValueError("공문 종류를 선택하세요.")
+    if replace_id=='8' and family!='공문':raise ValueError('완화공문은 공문 유형으로 등록하세요.')
     folder=str(settings.get("folder","")).strip()
     if not Path(folder).is_absolute():raise ValueError("기본 저장 폴더를 절대 경로로 선택하세요.")
     prefix=str(settings.get("prefix","")).strip()
@@ -104,7 +105,10 @@ def add(source,settings,storage=None):
     root.mkdir(parents=True,exist_ok=True)
     cp=root/"catalog.json"
     catalog=json.loads(cp.read_text(encoding="utf-8")) if cp.is_file() else docs.catalog()
-    if any(item["label"]==label for item in catalog):raise ValueError("같은 이름의 양식이 있습니다. 다른 이름을 입력하세요.")
+    if replace_id=='8' and not any(x['id']=='8' for x in catalog):catalog.append(docs.relief_template())
+    previous=next((x for x in catalog if x['id']==replace_id),None)
+    if replace_id and previous is None:raise ValueError('변경할 양식을 찾지 못했습니다.')
+    if any(item['label']==label and item['id']!=replace_id for item in catalog):raise ValueError("같은 이름의 양식이 있습니다. 다른 이름을 입력하세요.")
     # An upgrade must not make previously bundled forms disappear when the private library is created.
     oldroot=docs.template_root()
     for existing in catalog:
@@ -112,8 +116,8 @@ def add(source,settings,storage=None):
         original=oldroot/existing["file"];target=root/existing["file"]
         if original.is_file() and not target.exists():
             with target.open("xb") as dst:dst.write(original.read_bytes())
-    key="user_"+uuid.uuid4().hex
-    target=root/(key+".hwp")
+    file_key='user_'+uuid.uuid4().hex;key=replace_id or file_key
+    target=root/(file_key+".hwp")
     item={"id":key,"label":label,"file":target.name,"family":family,"folder":folder,"prefix":prefix,
           "spacing":" " if settings.get("spacing",True) else "","suffix":suffix,"receiver":anchors["receiver"],
           "default_receiver":str(settings.get("default_receiver","")).strip(),"old_sender":anchors["sender"],
@@ -121,11 +125,13 @@ def add(source,settings,storage=None):
           "blank_body":True,"metadata_only":True,"body_start":"","signature":"",
           "date_pattern":"({year2:02d}. {month}. {day})","number_pattern":number_pattern(original_number),
           "original_sha256":original_hash,"source_sha256":hashlib.sha256(raw).hexdigest()}
+    if previous and previous.get('role'):item['role']=previous['role']
     temporary=root/("catalog-"+uuid.uuid4().hex+".tmp")
     try:
         with target.open("xb") as dst:dst.write(raw)
         validate_anchors(inspect(target),anchors)
-        temporary.write_text(json.dumps([*catalog,item],ensure_ascii=False,indent=2),encoding="utf-8")
+        updated=[item if x['id']==key else x for x in catalog] if previous else [*catalog,item]
+        temporary.write_text(json.dumps(updated,ensure_ascii=False,indent=2),encoding="utf-8")
         os.replace(temporary,cp)
     except Exception:
         target.unlink(missing_ok=True)
@@ -133,3 +139,41 @@ def add(source,settings,storage=None):
     finally:temporary.unlink(missing_ok=True)
     docs.template_body.cache_clear()
     return item
+
+
+def _publish(path,items):
+    temporary=path.with_name('catalog-'+uuid.uuid4().hex+'.tmp')
+    try:
+        temporary.write_text(json.dumps(items,ensure_ascii=False,indent=2),encoding='utf-8');os.replace(temporary,path)
+    finally:temporary.unlink(missing_ok=True)
+
+
+def _private_catalog(storage):
+    root=Path(storage);root.mkdir(parents=True,exist_ok=True)
+    items=docs.catalog(root) if (root/'catalog.json').is_file() else docs.catalog()
+    oldroot=docs.template_root()
+    for item in items:
+        if Path(item['file']).name!=item['file']:raise ValueError('양식 파일 경로를 확인하세요.')
+        source=oldroot/item['file'];target=root/item['file']
+        if source.is_file() and not target.exists():
+            with target.open('xb') as dst:dst.write(source.read_bytes())
+    return root,items
+
+
+def rename(key,label,storage):
+    label=label.strip()
+    if not label:raise ValueError('양식 이름을 입력하세요.')
+    root,items=_private_catalog(storage)
+    if not any(x['id']==key for x in items):raise ValueError('변경할 양식을 찾지 못했습니다.')
+    if any(x['label']==label and x['id']!=key for x in items):raise ValueError('같은 이름의 양식이 있습니다.')
+    items=[{**x,'label':label} if x['id']==key else x for x in items]
+    _publish(root/'catalog.json',items);docs.template_body.cache_clear()
+
+
+def remove(key,storage):
+    root,items=_private_catalog(storage);selected=next((x for x in items if x['id']==key),None)
+    if selected is None:raise ValueError('삭제할 양식을 찾지 못했습니다.')
+    path=root/'catalog-retired.json';retired=json.loads(path.read_text(encoding='utf-8')) if path.is_file() else []
+    # Preserve retired metadata/files for documents already using this template ID.
+    _publish(path,[*[x for x in retired if x['id']!=key],selected])
+    _publish(root/'catalog.json',[x for x in items if x['id']!=key]);docs.template_body.cache_clear()

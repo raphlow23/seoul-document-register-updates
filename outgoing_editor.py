@@ -2,7 +2,7 @@
 from datetime import date
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk,filedialog,messagebox
+from tkinter import ttk,filedialog,messagebox,simpledialog
 import uuid
 
 from outgoing import defaults,METHODS
@@ -13,25 +13,44 @@ FAMILY_LABELS={"시행문(공문)":"공문","업무연락 발신":"업무연락"
 
 
 def folder_settings_dialog(app,parent,on_save=None):
-    win=tk.Toplevel(parent);win.title("발신 양식별 기본 저장 위치");win.transient(parent);win.grab_set()
-    win.geometry(f"900x{min(620,win.winfo_screenheight()-100)}")
+    win=tk.Toplevel(parent);win.title("발신 HWP 양식 · 이름 · 저장 위치 관리");win.transient(parent);win.grab_set()
+    win.geometry(f"{min(1180,win.winfo_screenwidth()-60)}x{min(720,win.winfo_screenheight()-100)}");win.minsize(850,480)
     footer=ttk.Frame(win,padding=12);footer.pack(side="bottom",fill="x")
-    area=ttk.Frame(win);area.pack(fill="both",expand=True)
-    canvas=tk.Canvas(area,highlightthickness=0);scroll=ttk.Scrollbar(area,command=canvas.yview)
-    canvas.configure(yscrollcommand=scroll.set);canvas.pack(side="left",fill="both",expand=True);scroll.pack(side="right",fill="y")
-    box=ttk.Frame(canvas,padding=14);window=canvas.create_window(0,0,anchor="nw",window=box)
-    box.bind("<Configure>",lambda e:canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.bind("<Configure>",lambda e:canvas.itemconfigure(window,width=e.width))
+    hint=ttk.Label(win,text='이름 변경·목록 삭제·HWP 연결은 즉시 반영됩니다. 저장 경로를 바꾼 뒤에는 아래 설정 저장을 누르세요.',wraplength=1050,padding=12);hint.pack(fill='x')
+    hint.bind('<Configure>',lambda e:hint.configure(wraplength=max(100,e.width-24)))
+    from modern_ui import ScrollablePanel
+    area=ScrollablePanel(win);area.pack(fill='both',expand=True);box=area.body
     box.columnconfigure(1,weight=1)
     fields={}
-    for row,item in enumerate(hwp_docs.catalog()):
-        fields[item["id"]]=tk.StringVar(value=hwp_docs.destination(app.config,item))
-        ttk.Label(box,text=item["label"]).grid(row=row,column=0,sticky="w",pady=5)
-        ttk.Entry(box,textvariable=fields[item["id"]],width=68).grid(row=row,column=1,padx=8)
-        def choose(key=item["id"]):
-            path=filedialog.askdirectory(parent=win)
-            if path:fields[key].set(path)
-        ttk.Button(box,text="선택",command=choose).grid(row=row,column=2)
+    def reload(_=None):
+        previous={k:v.get() for k,v in fields.items()};fields.clear()
+        for widget in box.winfo_children():widget.destroy()
+        for row,item in enumerate(hwp_docs.catalog()):
+            key=item['id'];fields[key]=tk.StringVar(value=previous.get(key,hwp_docs.destination(app.config,item)))
+            ttk.Label(box,text=item['label'],wraplength=185).grid(row=row,column=0,sticky='w',padx=8,pady=5)
+            ttk.Entry(box,textvariable=fields[key],width=20).grid(row=row,column=1,sticky='ew',padx=8)
+            def choose(key=key):
+                path=filedialog.askdirectory(parent=win)
+                if path:fields[key].set(path)
+            def change_name(item=item):
+                label=simpledialog.askstring('양식 이름 변경','프로그램에 표시할 양식 이름',initialvalue=item['label'],parent=win)
+                if label is None:return
+                try:
+                    from template_library import rename
+                    rename(item['id'],label,app.data/'hwp-templates');reload()
+                except (ValueError,OSError) as error:messagebox.showerror('양식 이름 확인',str(error),parent=win)
+            def remove(item=item):
+                if not messagebox.askyesno('양식 목록 삭제',item['label']+' 양식을 목록에서 삭제할까요?\n원본 HWP와 작성된 공문 파일은 지우지 않습니다.',parent=win):return
+                try:
+                    from template_library import remove as remove_template
+                    remove_template(item['id'],app.data/'hwp-templates');reload()
+                except (ValueError,OSError) as error:messagebox.showerror('양식 삭제 확인',str(error),parent=win)
+            def connect(key=key):
+                from template_manager import open_pick_template
+                open_pick_template(app,parent=win,on_added=reload,replace_id=key)
+            for col,label,command in ((2,'폴더 선택',choose),(3,'HWP 연결',connect),(4,'이름 변경',change_name),(5,'삭제',remove)):
+                ttk.Button(box,text=label,command=command).grid(row=row,column=col,padx=3,pady=5)
+    reload();win.template_fields=fields;win.template_panel=area
     def close():
         win.destroy()
         if isinstance(parent,tk.Toplevel):parent.grab_set()
@@ -41,7 +60,13 @@ def folder_settings_dialog(app,parent,on_save=None):
         if on_save:on_save()
         close()
     win.protocol("WM_DELETE_WINDOW",close)
+    def add_form():
+        from template_manager import open_pick_template
+        open_pick_template(app,parent=win,on_added=reload)
+    ttk.Button(footer,text='HWP 양식 추가',command=add_form).pack(side='left')
+    ttk.Button(footer,text='닫기',command=close).pack(side='right',padx=8)
     ttk.Button(footer,text="기본 설정 저장",command=save).pack(side="right")
+    return win
 
 
 class OutgoingEditor:

@@ -21,15 +21,25 @@ def template_root():
     return Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)) / "hwp-templates"
 
 
-def catalog():
-    path=template_root()/"catalog.json"
-    if path.is_file():return json.loads(path.read_text(encoding="utf-8"))
+def relief_template():
+    return {'id':'8','label':'완화공문','role':'relief_reply','file':'approved-relief-reply.hwp','family':'공문','folder':'3.완화신청','prefix':'','spacing':' ','suffix':'','receiver':'','blank_body':True,'metadata_only':True}
+
+
+def catalog(root=None):
+    root=Path(root) if root is not None else template_root();path=root/'catalog.json'
     kinds=(("7","센터회신","center_reply"),("1","센터발송","center_send"),("2","중앙회신","central_reply"),("3","시청회신","city_reply"),("4","업무연락","work_notice"),("5","처리지침","guideline"),("6","건축허가&사업계획승인 / 사용승인&사용검사","building_reply"))
-    return [{"id":key,"label":label,"role":role,"file":f"approved-20261103-{role}.hwp","family":"업무연락" if key=="4" else "처리지침" if key=="5" else "공문","folder":"0.시행문(업무연락)" if key=="4" else "0.시행문(처리지침)" if key=="5" else "0.시행문(센터)","prefix":"처리지침" if key=="5" else "","spacing":" ","suffix":"","receiver":"","blank_body":True,"metadata_only":True} for key,label,role in kinds]
+    items=json.loads(path.read_text(encoding='utf-8')) if path.is_file() else [{"id":key,"label":label,"role":role,"file":f"approved-20261103-{role}.hwp","family":"업무연락" if key=="4" else "처리지침" if key=="5" else "공문","folder":"0.시행문(업무연락)" if key=="4" else "0.시행문(처리지침)" if key=="5" else "0.시행문(센터)","prefix":"처리지침" if key=="5" else "","spacing":" ","suffix":"","receiver":"","blank_body":True,"metadata_only":True} for key,label,role in kinds]
+    retired=root/'catalog-retired.json';removed=json.loads(retired.read_text(encoding='utf-8')) if retired.is_file() else []
+    if not any(x['id']=='8' or x.get('role')=='relief_reply' for x in items+removed):items.append(relief_template())
+    return items
 
 
 def style(style_id):
-    return next(x for x in catalog() if x["id"] == str(style_id))
+    retired=template_root()/'catalog-retired.json'
+    archived=json.loads(retired.read_text(encoding='utf-8')) if retired.is_file() else []
+    found=next((x for x in [*catalog(),*archived] if x['id']==str(style_id)),None)
+    if found is None:raise ValueError('선택한 양식을 찾지 못했습니다. HWP 양식을 추가해 주세요.')
+    return found
 
 
 @lru_cache(maxsize=128)
@@ -47,14 +57,11 @@ def template_body(style_id):
 
 
 def suggested_style(job,family="공문"):
-    if family=="업무연락":return style("4")
-    if family=="처리지침":return style("5")
+    available=[x for x in catalog() if x['family']==family]
+    if not available:raise ValueError(family+' HWP 양식을 먼저 추가해 주세요.')
     category=job.get("category","")
-    if "중앙" in category:return style("2")
-    if "시청" in category:
-        return style("6" if any(k in job.get("title","") for k in ("협의","건축","주택","사업계획","사용승인","계획인가")) else "3")
-    available=catalog()
-    return next((x for x in available if x.get("role")=="center_reply"),style("1"))
+    preferred='4' if family=='업무연락' else '5' if family=='처리지침' else '8' if category=='완화공문' else '2' if '중앙' in category else ('6' if any(k in job.get('title','') for k in ('협의','건축','주택','사업계획','사용승인','계획인가')) else '3') if '시청' in category else '7'
+    return next((x for x in available if x['id']==preferred),available[0])
 
 
 def destination(config, item):

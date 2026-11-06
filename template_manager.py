@@ -6,15 +6,15 @@ from tkinter import ttk,filedialog,messagebox
 import template_library as library
 
 
-def open_pick_template(app,parent=None,on_added=None):
+def open_pick_template(app,parent=None,on_added=None,replace_id=None):
     parent=parent or app.root
     path=filedialog.askopenfilename(parent=parent,title="양식으로 사용할 HWP 파일",filetypes=[("한글 양식","*.hwp")])
-    if path:return open_add_template(app,parent=parent,on_added=on_added,source=path)
+    if path:return open_add_template(app,parent=parent,on_added=on_added,source=path,replace_id=replace_id)
 
 
-def open_add_template(app,parent=None,on_added=None,source=None):
+def open_add_template(app,parent=None,on_added=None,source=None,replace_id=None):
     parent=parent or app.root
-    win=tk.Toplevel(parent);win.title("HWP 양식 추가")
+    win=tk.Toplevel(parent);win.title("원본 HWP 연결 · 자동 입력 위치" if replace_id else "HWP 양식 추가")
     win.geometry(f"980x{min(760,win.winfo_screenheight()-100)}");win.transient(parent);win.grab_set()
     outer=ttk.Frame(win,padding=16);outer.pack(fill="both",expand=True)
     actions=ttk.Frame(outer);actions.pack(side="bottom",fill="x",pady=(12,0))
@@ -66,9 +66,14 @@ def open_add_template(app,parent=None,on_added=None,source=None):
         for key in ("prefix","suffix"):
             if key in hints:values[key].set(hints[key])
         if "spacing" in hints:spacing.set(hints["spacing"])
+        if replace_id:
+            import hwp_documents as docs
+            existing=docs.style(replace_id)
+            values['label'].set(existing['label']);values['family'].set(existing['family'])
+            values['folder'].set(docs.destination(app.config,existing))
     for i,(key,label) in enumerate((("source","원본 HWP"),("label","양식 이름"),("family","공문 종류"),("folder","기본 저장 폴더"),("default_receiver","기본 수신처 (선택)"),("prefix","파일명 번호 앞 표시"),("suffix","파일명 제목 뒤 표시"))):
         ttk.Label(basic,text=label).grid(row=i,column=0,sticky="w",pady=10)
-        widget=ttk.Combobox(basic,textvariable=values[key],values=("공문","업무연락","처리지침"),state="readonly") if key=="family" else ttk.Entry(basic,textvariable=values[key])
+        widget=ttk.Combobox(basic,textvariable=values[key],values=("공문",) if replace_id=='8' else ("공문","업무연락","처리지침"),state="readonly") if key=="family" else ttk.Entry(basic,textvariable=values[key])
         widget.grid(row=i,column=1,sticky="ew",padx=10)
         if key=="family":widget.bind("<<ComboboxSelected>>",lambda e:default_folder())
         if key=="source":ttk.Button(basic,text="파일 선택",command=browse).grid(row=i,column=2)
@@ -100,14 +105,14 @@ def open_add_template(app,parent=None,on_added=None,source=None):
         settings={key:value.get().strip() for key,value in values.items()};settings["spacing"]=spacing.get()
         settings['_occurrences']={key:box.current() for key,box in position_boxes.items() if len(box.cget('values'))>1}
         settings['_source_sha256']=source_hash[0]
-        try:item=library.add(settings.pop("source"),settings,storage=app.data/"hwp-templates")
+        try:item=library.add(settings.pop("source"),settings,storage=app.data/"hwp-templates",replace_id=replace_id)
         except Exception as error:
             tabs.select(mapping)
             return messagebox.showerror("양식 추가 확인",str(error),parent=win)
-        close();app.status.set("양식을 추가했습니다: "+item["label"])
+        close();app.status.set(("양식을 연결했습니다: " if replace_id else "양식을 추가했습니다: ")+item["label"])
         if on_added:on_added(item)
     win.protocol("WM_DELETE_WINDOW",close)
     ttk.Button(actions,text="취소",command=close).pack(side="left")
-    ttk.Button(actions,text="양식 추가",command=save).pack(side="right")
+    ttk.Button(actions,text="HWP 연결 저장" if replace_id else "양식 추가",command=save).pack(side="right")
     if source:browse(source);tabs.select(mapping)
     return win

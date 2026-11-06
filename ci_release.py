@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='작업표시줄 아이콘 확대·하단 안내·발신 초기화'
-RELEASE_BODY='기존 아이콘의 문서·화살표·색상과 투명 배경을 유지하면서 작은 Windows 아이콘 프레임의 그림 너비를 약 33% 키웠습니다. 메인 화면 하단 안내의 높이를 먼저 확보하고 창 너비에 맞춰 줄바꿈해 글자 잘림을 수정했습니다. 발신 작성 목록에 발신 초기화·다시 시작과 목록 삭제를 추가했습니다. 기존 발신·직인 등록 진행은 새 작성에 재사용하지 않고 양식 선택부터 시작하며 등록 시 최신 대장에서 새 번호를 받습니다. 수신 접수·기존 구글시트 행·파일은 보존합니다. 206개 검사와 실제 설치 파일의 화면·아이콘·새 발신 진행·자동 업데이트 및 재실행을 검증하며 최신·직전 릴리스만 보관합니다.'
+RELEASE_TITLE='아이콘 확대·하단 안내·발신 초기화·완화공문 양식 관리'
+RELEASE_BODY='투명 아이콘의 작은 크기용 그림 너비를 약 33% 키웠으며 메인 화면 하단 안내의 높이·줄바꿈을 수정했습니다. 발신 초기화·다시 시작과 목록 삭제는 이전 발신·직인 진행을 이어 쓰지 않고 최신 대장에서 번호를 다시 받도록 합니다. 수신 접수·기존 시트 행·파일은 보존합니다. 설정에 완화공문 양식(일반 공문, 기본 위치 3.완화신청), 원본 HWP 연결, 양식 이름 변경·목록 삭제를 추가했습니다. 삭제한 양식의 기존 공문 연결과 파일은 보존하고 업데이트 후 목록에서 되살리지 않습니다. 212개 검사와 실제 설치 파일의 화면·아이콘·발신 초기화·양식 관리·자동 업데이트와 재실행을 검증하며 최신·직전 릴리스만 보관합니다.'
 _release_id = None
 
 
@@ -85,7 +85,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_template_management"],check=True,timeout=90)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:

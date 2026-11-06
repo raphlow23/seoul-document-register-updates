@@ -36,7 +36,7 @@ def open_settings(app):
         parent.columnconfigure(1,weight=1)
     for row,(key,label) in enumerate((("downloads","다운로드 폴더"),("root","공유 실적 폴더"),("recipient","기본 담당자"),("spreadsheet_id","구글 시트 주소 또는 ID"))):entry(basic,row,key,label,key in ("downloads","root"))
     ttk.Label(basic,text="발신 양식별 기본 저장 위치").grid(row=4,column=0,sticky="w",pady=12)
-    ttk.Button(basic,text="양식별 저장 위치 설정",command=lambda:folder_settings_dialog(app,win)).grid(row=4,column=1,sticky="w",padx=10)
+    ttk.Button(basic,text="양식 관리 · 저장 위치",command=lambda:folder_settings_dialog(app,win)).grid(row=4,column=1,sticky="w",padx=10)
     def add_template():
         from template_manager import open_pick_template
         open_pick_template(app,parent=win)

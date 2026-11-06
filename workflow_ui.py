@@ -432,9 +432,16 @@ class WorkflowShell:
         if not self.available():return
         self.clear_editor();self.focus(job["hash"])
         if job.get("outgoing",{}).get("sheet_attempted"):return self.outgoing_form(job)
+        available=hwp_docs.catalog()
+        if not available:
+            messagebox.showinfo('HWP 양식 추가','사용할 양식이 없습니다. 원본 HWP 양식을 추가해 주세요.')
+            from template_manager import open_pick_template
+            return open_pick_template(self.app,on_added=lambda _:self.start_outgoing(job))
+        try:recommended=hwp_docs.suggested_style(job)['id']
+        except ValueError:recommended=available[0]['id']
         page=self.empty("outgoing_types");self.show("outgoing_types","outgoing",2)
         heading(page,"사용할 HWP 양식을 고르세요",job["title"])
-        self.style_choice=tk.StringVar(value=self.drafts.get(job["hash"],{}).get("template_id") or job.get("outgoing",{}).get("template_id") or hwp_docs.suggested_style(job)["id"])
+        self.style_choice=tk.StringVar(value=self.drafts.get(job["hash"],{}).get("template_id") or job.get("outgoing",{}).get("template_id") or recommended)
         bar=ttk.Frame(page);bar.pack(fill="x",pady=16)
         bar.pack_configure(side="bottom")
         choices=ttk.PanedWindow(page,orient="horizontal");choices.pack(fill="both",expand=True)
@@ -451,7 +458,9 @@ class WorkflowShell:
             from PIL import Image,ImageTk
             image=hwp_docs.template_preview(keys[0])
             if image is None:
-                self.template_photo=None;preview.configure(image="",text="이 양식에는 미리보기 이미지가 없습니다.\n선택 후 번호를 받은 사본을 한글에서 엽니다.")
+                self.template_photo=None
+                missing=not (hwp_docs.template_root()/item['file']).is_file()
+                preview.configure(image='',text='원본 HWP가 연결되지 않았습니다.\n설정 · 연결 → 양식 관리 · 저장 위치에서\n이 양식의 HWP 연결을 눌러 원본을 지정하세요.' if missing else '이 양식에는 미리보기 이미지가 없습니다.\n선택 후 번호를 받은 사본을 한글에서 엽니다.')
             else:
                 image.thumbnail((300,300),Image.Resampling.LANCZOS)
                 self.template_photo=ImageTk.PhotoImage(image,master=page);image.close()

@@ -213,6 +213,10 @@ def run():
                 open_settings(app)
                 for child in root.winfo_children():
                     if isinstance(child,tk.Toplevel):child.destroy()
+                from outgoing_editor import folder_settings_dialog
+                manager=folder_settings_dialog(app,root);root.update_idletasks()
+                assert '8' in manager.template_fields, 'Relief form must appear in settings'
+                manager.destroy()
                 from template_manager import open_add_template
                 dialog=open_add_template(app);root.update_idletasks();dialog.destroy()
                 # The frozen application must include the real custom-folder dialog.
