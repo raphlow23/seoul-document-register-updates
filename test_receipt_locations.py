@@ -6,6 +6,20 @@ import folder_naming as naming
 
 
 class ReceiptLocationTests(unittest.TestCase):
+    def test_relief_category_copies_only_to_relief_materials_and_uses_regular_receipt_tab(self):
+        shared=self.root/'share';parent=shared/'3.완화신청';parent.mkdir(parents=True)
+        job=self.job();job.update(category='완화공문',recipient='fixture staff',issuer='')
+        job['routing']={'agency':'완화공문','relief':{'district':'서대문구청'},'targets':[{'relative':'3.완화신청','template':'{title}','children':['relief']}]}
+        observed=[]
+        class Sheet:
+            def __init__(self,config):observed.append(config['tab'])
+            def register(self,job,store):return 7,'23'
+        done=core.process(job,{'root':str(shared)},self.store,Sheet)
+        folder=parent/job['title']
+        self.assertTrue((folder/'1.완화신청자료'/'공문.pdf').is_file())
+        self.assertEqual(observed,[core.RECEIPT_TABS['공문']]);self.assertEqual(done['number'],'23')
+        self.assertEqual(done['issuer'],'서대문구청');self.assertFalse((folder/'1.시청공문').exists())
+
     def test_year_storage_reuses_existing_file_without_owning_or_removing_it(self):
         from file_rollback import execute
         relative=str(Path('5.보건복지부 및 중앙처리지침')/'0. 보건복지부 지침')
