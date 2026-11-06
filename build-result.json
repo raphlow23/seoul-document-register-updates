@@ -1,24 +1,30 @@
 {
   "manifest": {
     "product": "SeoulDocumentRegister",
-    "version": "2.7.5",
-    "filename": "SeoulDocumentRegister-2.7.5.exe",
-    "size": 128144812,
-    "sha256": "9a443fa159b1de142011e6482e8f9eca7b2cc75ca58abc3fbda9660fa564ade1",
-    "download_base": "https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.7.5",
+    "version": "2.7.6",
+    "filename": "SeoulDocumentRegister-2.7.6.exe",
+    "size": 54596853,
+    "sha256": "8cbb79ec7428ecfb53b29a65a0b84fb1fff13a629b0e7f9676a3149db03e5e66",
+    "download_base": "https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.7.6",
     "components": {
       "spacing_model": {
         "filename": "SpacingModel-0.20.0.zip",
         "size": 34816003,
         "sha256": "f1cc042d0ea315d34170049ee770eacaf13c0f3e7c1b6117a38c9fbc51bfb4ce"
+      },
+      "ocr_runtime": {
+        "filename": "OCRRuntime-a64935a0b857102f.zip",
+        "size": 48931721,
+        "sha256": "1e5d38069f6e1653fa5388e0fe4186af871240c2e57c2fbf35fa13118f1b3587",
+        "runtime_id": "a64935a0b857102f1d8c69b62ec936d871368ba94464391ae9524f3b2bdbe2d2"
       }
     }
   },
   "assets": [
     {
-      "name": "SeoulDocumentRegister-2.7.5.exe",
-      "size": 128144812,
-      "sha256": "9a443fa159b1de142011e6482e8f9eca7b2cc75ca58abc3fbda9660fa564ade1"
+      "name": "SeoulDocumentRegister-2.7.6.exe",
+      "size": 54596853,
+      "sha256": "8cbb79ec7428ecfb53b29a65a0b84fb1fff13a629b0e7f9676a3149db03e5e66"
     },
     {
       "name": "SpacingModel-0.20.0.zip",
@@ -27,8 +33,13 @@
     },
     {
       "name": "ThirdPartyNotices.zip",
-      "size": 9592529,
-      "sha256": "b6017d51766d48fd56a1edf7fb4fa12e9a6917780f73cae5ffd37c83b00133d6"
+      "size": 9592824,
+      "sha256": "37071bd1808ece473533e5d69748fb5b1e0ab7a794d830eee75c185096dd8660"
+    },
+    {
+      "name": "OCRRuntime-a64935a0b857102f.zip",
+      "size": 48931721,
+      "sha256": "1e5d38069f6e1653fa5388e0fe4186af871240c2e57c2fbf35fa13118f1b3587"
     }
   ]
 }
