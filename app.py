@@ -41,6 +41,8 @@ class Worker(threading.Thread):
 
     def run(self):
         self.store = Store(self.dbpath)
+        from ocr_runtime import configure
+        configure(self.config)
         while True:
             try:
                 cmd, data = self.commands.get(timeout=1)
@@ -56,6 +58,7 @@ class Worker(threading.Thread):
                         updated=deepcopy(data)
                         preferences=preserve_changed_profiles(self.config,updated)
                         self.config = updated
+                        configure(self.config)
                         if preferences:self.emit("folder_preferences",preferences)
                         if self.watch and previous_downloads!=updated.get("downloads"):
                             self.seen=self.files();self.pending={}
@@ -474,13 +477,9 @@ class App:
         root.geometry(f"{min(1180,root.winfo_screenwidth()-60)}x{min(900,root.winfo_screenheight()-100)}")
         root.minsize(1000, 660)
         root.configure(bg="#f3f5f8")
-        style = ttk.Style(root)
-        style.theme_use("clam")
-        style.configure("Treeview", rowheight=31, font=("맑은 고딕", 10))
-        style.configure("Treeview.Heading", font=("맑은 고딕", 10, "bold"))
-        style.configure("TButton", padding=(12, 7), font=("맑은 고딕", 10))
-        style.configure("TLabel", font=("맑은 고딕", 10))
-        outer = ttk.Frame(root, padding=20)
+        from modern_ui import apply_theme
+        apply_theme(root)
+        outer = ttk.Frame(root, padding=20,style='App.TFrame')
         outer.pack(fill="both", expand=True)
         from workflow_ui import WorkflowShell
         self.workflow = WorkflowShell(self, outer)
@@ -500,6 +499,24 @@ class App:
         root.after(200, self.poll)
         if not smoke:
             root.after(100, self.startup)
+            root.after(1000,self.prepare_ocr_background)
+
+    def prepare_ocr_background(self):
+        if getattr(self,'closing',False) or self.updating:return
+        if self.startup_gate:
+            self.root.after(1000,self.prepare_ocr_background);return
+        if not getattr(sys,'frozen',False):return
+        config=dict(self.config)
+        def prepare():
+            from ocr_runtime import installed,ensure
+            try:
+                if installed(config):return
+                self.events.put(('status','최초 OCR 구성 준비 중 · 프로그램은 계속 사용할 수 있습니다.'))
+                ensure(config)
+                if not self.worker.working.is_set():self.events.put(('status','OCR 구성 준비 완료 · 다음 실행부터 설치된 파일을 재사용합니다.'))
+            except Exception:
+                if not self.worker.working.is_set():self.events.put(('status','OCR 구성은 PDF를 읽을 때 다시 준비합니다.'))
+        threading.Thread(target=prepare,daemon=True).start()
 
     def render(self, job):
         key = job["hash"]
@@ -956,6 +973,17 @@ class App:
 
 
 def main():
+    ocr_test_data=None
+    if '--ocr-data' in sys.argv:
+        index=sys.argv.index('--ocr-data');ocr_test_data=sys.argv[index+1]
+        from ocr_runtime import configure
+        configure({'_auth_data_dir':ocr_test_data})
+        del sys.argv[index:index+2]
+    if len(sys.argv) in (3,4) and sys.argv[1]=='--prepare-ocr-runtime':
+        from ocr_runtime import ensure
+        source=Path(sys.argv[2]);config={'_auth_data_dir':sys.argv[3] if len(sys.argv)==4 else str(DATA),'ocr_source':sys.argv[2]}
+        ensure(config,archive=source if not sys.argv[2].startswith('https://') and source.is_file() else None)
+        return
     if len(sys.argv)==3 and sys.argv[1]=='--test-update-restart':
         from updater import apply_plan
         apply_plan(sys.argv[2],test_restart=True)
@@ -1048,10 +1076,13 @@ def main():
             assert len(OUTGOING_TABS)==3 and etree.fromstring(b"<test/>").tag=="test"
             import pypdfium2
             from ocr import run_engine, runtime_path
-            assert (runtime_path() / "tessdata" / "kor.traineddata").is_file()
             import subprocess
-            check = subprocess.run([str(runtime_path() / "tesseract.exe"), "--list-langs", "--tessdata-dir", str(runtime_path() / "tessdata")], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
-            assert check.returncode == 0 and b"kor" in check.stdout and b"eng" in check.stdout
+            runtime=runtime_path(prepare=False)
+            if ocr_test_data:assert runtime is not None
+            if runtime:
+                assert (runtime / 'tessdata' / 'kor.traineddata').is_file()
+                check = subprocess.run([str(runtime / 'tesseract.exe'), '--list-langs', '--tessdata-dir', str(runtime / 'tessdata')], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
+                assert check.returncode==0 and b'kor' in check.stdout and b'eng' in check.stdout
             root.withdraw()
             with tempfile.TemporaryDirectory() as temporary:
                 app = App(root, temporary, smoke=True)
