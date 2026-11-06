@@ -1,7 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
+from pathlib import Path
+from prepare_ocr_component import prepare
+prepare(Path(SPECPATH))
 
-datas = [('ocr-runtime', 'ocr-runtime')]
+datas = []
 binaries = []
 hiddenimports = ['google.auth.transport.requests', 'google.oauth2.service_account']
 tmp_ret = collect_all('pypdf')
