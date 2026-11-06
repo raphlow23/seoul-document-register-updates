@@ -25,6 +25,7 @@ CATEGORIES = {
     "기초센터 공문": ["00.기초센터 공문"],
     "서울시청 공문": ["0.시청공문"],
     "중앙센터 공문": ["0.중앙센터 공문"],
+    "완화공문": ["3.완화신청"],
     "중앙센터 편의시설 지침": ["0.중앙센터 공문", r"5.보건복지부 및 중앙처리지침\1. 중앙지침(처리지침, 업무연락 등)"],
     "중앙센터 전달 보건복지부 지침": ["0.중앙센터 공문", r"5.보건복지부 및 중앙처리지침\0. 보건복지부 지침"],
 }
@@ -611,7 +612,7 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
     if job["category"] not in CATEGORIES:
         raise ValueError("분류를 선택해 주세요.")
     if not job.get("issuer"):
-        job["issuer"] = "서울시청" if job["category"] == "서울시청 공문" else "기초센터" if job["category"] == "기초센터 공문" else "중앙센터"
+        job["issuer"] = (job.get('routing',{}).get('relief',{}).get('district') or '서울시청') if job['category']=='완화공문' else "서울시청" if job["category"] == "서울시청 공문" else "기초센터" if job["category"] == "기초센터 공문" else "중앙센터"
     if job.get("routing"):
         from folder_naming import plan_folders, copy_to_subfolders
         plan_folders(job, config["root"])
