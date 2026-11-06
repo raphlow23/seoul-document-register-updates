@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 $packageRoot = $PSScriptRoot
 $installRoot = Join-Path $env:LOCALAPPDATA 'SeoulDocumentRegister\Program'
 $sourceExe = Join-Path $packageRoot 'SeoulDocumentRegister.exe'
@@ -31,12 +31,20 @@ $shortcut.Description = '다운로드한 공문 분류, 저장 및 수신등록'
 $shortcut.Save()
 $spacingMessage = ''
 try {
+    $ocrFeed = Join-Path $packageRoot '업데이트배포'
+    $ocrArguments = @('--prepare-ocr-runtime', ('"' + $ocrFeed + '"'))
+    $ocrProcess = Start-Process -FilePath (Join-Path $installRoot 'SeoulDocumentRegister.exe') -ArgumentList $ocrArguments -WindowStyle Hidden -Wait -PassThru
+    if ($ocrProcess.ExitCode -ne 0) { throw 'OCR 구성 설치를 완료하지 못했습니다. 첫 PDF 확인 시 다시 준비합니다.' }
+} catch {
+    $spacingMessage = "`nOCR 준비: " + $_.Exception.Message
+}
+try {
     $modelFeed = Join-Path $packageRoot '업데이트배포'
     $modelArguments = @('--prepare-spacing-model', ('"' + $modelFeed + '"'))
     $modelProcess = Start-Process -FilePath (Join-Path $installRoot 'SeoulDocumentRegister.exe') -ArgumentList $modelArguments -WindowStyle Hidden -Wait -PassThru
     if ($modelProcess.ExitCode -ne 0) { throw '한국어 띄어쓰기 모델 설치를 완료하지 못했습니다.' }
 } catch {
-    $spacingMessage = "`n띄어쓰기 준비: " + $_.Exception.Message
+    $spacingMessage += "`n띄어쓰기 준비: " + $_.Exception.Message
 }
 $updateMessage = "`n앞으로 실행할 때 GitHub에서 새 버전을 내려받아 자동 업데이트합니다. 공문 양식과 기존 설정은 이 PC에 보관됩니다."
 Add-Type -AssemblyName System.Windows.Forms
