@@ -5,12 +5,25 @@ from outgoing_editor import folder_settings_dialog
 
 
 def open_settings(app):
-    win=tk.Toplevel(app.root);win.title("설정 · Google 연결");win.geometry("900x690")
+    win=tk.Toplevel(app.root);win.title("설정 · Google 연결")
+    win.geometry(f"{min(960,win.winfo_screenwidth()-60)}x{min(800,win.winfo_screenheight()-100)}");win.minsize(760,480)
     win.transient(app.root);win.grab_set()
     outer=ttk.Frame(win,padding=20);outer.pack(fill="both",expand=True)
+    bottom=ttk.Frame(outer);bottom.pack(side='bottom',fill="x",pady=(14,0))
     tabs=ttk.Notebook(outer);tabs.pack(fill="both",expand=True)
-    basic=ttk.Frame(tabs,padding=16);advanced=ttk.Frame(tabs,padding=16)
-    tabs.add(basic,text="기본 설정");tabs.add(advanced,text="고급 설정 (필요할 때만)")
+    basic_host=ttk.Frame(tabs,padding=12);advanced_host=ttk.Frame(tabs,padding=12)
+    tabs.add(basic_host,text="기본 설정");tabs.add(advanced_host,text="고급 설정 (필요할 때만)")
+    from modern_ui import ScrollablePanel
+    basic_scroll=ScrollablePanel(basic_host);basic_scroll.pack(fill='both',expand=True);basic=basic_scroll.body
+    advanced_scroll=ScrollablePanel(advanced_host);advanced_scroll.pack(fill='both',expand=True);advanced=advanced_scroll.body
+    def fit_labels(panel,event):
+        def visit(widget):
+            if isinstance(widget,ttk.Label) and str(widget.cget('wraplength')) not in ('','0'):
+                widget.configure(wraplength=max(220,event.width-48))
+            for child in widget.winfo_children():visit(child)
+        visit(panel.body)
+    for panel in (basic_scroll,advanced_scroll):panel.canvas.bind('<Configure>',lambda e,p=panel:fit_labels(p,e),add='+')
+    win.settings_parts={'footer':bottom,'tabs':tabs,'basic':basic_scroll,'advanced':advanced_scroll}
     fields={k:tk.StringVar(value=str(app.config.get(k,""))) for k in ("downloads","root","recipient","spreadsheet_id","tab","update_url","oauth_client_path","key_path")}
     def entry(parent,row,key,label,browse=False):
         ttk.Label(parent,text=label).grid(row=row,column=0,sticky="w",pady=9)
@@ -63,10 +76,10 @@ def open_settings(app):
             app.busy=True;app.commands.put((cmd,None))
     for label,kind in (("Google 로그인","browser"),("연결 확인","test"),("시트 열기","open")):
         ttk.Button(row,text=label,command=lambda k=kind:action(k)).pack(side="left",padx=(0,8))
-    bottom=ttk.Frame(outer);bottom.pack(fill="x",pady=(14,0))
     ttk.Button(bottom,text="업데이트 확인",command=lambda:action("update")).pack(side="left")
     def save():
         if not app.workflow.available():return
         persist();win.destroy();app.status.set("설정을 저장했습니다.")
-    ttk.Button(bottom,text="설정 저장",command=save).pack(side="right")
+    ttk.Button(bottom,text="설정 저장",command=save,style='Accent.TButton').pack(side="right")
     ttk.Button(bottom,text="닫기",command=win.destroy).pack(side="right",padx=8)
+    return win

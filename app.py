@@ -475,7 +475,7 @@ class App:
         root.bind_all("<ButtonPress>", self.activity, add="+")
         root.title(f"서울센터 공문 업무 v{VERSION}")
         from app_icon import apply_window_icon
-        apply_window_icon(root)
+        apply_window_icon(root,self.data)
         root.geometry(f"{min(1180,root.winfo_screenwidth()-60)}x{min(900,root.winfo_screenheight()-100)}")
         root.minsize(1000, 660)
         root.configure(bg="#f3f5f8")
@@ -975,6 +975,9 @@ class App:
 
 
 def main():
+    if len(sys.argv)==3 and sys.argv[1]=='--test-taskbar':
+        from taskbar_smoke import run
+        run(sys.argv[2]);return
     ocr_test_data=None
     if '--ocr-data' in sys.argv:
         index=sys.argv.index('--ocr-data');ocr_test_data=sys.argv[index+1]
@@ -1053,6 +1056,13 @@ def main():
             ctypes.windll.user32.MessageBoxW(None, "프로그램이 이미 실행 중입니다.", "서울센터 공문 수신등록", 0)
             return
     try:
+        from app_icon import prepare_process_identity,prepare_desktop_identity
+        prepare_process_identity()
+        if getattr(sys,'frozen',False) and '--self-test' not in sys.argv and '--test-restart' not in sys.argv:
+            try:prepare_desktop_identity(DATA,sys.executable)
+            except Exception as error:
+                DATA.mkdir(parents=True,exist_ok=True)
+                (DATA/'taskbar-setup-error.txt').write_text(str(error),encoding='utf-8')
         from file_drop import create_root
         root = create_root()
         if "--self-test" in sys.argv:

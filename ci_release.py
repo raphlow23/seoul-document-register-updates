@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — OCR DLL 누락 수정·완화공문 기본 제목·새 아이콘","draft":True,"prerelease":False,"body":"OCR의 필수 libcurl.dll 및 재귀 DLL 의존성을 배포 구성에 포함하고 필수 DLL이 빠지면 빌드를 중단합니다. 개발 PC의 Git 등 설치 경로를 제외한 환경에서 외부 OCR을 실행·검증하고 Windows DLL 오류창 때문에 멈추는 상황을 방지합니다. 제목 확인 화면에서 완화공문을 선택하는 즉시 완화된 세부기준의 승인신청에 따른 의견 요청(주소)을 기본 입력합니다. 신청서·붙임 같은 파일명 표기는 주소로 사용하지 않고 선택한 첨부파일의 주소를 우선 가져옵니다. 뒤늦게 도착한 OCR 본문이 기본 제목이나 직접 수정한 제목을 덮어쓰지 않도록 합니다. 사용자 선택에 따라 파란 문서·흰색 선과 테두리·민트/파란 화살표의 투명 아이콘을 실행 파일·창·바로가기에 적용합니다. 설정·이력·한글 양식은 보존하며 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 작업표시줄 아이콘 연결·설정 메뉴 잘림 수정","draft":True,"prerelease":False,"body":"실행 중인 창에 아이콘을 명시적으로 지정하고 Windows 작업표시줄의 앱 식별자·다시 실행 아이콘·실행 명령을 같은 프로그램으로 연결합니다. 작업표시줄 아이콘은 종료 시 사라지는 임시 폴더 대신 사용자 프로그램 자료 폴더에 보관합니다. 기존 바로가기 중 실행 대상이 이 프로그램과 일치하는 항목만 아이콘과 앱 식별자를 갱신하고 다른 앱 및 기존 실행 인자는 유지합니다. 설정 창의 저장·닫기·업데이트 버튼이 항상 보이도록 배치를 바꾸고 기본/고급 설정은 스크롤할 수 있게 했습니다. 실제 Windows 창 아이콘 핸들·작업표시줄 속성·바로가기 연결과 작은 설정 창의 메뉴 표시를 검증합니다. OCR DLL 수정·완화공문 기본 제목·자동 업데이트와 기존 설정·이력·양식 보존을 유지하며 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -79,7 +79,12 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout"],check=True,timeout=90)
+    taskbar=out/'taskbar-check.json'
+    subprocess.run([str(exe),'--test-taskbar',str(taskbar)],check=True,timeout=90)
+    taskbar_result=json.loads(taskbar.read_text(encoding='utf-8'))
+    assert taskbar_result['big_icon'] and taskbar_result['small_icon'] and taskbar_result['owned_shortcut_repaired']
+    print('Native taskbar and shortcut verification:',taskbar.read_text(encoding='utf-8'))
     from updater import restart_target
     print("Frozen post-update GUI readiness:", restart_target(exe,out,VERSION,test=True))
     startup=out/"browser-startup.json"
