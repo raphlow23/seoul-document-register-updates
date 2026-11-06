@@ -976,8 +976,14 @@ class App:
 
 def main():
     if len(sys.argv)==3 and sys.argv[1]=='--test-taskbar':
-        from taskbar_smoke import run
-        run(sys.argv[2]);return
+        try:
+            from taskbar_smoke import run
+            run(sys.argv[2])
+        except Exception:
+            import traceback
+            Path(sys.argv[2]+'.error.txt').write_text(traceback.format_exc(),encoding='utf-8')
+            sys.exit(1)
+        return
     ocr_test_data=None
     if '--ocr-data' in sys.argv:
         index=sys.argv.index('--ocr-data');ocr_test_data=sys.argv[index+1]

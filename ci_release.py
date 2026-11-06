@@ -81,7 +81,11 @@ def build():
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
     subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout"],check=True,timeout=90)
     taskbar=out/'taskbar-check.json'
-    subprocess.run([str(exe),'--test-taskbar',str(taskbar)],check=True,timeout=90)
+    taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
+    if taskbar_run.returncode:
+        error=Path(str(taskbar)+'.error.txt')
+        if error.is_file():print(error.read_text(encoding='utf-8'),flush=True)
+        taskbar_run.check_returncode()
     taskbar_result=json.loads(taskbar.read_text(encoding='utf-8'))
     assert taskbar_result['big_icon'] and taskbar_result['small_icon'] and taskbar_result['owned_shortcut_repaired']
     print('Native taskbar and shortcut verification:',taskbar.read_text(encoding='utf-8'))

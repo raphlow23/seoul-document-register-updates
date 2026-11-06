@@ -7,6 +7,7 @@ prepare(Path(SPECPATH))
 datas = [('assets/app_icon.ico','assets'),('assets/app_icon.png','assets')]
 binaries = []
 hiddenimports = ['google.auth.transport.requests', 'google.oauth2.service_account']
+hiddenimports += ['win32com.propsys.propsys', 'win32com.propsys.pscon']
 tmp_ret = collect_all('pypdf')
 datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
 tmp_ret = collect_all('pypdfium2')
