@@ -8,15 +8,17 @@ import string
 AGENCIES = {
     "기초센터 공문": ["00.기초센터 공문"],
     "중앙센터 공문": ["0.중앙센터 공문", "5.보건복지부 및 중앙처리지침", "8.실태조사"],
-    "서울시청 공문": ["0.시청공문", "1.건축허가&사업계획승인", "2.사용승인&사용검사", "3.완화신청", "8.실태조사"],
+    "서울시청 공문": ["0.시청공문", "1.건축허가&사업계획승인", "2.사용승인&사용검사", "8.실태조사"],
+    "완화공문": ["3.완화신청"],
 }
 TEMPLATES = ("{date}_{title}", "{ymd}_{title}", "{dotdate} {title}", "{year}-{number:03d} {title}", "{number:03d}. {title}", "{title}")
 CHILD_KINDS=("incoming","outgoing","reply")
-ALL_CHILD_KINDS=('incoming','outgoing','drawings','photos','reply')
+ALL_CHILD_KINDS=('incoming','outgoing','drawings','photos','reply','relief')
 
 
 def child_kinds(location):
     parts=PureWindowsPath(str(location)).parts
+    if '3.완화신청' in parts:return ('relief',)
     if any('사용승인&사용검사' in p for p in parts):return ('incoming','drawings','photos','reply')
     if any('건축허가&사업계획승인' in p for p in parts):return ('incoming','drawings','reply')
     return CHILD_KINDS
@@ -40,8 +42,8 @@ AGENCY_SUFFIX=re.compile(r"(\s*\((?:[^()\r\n]*(?:센터|시청|중앙|기초|서
 def child_folders(agency,selected,order=None):
     keys=list(dict.fromkeys([*selected,*(order or [])]))
     if any(k not in ALL_CHILD_KINDS and not (isinstance(k,str) and k.startswith('custom:') and k[7:].strip()) for k in keys):raise ValueError("하위 폴더 선택이 올바르지 않습니다.")
-    prefix={"기초센터 공문":"기초","중앙센터 공문":"중앙","서울시청 공문":"시청"}[agency]
-    labels={"incoming":prefix+"공문","outgoing":"센터발송","drawings":"협의도면","photos":"현장사진","reply":prefix+"회신"}
+    prefix={"기초센터 공문":"기초","중앙센터 공문":"중앙","서울시청 공문":"시청","완화공문":"완화"}[agency]
+    labels={"incoming":prefix+"공문","outgoing":"센터발송","drawings":"협의도면","photos":"현장사진","reply":prefix+"회신",'relief':'완화신청자료'}
     labels.update({k:safe_component(k[7:]) for k in keys if k.startswith('custom:')})
     sequence=list(order) if order is not None else [*ALL_CHILD_KINDS,*[k for k in selected if k.startswith('custom:')]]
     if len(sequence)!=len(set(sequence)) or any(k not in sequence for k in selected):raise ValueError('하위 폴더 순서를 확인해 주세요.')
@@ -49,7 +51,7 @@ def child_folders(agency,selected,order=None):
 
 
 def agency_for(category):
-    return "중앙센터 공문" if "중앙" in category else "기초센터 공문" if "기초" in category else "서울시청 공문" if "시청" in category else ""
+    return '완화공문' if category=='완화공문' else "중앙센터 공문" if "중앙" in category else "기초센터 공문" if "기초" in category else "서울시청 공문" if "시청" in category else ""
 
 
 def safe_component(text):
@@ -296,7 +298,8 @@ def preflight(job, root):
         relative = target["relative"]
         if relative in seen: raise ValueError("같은 저장 위치를 두 번 선택했습니다.")
         seen.add(relative)
-        if not any(relative == p or PureWindowsPath(relative).is_relative_to(PureWindowsPath(p)) for p in AGENCIES[agency]):
+        legacy_relief=(agency=='서울시청 공문' and relative=='3.완화신청' and (job.get('files_started') or job.get('receipt_done')))
+        if not legacy_relief and not any(relative == p or PureWindowsPath(relative).is_relative_to(PureWindowsPath(p)) for p in AGENCIES[agency]):
             raise ValueError("선택한 공문 종류에 포함된 저장 폴더를 선택해 주세요.")
         destination(root, relative)
         if target.get('storage_mode')!='year':folder_name(target["template"], target.get("folder_title") or routing.get("folder_title") or job["title"], job["date"], target.get("folder_number"))
@@ -347,7 +350,7 @@ def copy_to_subfolders(job, root, on_progress=None):
         children=receipt_children(job['routing'],target)
         for child in children.values():(folder/child).mkdir(exist_ok=True)
         # Incoming attachments belong to the source-letter folder when it is selected.
-        incoming=children.get("incoming")
+        incoming=children.get("incoming") or children.get('relief')
         relative=str(Path(name)/incoming) if incoming else name
         results.extend(copy_files(job, parent, subfolders=[relative],on_progress=on_progress))
     return results
