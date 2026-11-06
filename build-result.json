@@ -1,11 +1,11 @@
 {
   "manifest": {
     "product": "SeoulDocumentRegister",
-    "version": "2.7.8",
-    "filename": "SeoulDocumentRegister-2.7.8.exe",
-    "size": 55093354,
-    "sha256": "65e48be1d9a0eb45cd018a0c1dadebe9d74400c8eaeef90ba93b212aed772a29",
-    "download_base": "https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.7.8",
+    "version": "2.7.9",
+    "filename": "SeoulDocumentRegister-2.7.9.exe",
+    "size": 55176909,
+    "sha256": "a93ffa05b1aba2365dd5568958a8e1f5403788aab072267b69b928c1904333c7",
+    "download_base": "https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.7.9",
     "components": {
       "spacing_model": {
         "filename": "SpacingModel-0.20.0.zip",
@@ -22,9 +22,9 @@
   },
   "assets": [
     {
-      "name": "SeoulDocumentRegister-2.7.8.exe",
-      "size": 55093354,
-      "sha256": "65e48be1d9a0eb45cd018a0c1dadebe9d74400c8eaeef90ba93b212aed772a29"
+      "name": "SeoulDocumentRegister-2.7.9.exe",
+      "size": 55176909,
+      "sha256": "a93ffa05b1aba2365dd5568958a8e1f5403788aab072267b69b928c1904333c7"
     },
     {
       "name": "SpacingModel-0.20.0.zip",
@@ -34,7 +34,7 @@
     {
       "name": "ThirdPartyNotices.zip",
       "size": 9614137,
-      "sha256": "417136b1a405f430a0d0dcc455ecc57cfca368a8f27978549f46b0eeb85ed0a0"
+      "sha256": "397e699eed19a68adb5e859f8b7d8c3d4ba86905bb65be386197bf1398b222d4"
     },
     {
       "name": "OCRRuntime-9be277fb4d839648.zip",
