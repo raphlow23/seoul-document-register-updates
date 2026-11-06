@@ -15,6 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
+RELEASE_TITLE='작업표시줄 아이콘 확대·하단 안내·발신 초기화'
+RELEASE_BODY='기존 아이콘의 문서·화살표·색상과 투명 배경을 유지하면서 작은 Windows 아이콘 프레임의 그림 너비를 약 33% 키웠습니다. 메인 화면 하단 안내의 높이를 먼저 확보하고 창 너비에 맞춰 줄바꿈해 글자 잘림을 수정했습니다. 발신 작성 목록에 발신 초기화·다시 시작과 목록 삭제를 추가했습니다. 기존 발신·직인 등록 진행은 새 작성에 재사용하지 않고 양식 선택부터 시작하며 등록 시 최신 대장에서 새 번호를 받습니다. 수신 접수·기존 구글시트 행·파일은 보존합니다. 206개 검사와 실제 설치 파일의 화면·아이콘·새 발신 진행·자동 업데이트 및 재실행을 검증하며 최신·직전 릴리스만 보관합니다.'
 _release_id = None
 
 
@@ -37,7 +39,11 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 작업표시줄 아이콘 연결·설정 메뉴 잘림 수정","draft":True,"prerelease":False,"body":"실행 중인 창에 아이콘을 명시적으로 지정하고 Windows 작업표시줄의 앱 식별자·다시 실행 아이콘·실행 명령을 같은 프로그램으로 연결합니다. 작업표시줄 아이콘은 종료 시 사라지는 임시 폴더 대신 사용자 프로그램 자료 폴더에 보관합니다. 기존 바로가기 중 실행 대상이 이 프로그램과 일치하는 항목만 아이콘과 앱 식별자를 갱신하고 다른 앱 및 기존 실행 인자는 유지합니다. 설정 창의 저장·닫기·업데이트 버튼이 항상 보이도록 배치를 바꾸고 기본/고급 설정은 스크롤할 수 있게 했습니다. 실제 Windows 창 아이콘 핸들·작업표시줄 속성·바로가기 연결과 작은 설정 창의 메뉴 표시를 검증합니다. OCR DLL 수정·완화공문 기본 제목·자동 업데이트와 기존 설정·이력·양식 보존을 유지하며 최신·직전 릴리스만 보관합니다.",**({"name":"v"+VERSION+" — 작업표시줄 아이콘 확대","body":"기존 아이콘의 파란 문서·흰 선·민트 및 파란 화살표를 유지하면서 투명 여백을 줄였습니다. 16·20·24·32·40·48·64·96·128·256픽셀 프레임을 각각 다시 포장해 작업표시줄의 실제 그림 크기를 약 33% 키웠습니다. 기존 아이콘 연결·설정 창·자동 업데이트를 유지하며 새 아이콘 리소스, 실제 창 아이콘 및 바로가기 속성을 검증합니다. 기존 설정·이력·양식은 유지하고 최신·직전 릴리스만 보관합니다."} if VERSION=="2.7.9" else {})},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — "+RELEASE_TITLE,"draft":True,"prerelease":False,"body":RELEASE_BODY},timeout=30)
+        response.raise_for_status();result=response.json()
+    elif result is not None and create:
+        assert result['draft'], 'Published releases must not be rebuilt'
+        response=requests.patch(f"{API}/releases/{result['id']}",headers=headers(),json={'name':'v'+VERSION+' — '+RELEASE_TITLE,'body':RELEASE_BODY},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -79,7 +85,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart"],check=True,timeout=90)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:

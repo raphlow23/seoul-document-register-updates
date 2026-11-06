@@ -48,6 +48,9 @@ def run():
         def idle():wait(lambda:not app.busy and not app.worker.working.is_set() and app.commands.empty())
         def check_actions():
             root.deiconify();root.geometry("1000x660");root.update_idletasks()
+            for label in flow.status_labels:
+                assert label.winfo_height()>=label.winfo_reqheight(), 'Status text is vertically clipped'
+                assert label.winfo_rooty()+label.winfo_height()<=root.winfo_rooty()+root.winfo_height()-16, 'Status footer has no bottom clearance'
             def walk(widget):
                 for child in widget.winfo_children():
                     if isinstance(child,ttk.Button) and child.winfo_ismapped():
@@ -189,6 +192,20 @@ def run():
                     rows=[json.loads(row[0]) for row in db.execute('SELECT payload FROM jobs')]
                     assert all(next(row for row in rows if row['hash']==key)['history_hidden'] for key in (h0,'history-fixture-2'))
                 assert writes==['receipt','outgoing'] and app.jobs[h0]['number']=='581' and app.jobs[h0]['outgoing']['number']=='12'
+                # Cancelled outgoing progress must not survive either list action.
+                flow.outgoing_home();flow.outgoing_list_tree.selection_set(h0)
+                previous_id=app.jobs[h0]['outgoing']['id'];flow.drafts[h0]={'number':'12'}
+                with patch('workflow_ui.messagebox.askyesno',return_value=False):flow.restart_outgoing()
+                assert app.jobs[h0]['outgoing']['id']==previous_id
+                with patch('workflow_ui.messagebox.askyesno',return_value=True):flow.restart_outgoing()
+                wait(lambda:flow.section=='outgoing' and flow.step==2);idle()
+                assert app.jobs[h0]['outgoing']['id']!=previous_id and 'number' not in app.jobs[h0]['outgoing']
+                assert h0 not in flow.drafts and app.jobs[h0]['number']=='581' and writes==['receipt','outgoing']
+                check_actions();flow.outgoing_home();flow.outgoing_list_tree.selection_set(h0)
+                with patch('workflow_ui.messagebox.askyesno',return_value=True):flow.restart_outgoing(hide=True)
+                wait(lambda:not flow.outgoing_list_tree.exists(h0));idle()
+                assert app.jobs[h0]['receipt_done'] and app.jobs[h0]['outgoing_list_hidden'] and app.jobs[h0]['number']=='581'
+                flow.start_outgoing(app.jobs[h0]);assert flow.step==2 and 'number' not in app.jobs[h0]['outgoing']
                 pending={**deepcopy(jobs[1]),"hash":"missing","files":[{"hash":"missing","path":str(downloads/"gone.pdf")}],"state":"확인 필요"}
                 app.render(pending);assert not app.tree.exists("missing")
                 assert not errors,errors

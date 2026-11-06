@@ -45,14 +45,22 @@ class WorkflowShell:
         app.watching=tk.BooleanVar(value=False)
         ttk.Checkbutton(nav,text="다운로드 자동 확인",variable=app.watching,command=app.toggle_watch).pack(side="right")
         self.steps=tk.StringVar();ttk.Label(outer,textvariable=self.steps,foreground="#1c5295",font=("맑은 고딕",11,"bold"),style='App.TLabel').pack(anchor="w",pady=(0,8))
-        self.content=ttk.Frame(outer,style='Card.TFrame',padding=16);self.content.pack(fill="both",expand=True)
+        self.content=ttk.Frame(outer,style='Card.TFrame',padding=16)
         self.pages={key:ttk.Frame(self.content) for key in ("queue","title","route","receipt_result","outgoing_list","outgoing_types","outgoing_form","outgoing_result","history")}
         app.fields={k:tk.StringVar() for k in ("title","category","recipient","date","issuer","receipt_type")}
         app.outgoing_enabled=tk.BooleanVar(value=False);app.detail=tk.StringVar()
         app.status=tk.StringVar(value="같은 메일에서 받은 첨부파일을 선택하고 다음으로 진행하세요.")
         app.update_status=tk.StringVar();app.auth_status=tk.StringVar(value="브라우저 로그인 방식 · API 설정 불필요" if app.config.get("auth_mode")=="browser" else "Google 계정 연결")
-        ttk.Label(outer,textvariable=app.status,foreground="#1c5295",wraplength=1000).pack(fill="x",pady=(10,2))
-        ttk.Label(outer,textvariable=app.update_status,foreground="#667085").pack(anchor="w")
+        # Reserve the status area's requested height before allocating space to document pages.
+        self.footer=ttk.Frame(outer,style='App.TFrame',padding=(0,8,0,2));self.footer.pack(side='bottom',fill='x')
+        self.status_labels=[]
+        for variable,color in ((app.status,'#1c5295'),(app.update_status,'#667085')):
+            label=ttk.Label(self.footer,textvariable=variable,foreground=color,wraplength=1000,style='App.TLabel',padding=(0,2))
+            label.pack(fill='x');self.status_labels.append(label)
+        def fit_status(event):
+            for label in self.status_labels:label.configure(wraplength=max(1,event.width-8))
+        self.footer.bind('<Configure>',fit_status)
+        self.content.pack(fill='both',expand=True)
         self.build_queue();self.build_history();self.show("queue","receipt",1)
 
     def available(self):
@@ -122,6 +130,10 @@ class WorkflowShell:
                 tree.bind('<Delete>',lambda event:self.app.hide_history())
                 tree.bind('<Control-a>',lambda event,t=tree:(t.selection_set(t.get_children('')),'break')[-1])
                 ttk.Label(page,text='Ctrl·Shift로 여러 항목 선택 → 목록 삭제. 파일·시트·접수번호는 유지됩니다.',foreground='#667085').pack(fill='x',before=bar,pady=(6,0))
+            else:
+                ttk.Button(bar,text='발신 초기화 · 다시 시작',command=self.restart_outgoing).pack(side='left')
+                ttk.Button(bar,text='목록에서 삭제',command=lambda:self.restart_outgoing(hide=True)).pack(side='left',padx=6)
+                tree.bind('<Delete>',lambda event:self.restart_outgoing(hide=True))
             ttk.Button(bar,text="공문에 첨부 추가",command=self.add_attachments).pack(side="left",padx=6)
             ttk.Button(bar,text="이 문서로 발신 작성",command=self.start_outgoing_selected).pack(side="right")
 
@@ -153,7 +165,25 @@ class WorkflowShell:
         numbers=str(job.get("number", ""))+(" / "+str(out["number"]) if out.get("number") else "")
         vals=(job.get("date",""),job["title"],numbers,job["state"])
         self.row(self.history_tree,key,received and not alias and not job.get('history_hidden'),vals)
-        self.row(self.outgoing_list_tree,key,received and not alias,vals)
+        self.row(self.outgoing_list_tree,key,received and not alias and not job.get('outgoing_list_hidden'),vals)
+
+    def restart_outgoing(self,hide=False):
+        if not self.available():return
+        jobs=self.selected_jobs()
+        if len(jobs)!=1:return messagebox.showinfo('발신 문서 선택','초기화하거나 목록에서 삭제할 문서 한 개를 선택하세요.')
+        job=jobs[0]
+        text=('이 문서의 발신 진행을 초기화하고 발신 목록에서 제외할까요?' if hide else '이 문서의 발신 진행을 초기화하고 양식 선택부터 다시 시작할까요?')
+        text+='\n\n기존 발신번호·직인 등록 진행은 다시 사용하지 않습니다. 다음 등록 때 구글시트를 다시 읽어 새 발신번호를 받습니다.\n수신 접수·기존 시트 행·저장된 파일은 그대로 유지합니다.'
+        if not messagebox.askyesno('발신 초기화 확인',text,parent=self.app.root):return
+        self.app.send('outgoing_restart',{'hash':job['hash'],'expected_id':job.get('outgoing',{}).get('id'),'hide':hide})
+
+    def outgoing_restarted(self,data):
+        key=data['hash'];self.drafts.pop(key,None);self.pending_register=None;self.pending_open=None
+        def ready():
+            if not self.available():return self.app.root.after(50,ready)
+            if data.get('hide'):self.outgoing_home()
+            else:self.start_outgoing(self.app.jobs[key])
+        self.app.root.after(50,ready)
 
     @staticmethod
     def row(tree,key,visible,values):

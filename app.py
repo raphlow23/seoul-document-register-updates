@@ -106,6 +106,13 @@ class Worker(threading.Thread):
                         self.hide_list(data)
                     elif cmd == 'hide_history':
                         self.hide_list(data,history=True)
+                    elif cmd == 'outgoing_restart':
+                        from outgoing_restart import restart
+                        job=self.store.get(data['hash'])
+                        if not job:raise ValueError('초기화할 문서 이력을 찾지 못했습니다.')
+                        result=restart(job,self.config,self.store,hide=data.get('hide',False),expected_id=data.get('expected_id'))
+                        self.emit('job',result)
+                        self.emit('outgoing_restart_done',{**data,'job':result})
                     elif cmd == "google_login":
                         config = {**self.config, **data, "auth_mode": "oauth"}
                         self.emit("status", "브라우저의 Google 로그인 창에서 편집 권한이 있는 계정을 선택해 주세요.")
@@ -163,6 +170,7 @@ class Worker(threading.Thread):
                             if not job.get("files_started"):job.update(data.get("receipt_fields",{}))
                             elif data.get("receipt_fields",{}).get("receipt_type"):job["receipt_type"]=data["receipt_fields"]["receipt_type"]
                         merge_edit(job,data["outgoing"])
+                        job.pop('outgoing_list_hidden',None)
                         plan=job["outgoing"].get("folder_plan")
                         if plan:
                             from folder_naming import remember_profile
@@ -562,6 +570,10 @@ class App:
                     self.busy=False
                     self.workflow.attachments_added(data['job'])
                     self.status.set(data['job']['reason'])
+                elif kind == 'outgoing_restart_done':
+                    self.busy=False
+                    self.workflow.outgoing_restarted(data)
+                    self.status.set(data['job']['reason']+' · 기존 구글시트 행과 파일은 유지합니다.')
                 elif kind in ("completed","files_resaved"):
                     out=data.get("outgoing",{})
                     detail=f"수신 {data['number']}"+(f" · 발신 {out.get('number','')} · 직인대장 등록 완료" if out.get("enabled") else " · 저장·수신등록 완료")
