@@ -14,19 +14,8 @@ out = base / "ocr-runtime"
 out.mkdir(exist_ok=True)
 if not (library / "tesseract.exe").is_file():
     raise SystemExit("Create build-tools/ocr-env with conda-forge tesseract=5.5.1 and libarchive=3.8.11=lgpl* first")
-available = {p.name.lower(): p for p in library.iterdir() if p.suffix.lower() in (".exe", ".dll")}
-selected = {}
-pending = [library / "tesseract.exe"]
-while pending:
-    file = pending.pop()
-    if file.name.lower() in selected:
-        continue
-    selected[file.name.lower()] = file
-    with pefile.PE(str(file)) as pe:
-        for block in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []):
-            dependency = block.dll.decode("ascii").lower()
-            if dependency in available:
-                pending.append(available[dependency])
+from native_dependencies import collect
+selected = collect(library)
 for name, source in selected.items():
     shutil.copy2(source, out / source.name)
 models = out / "tessdata"

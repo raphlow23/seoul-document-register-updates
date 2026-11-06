@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 새 화면 디자인·시작 속도 개선·완화공문","draft":True,"prerelease":False,"body":"화면 전체에 밝은 카드 구성과 둥근 버튼·입력칸·체크박스·선택 표시를 적용합니다. 저장 위치의 문자 체크박스를 큰 체크 아이콘으로 바꾸고 최종 폴더 미리보기는 항상 보이도록 구성합니다. OCR 엔진과 한국어/영어 인식 자료를 실행 파일에서 분리합니다. 최초 설치나 업데이트 후 한 번 검증·설치하고 다음 실행부터 같은 파일을 재사용합니다. 기존 단일 실행 파일 업데이트와 호환되며 새 구조의 자동 업데이트·재실행을 검증합니다. 공문 기관과 저장 위치 선택에 완화공문을 별도로 추가합니다. 완화공문의 수신대장은 공문, 저장 위치는 3.완화신청, 기본 내부 폴더는 1.완화신청자료입니다. 서울시청 공문에서는 완화신청을 분리하고 기존에 시작한 저장·등록은 보호합니다. 구청명·접수 제목·폴더 이름 기본 형식과 수동 수정을 유지합니다. 개인 설정·이력·한글 양식은 보존하며 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — OCR DLL 누락 수정·완화공문 기본 제목·새 아이콘","draft":True,"prerelease":False,"body":"OCR의 필수 libcurl.dll 및 재귀 DLL 의존성을 배포 구성에 포함하고 필수 DLL이 빠지면 빌드를 중단합니다. 개발 PC의 Git 등 설치 경로를 제외한 환경에서 외부 OCR을 실행·검증하고 Windows DLL 오류창 때문에 멈추는 상황을 방지합니다. 제목 확인 화면에서 완화공문을 선택하는 즉시 완화된 세부기준의 승인신청에 따른 의견 요청(주소)을 기본 입력합니다. 신청서·붙임 같은 파일명 표기는 주소로 사용하지 않고 선택한 첨부파일의 주소를 우선 가져옵니다. 뒤늦게 도착한 OCR 본문이 기본 제목이나 직접 수정한 제목을 덮어쓰지 않도록 합니다. 사용자 선택에 따라 파란 문서·흰색 선과 테두리·민트/파란 화살표의 투명 아이콘을 실행 파일·창·바로가기에 적용합니다. 설정·이력·한글 양식은 보존하며 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -79,7 +79,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step"],check=True,timeout=90)
     from updater import restart_target
     print("Frozen post-update GUI readiness:", restart_target(exe,out,VERSION,test=True))
     startup=out/"browser-startup.json"

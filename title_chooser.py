@@ -24,6 +24,7 @@ class TitleChooser:
         self.zoom, self.scale = 1.0, 1.0
         self.selection = None
         self.mode = "manual"
+        self.relief_auto_title='';self.relief_manual_title=False;self.category_trace=None
         self.agency = ""
         self.loaded = False
         self.embedded = parent is not None
@@ -107,7 +108,34 @@ class TitleChooser:
             footer.pack_configure(side="bottom",before=panes,pady=(6,0))
             for widget in footer.winfo_children():
                 if isinstance(widget,ttk.Label):widget.configure(wraplength=430)
+        self.title.bind('<<Modified>>',self.title_modified)
+        if self.embedded:
+            self.category_var=self.app.fields['category']
+            self.category_trace=self.category_var.trace_add('write',self.category_changed)
+        else:self.category_var=tk.StringVar(value=self.primary.get('category',''))
+        self.category_changed()
         self.initial_after = self.win.after(100, self.load)
+
+    def is_relief(self):return self.category_var.get()=='완화공문'
+
+    def title_modified(self,_=None):
+        if self.title.edit_modified():
+            if self.is_relief():self.relief_manual_title=True
+            self.title.edit_modified(False)
+
+    def category_changed(self,*_):
+        if self.is_relief():
+            if self.embedded:self.app.fields['receipt_type'].set('공문')
+            self.relief_manual_title=False;self.set_relief_default(force=True)
+
+    def set_relief_default(self,force=False,text=''):
+        if not self.is_relief() or (self.relief_manual_title and not force):return
+        from relief_intake import source_fields,receipt_title
+        selected=self.selected_file()
+        probe={**self.primary,'files':[selected,*[f for f in self.files if f!=selected]],'text':text or self.primary.get('text','')}
+        fields=source_fields(probe);subject=fields['subject'] or '주소'
+        self.relief_auto_title=receipt_title(subject,fields['suffix'])
+        self.set_title(self.relief_auto_title)
 
     def selected_file(self):
         return self.files[max(0, self.file_box.current())]
@@ -164,23 +192,28 @@ class TitleChooser:
         for i, option in enumerate(options):
             tk.Radiobutton(self.options_frame, text=f"{option['label']}\n{option['title']}", variable=self.choice, value=i,
                            command=lambda o=option: self.choose(o), wraplength=430, anchor="w", justify="left", font=("맑은 고딕", 10)).pack(fill="x", anchor="w", pady=4)
+        preserve=self.title.get('1.0','end').strip() if self.is_relief() and self.relief_manual_title else None
         if options:
             self.choice.set(0)
-            self.choose(options[0])
+            self.choose(options[0],automatic=True)
         if hasattr(self,"resume_title"):
             self.set_title(self.resume_title);self.mode="manual";del self.resume_title
+        if preserve is not None:self.set_title(preserve)
+        elif self.is_relief():self.set_relief_default(text=payload['text'])
         self.draw()
         from attachment_files import can_extract
         self.status.set("엑셀 등 첨부파일은 그대로 함께 저장합니다. 제목을 직접 입력하거나 PDF·한글 파일을 골라 주세요." if not can_extract(self.selected_file()['path']) else "PDF에서 필요한 부분을 드래그하거나 오른쪽 제목 후보를 선택하세요." if self.image else "한글 첨부는 오른쪽 OCR·추출 본문에서 문장을 선택하세요.")
 
-    def choose(self, option):
+    def choose(self, option,automatic=False):
         self.set_title(option["title"])
+        if self.is_relief() and not automatic:self.relief_manual_title=True
         self.mode = option["mode"]
         self.remember_button.configure(state="normal")
 
     def set_title(self, text):
         self.title.delete("1.0", "end")
         self.title.insert("1.0", text)
+        self.title.edit_modified(False)
 
     def draw(self):
         from PIL import Image, ImageTk
@@ -247,6 +280,8 @@ class TitleChooser:
             return messagebox.showinfo("제목 확인", "사용할 제목을 입력하거나 후보를 선택해 주세요.", parent=self.win)
         if len(title) > 500:
             return messagebox.showinfo("제목 확인", "제목을 500자 이내로 줄여 주세요.", parent=self.win)
+        if self.is_relief() and title==self.relief_auto_title and title.endswith('(주소)'):
+            return messagebox.showinfo('주소 확인','수신접수 제목의 괄호 안에 실제 주소를 입력해 주세요.',parent=self.win)
         if self.embedded:
             self.primary.update({k:v.get().strip() for k,v in self.app.fields.items() if k!="title"})
         self.app.busy = True
@@ -257,6 +292,7 @@ class TitleChooser:
         self.close()
 
     def close(self):
+        if self.category_trace:self.category_var.trace_remove('write',self.category_trace)
         self.win.after_cancel(self.initial_after)
         if self.image is not None:
             self.image.close()

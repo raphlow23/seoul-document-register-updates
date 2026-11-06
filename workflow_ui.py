@@ -66,7 +66,7 @@ class WorkflowShell:
                 if name=="outgoing_editor":
                     self.drafts[editor.job["hash"]]=editor.current()
                 elif name=="title_dialog":
-                    self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current()}
+                    self.receipt_drafts[self.current]={"title":editor.title.get("1.0","end").strip(),"file":editor.file_box.current(),'relief_manual_title':editor.relief_manual_title}
                 elif name=="route_dialog" and editor.records:
                     editor.children_changed()
                     self.route_drafts[self.current]={"agency":editor.agency.get(),"targets":editor.targets(),"folder_title":"","children":[],"relief":editor.relief_values(),'relief_category':editor.agency.get()=='완화공문'}
@@ -353,6 +353,7 @@ class WorkflowShell:
         if draft:
             editor=self.app.title_dialog
             editor.resume_title=draft["title"]
+            editor.set_title(draft['title']);editor.relief_manual_title=draft.get('relief_manual_title',False)
             editor.file_box.current(max(0,min(draft["file"],len(editor.files)-1)))
         elif jobs[0].get("title_source"):
             self.app.title_dialog.resume_title=jobs[0]["title"]

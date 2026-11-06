@@ -8,6 +8,34 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
+
+_spawn_lock=threading.Lock()
+
+
+def run_native(args,runtime,timeout):
+    env=os.environ.copy();windows=Path(env.get('SystemRoot','C:/Windows'))
+    env['PATH']=os.pathsep.join((str(runtime),str(windows/'System32'),str(windows)))
+    env['OMP_THREAD_LIMIT']='2'
+    with _spawn_lock:
+        kernel=None;old_mode=None;old_dll=None
+        if os.name=='nt':
+            import ctypes
+            kernel=ctypes.windll.kernel32
+            n=kernel.GetDllDirectoryW(0,None);buffer=ctypes.create_unicode_buffer(n+1)
+            kernel.GetDllDirectoryW(n+1,buffer);old_dll=buffer.value or None
+            old_mode=kernel.SetErrorMode(0x8003)
+            kernel.SetDllDirectoryW(None)
+        try:
+            process=subprocess.Popen(args,cwd=str(runtime),stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                encoding='utf-8',errors='replace',env=env,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        finally:
+            if kernel is not None:kernel.SetDllDirectoryW(old_dll);kernel.SetErrorMode(old_mode)
+    try:stdout,stderr=process.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill();process.communicate()
+        raise ValueError('OCR 처리 시간이 초과되었습니다. 글자 영역을 줄이거나 PDF 상태를 확인해 주세요.') from None
+    return subprocess.CompletedProcess(args,process.returncode,stdout,stderr)
 
 
 def runtime_path(prepare=True):
@@ -24,12 +52,7 @@ def run_engine(image, mode, timeout=120):
         raise ValueError("한국어 OCR 엔진이 없습니다. OCR 포함 배포판을 설치해 주세요.")
     args = [str(exe), str(image), "stdout", "--tessdata-dir", str(runtime / "tessdata")]
     args += ["--psm", "0"] if mode == "orientation" else ["-l", "kor+eng", "--oem", "1", "--psm", "6", "--dpi", "300", "-c", "tessedit_create_tsv=1"]
-    env = os.environ.copy()
-    env["PATH"] = str(runtime) + os.pathsep + env.get("PATH", "")
-    env["OMP_THREAD_LIMIT"] = "2"
-    result = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=timeout,
-                            encoding="utf-8", errors="replace", env=env,
-                            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+    result=run_native(args,runtime,timeout)
     if result.returncode and mode != "orientation":
         raise ValueError("한국어 OCR 처리에 실패했습니다. PDF 손상 여부와 OCR 엔진 설치를 확인해 주세요.")
     return result.stdout if result.returncode == 0 else ""

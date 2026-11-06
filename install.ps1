@@ -26,6 +26,7 @@ $desktopPath = [Environment]::GetFolderPath('Desktop')
 $shellObject = New-Object -ComObject WScript.Shell
 $shortcut = $shellObject.CreateShortcut((Join-Path $desktopPath '서울센터 공문 수신등록.lnk'))
 $shortcut.TargetPath = Join-Path $installRoot 'SeoulDocumentRegister.exe'
+$shortcut.IconLocation = (Join-Path $installRoot 'SeoulDocumentRegister.exe') + ',0'
 $shortcut.WorkingDirectory = $installRoot
 $shortcut.Description = '다운로드한 공문 분류, 저장 및 수신등록'
 $shortcut.Save()

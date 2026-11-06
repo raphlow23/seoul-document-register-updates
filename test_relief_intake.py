@@ -33,9 +33,9 @@ class ReliefIntakeTests(unittest.TestCase):
     def test_title_variants_keep_address_and_additional_case_suffix(self):
         values=relief.source_fields({'title':'다른 제목 (예시동 1-1)외1','issuer':'서대문구청장'})
         self.assertEqual(values,{'district':'서대문구청','subject':'예시동 1-1','suffix':'외1'})
-        self.assertEqual(relief.receipt_title(values['subject'],values['suffix']),relief.TITLE+' (예시동 1-1)외1')
+        self.assertEqual(relief.receipt_title(values['subject'],values['suffix']),relief.TITLE+'(예시동 1-1)외1')
         title=relief.folder_title(values['district'],values['subject'],values['suffix'])
-        self.assertEqual(folder_name(relief.default_template('{number:03d}. {title}'),title,'2026-11-05',5),'005.26.11.05._[서대문구청] '+relief.TITLE+'(예시동 1-1)외1')
+        self.assertEqual(folder_name(relief.default_template('{number:03d}. {title}'),title,'2026-11-05',5),'005.26.11.05._[서대문구청] '+relief.FOLDER_TITLE+'(예시동 1-1)외1')
 
     def test_district_is_not_guessed_from_neighborhood_and_required_fields_are_checked(self):
         values=relief.source_fields({'title':'다른 제목 (예시동 1-1)'})
@@ -66,7 +66,7 @@ class ReliefIntakeTests(unittest.TestCase):
     def test_relief_selection_builds_separate_ledger_and_folder_titles_and_preserves_other_location(self):
         app,job,dialog=self.fixture();dialog.selected.update(('0.시청공문',relief.LOCATION));dialog.focus_folder(relief.LOCATION)
         dialog.relief_vars['district'].set('서대문구청')
-        expected=relief.TITLE+' (예시동 1-1)'
+        expected=relief.TITLE+'(예시동 1-1)'
         self.assertEqual(dialog.registration_title(),expected)
         target=next(t for t in dialog.targets() if t['relative']==relief.LOCATION)
         self.assertEqual(sequence_from_names(dialog.records[relief.LOCATION]['names'],target['template']),5)

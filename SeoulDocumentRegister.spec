@@ -4,7 +4,7 @@ from pathlib import Path
 from prepare_ocr_component import prepare
 prepare(Path(SPECPATH))
 
-datas = []
+datas = [('assets/app_icon.ico','assets'),('assets/app_icon.png','assets')]
 binaries = []
 hiddenimports = ['google.auth.transport.requests', 'google.oauth2.service_account']
 tmp_ret = collect_all('pypdf')
@@ -42,6 +42,7 @@ exe = EXE(
     a.datas,
     [],
     name='SeoulDocumentRegister',
+    icon='assets/app_icon.ico',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

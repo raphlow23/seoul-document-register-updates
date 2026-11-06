@@ -22,7 +22,7 @@ jobs:
         run: |
           Invoke-WebRequest 'https://micro.mamba.pm/api/micromamba/win-64/latest' -OutFile micromamba.tar.bz2
           tar -xf micromamba.tar.bz2
-          & .\Library\bin\micromamba.exe create -y -p "$env:GITHUB_WORKSPACE\build-tools\ocr-env" -c conda-forge --override-channels 'tesseract=5.5.1' 'libarchive=3.8.11=lgpl*'
+          & .\Library\bin\micromamba.exe create -y -p "$env:GITHUB_WORKSPACE\build-tools\ocr-env" -c conda-forge --override-channels 'tesseract=5.5.1' 'libarchive=3.8.11=lgpl*' 'libcurl=8.23.0'
           if ($LASTEXITCODE -ne 0) { throw 'OCR environment creation failed' }
           python prepare_ocr.py
           if ($LASTEXITCODE -ne 0) { throw 'OCR preparation failed' }

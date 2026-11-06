@@ -474,6 +474,8 @@ class App:
         root.bind_all("<KeyPress>", self.activity, add="+")
         root.bind_all("<ButtonPress>", self.activity, add="+")
         root.title(f"서울센터 공문 업무 v{VERSION}")
+        from app_icon import apply_window_icon
+        apply_window_icon(root)
         root.geometry(f"{min(1180,root.winfo_screenwidth()-60)}x{min(900,root.winfo_screenheight()-100)}")
         root.minsize(1000, 660)
         root.configure(bg="#f3f5f8")
@@ -1081,8 +1083,9 @@ def main():
             if ocr_test_data:assert runtime is not None
             if runtime:
                 assert (runtime / 'tessdata' / 'kor.traineddata').is_file()
-                check = subprocess.run([str(runtime / 'tesseract.exe'), '--list-langs', '--tessdata-dir', str(runtime / 'tessdata')], stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
-                assert check.returncode==0 and b'kor' in check.stdout and b'eng' in check.stdout
+                from ocr import run_native
+                check=run_native([str(runtime/'tesseract.exe'),'--list-langs','--tessdata-dir',str(runtime/'tessdata')],runtime,20)
+                assert check.returncode==0 and 'kor' in check.stdout and 'eng' in check.stdout
             root.withdraw()
             with tempfile.TemporaryDirectory() as temporary:
                 app = App(root, temporary, smoke=True)
