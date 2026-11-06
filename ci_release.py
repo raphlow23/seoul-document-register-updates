@@ -37,7 +37,7 @@ def info(create=False):
         response.raise_for_status()
         result=next((r for r in response.json() if r["tag_name"]=="v"+VERSION),None)
     if result is None and create:
-        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 완화신청 접수명·구청명 폴더 기본 형식","draft":True,"prerelease":False,"body":"3.완화신청을 선택하면 구청명과 주소·사업명을 확인하고 수신접수 제목을 기본 입력합니다. 수신접수명은 완화된 세부기준의 승인신청에 따른 의견요청 (주소·사업명), 폴더명은 폴더연번.날짜._[구청명] 완화된 세부기준의 승인신청에 따른 의견요청(주소·사업명) 형식입니다. 구청명은 구청까지 직접 입력하며 실제 문서에 적힌 구청명만 후보로 가져옵니다. 폴더 연번은 기존 폴더의 다음 순번을 사용하고 시트 접수번호와 분리합니다. 접수명과 폴더명은 각각 수정할 수 있고 다른 저장 위치의 제목은 유지합니다. 기존에 시작한 등록과 폴더는 자동 변경하지 않습니다. 자동 업데이트·재실행을 유지하고 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
+        response=requests.post(f"{API}/releases",headers=headers(),json={"tag_name":"v"+VERSION,"target_commitish":"main","name":"v"+VERSION+" — 새 화면 디자인·시작 속도 개선·완화공문","draft":True,"prerelease":False,"body":"화면 전체에 밝은 카드 구성과 둥근 버튼·입력칸·체크박스·선택 표시를 적용합니다. 저장 위치의 문자 체크박스를 큰 체크 아이콘으로 바꾸고 최종 폴더 미리보기는 항상 보이도록 구성합니다. OCR 엔진과 한국어/영어 인식 자료를 실행 파일에서 분리합니다. 최초 설치나 업데이트 후 한 번 검증·설치하고 다음 실행부터 같은 파일을 재사용합니다. 기존 단일 실행 파일 업데이트와 호환되며 새 구조의 자동 업데이트·재실행을 검증합니다. 공문 기관과 저장 위치 선택에 완화공문을 별도로 추가합니다. 완화공문의 수신대장은 공문, 저장 위치는 3.완화신청, 기본 내부 폴더는 1.완화신청자료입니다. 서울시청 공문에서는 완화신청을 분리하고 기존에 시작한 저장·등록은 보호합니다. 구청명·접수 제목·폴더 이름 기본 형식과 수동 수정을 유지합니다. 개인 설정·이력·한글 양식은 보존하며 정상 배포 후 최신·직전 릴리스만 보관합니다."},timeout=30)
         response.raise_for_status();result=response.json()
     if result is None:raise ValueError("No draft release for "+VERSION)
     assert result["tag_name"] == "v" + VERSION and result["draft"]
@@ -62,11 +62,24 @@ def build():
     from public_assets import verify
     out=ROOT/"public-build";out.mkdir(exist_ok=True)
     exe=out/f"{PRODUCT}-{VERSION}.exe";shutil.copy2(ROOT/"dist"/f"{PRODUCT}.exe",exe)
+    from ocr_runtime_info import COMPONENT_NAME,RUNTIME_ID
+    native=out/COMPONENT_NAME
+    assert native.is_file() and exe.stat().st_size<90*1024*1024
+    from PyInstaller.archive.readers import CArchiveReader
+    assert not any('ocr-runtime' in n.lower() for n in CArchiveReader(str(exe)).toc)
+    ocr_data=out/'ocr-test-data'
+    subprocess.run([str(exe),'--prepare-ocr-runtime',str(native),str(ocr_data)],check=True,timeout=90)
     seed=out/"empty-seed.json";seed.write_text('{"root":"","spreadsheet_id":""}')
     print("Public executable check:",verify(exe,seed));seed.unlink()
-    subprocess.run([str(exe),"--self-test"],check=True,timeout=90)
+    subprocess.run([str(exe),'--ocr-data',str(ocr_data),"--self-test"],check=True,timeout=90)
+    from PIL import Image,ImageDraw,ImageFont
+    sample=out/'ocr-fixture.png';image=Image.new('RGB',(1600,300),'white')
+    ImageDraw.Draw(image).text((70,80),'OCR TEST 2026',font=ImageFont.truetype('arial.ttf',72),fill='black');image.save(sample);image.close()
+    result=out/'ocr-result.json'
+    subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
+    assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui"],check=True,timeout=90)
     from updater import restart_target
     print("Frozen post-update GUI readiness:", restart_target(exe,out,VERSION,test=True))
     startup=out/"browser-startup.json"
@@ -90,10 +103,10 @@ def build():
         z.write(ROOT/"THIRD_PARTY_NOTICES.txt","THIRD_PARTY_NOTICES.txt")
         for file in licenses.rglob("*"):
             if file.is_file():z.write(file,str(Path("licenses")/file.relative_to(licenses)))
-    manifest={"product":PRODUCT,"version":VERSION,"filename":exe.name,"size":exe.stat().st_size,"sha256":digest(exe),"download_base":f"https://github.com/{UPDATE_REPOSITORY}/releases/download/v{VERSION}","components":{"spacing_model":{"filename":model.name,"size":model.stat().st_size,"sha256":digest(model)}}}
+    manifest={"product":PRODUCT,"version":VERSION,"filename":exe.name,"size":exe.stat().st_size,"sha256":digest(exe),"download_base":f"https://github.com/{UPDATE_REPOSITORY}/releases/download/v{VERSION}","components":{"spacing_model":{"filename":model.name,"size":model.stat().st_size,"sha256":digest(model)},'ocr_runtime':{'filename':native.name,'size':native.stat().st_size,'sha256':digest(native),'runtime_id':RUNTIME_ID}}}
     info(create=True)
-    for path in (exe,model,notices):upload(path)
-    result={"manifest":manifest,"assets":[{"name":p.name,"size":p.stat().st_size,"sha256":digest(p)} for p in (exe,model,notices)]}
+    for path in (exe,model,notices,native):upload(path)
+    result={"manifest":manifest,"assets":[{"name":p.name,"size":p.stat().st_size,"sha256":digest(p)} for p in (exe,model,notices,native)]}
     path=ROOT/"build-result.json";path.write_text(json.dumps(result,indent=2),encoding="utf-8")
     subprocess.run(["git","config","user.name","github-actions[bot]"],check=True)
     subprocess.run(["git","config","user.email","41898282+github-actions[bot]@users.noreply.github.com"],check=True)
@@ -124,6 +137,8 @@ def finalize():
         z.write(ROOT/"latest.json","업데이트배포/latest.json")
         model=manifest["components"]["spacing_model"]["filename"]
         z.write(out/model,"업데이트배포/"+model)
+        native=manifest['components']['ocr_runtime']['filename']
+        z.write(out/native,'업데이트배포/'+native)
         for name in ("install.cmd","install.ps1","THIRD_PARTY_NOTICES.txt"):z.write(ROOT/name,name)
         with zipfile.ZipFile(out/"ThirdPartyNotices.zip") as notices:
             for item in notices.infolist():
