@@ -50,6 +50,7 @@ class RouteChooser:
         from core import RECEIPT_TABS
         self.receipt_type=tk.StringVar(value=job.get("receipt_type") or "공문")
         receipt=ttk.Combobox(registration,textvariable=self.receipt_type,values=list(RECEIPT_TABS),state="readonly",width=13)
+        self.receipt_box=receipt
         receipt.pack(side="left",padx=8)
         if job.get("sheet_attempted") or job.get("receipt_done"):receipt.configure(state="disabled")
         from outgoing import defaults
@@ -70,6 +71,10 @@ class RouteChooser:
         left, right = ttk.Frame(panes), ttk.Frame(panes, padding=(14,0,0,0))
         panes.add(left, weight=2)
         panes.add(right, weight=3)
+        preview_area=ttk.Frame(right);preview_area.pack(side='bottom',fill='x',pady=(8,0))
+        from modern_ui import ScrollablePanel
+        self.settings_scroll=ScrollablePanel(right);self.settings_scroll.pack(fill='both',expand=True)
+        right=self.settings_scroll.body
         self.folder_title=tk.StringVar(value=job.get("routing",{}).get("folder_title") or job["title"])
         self.location_label=tk.StringVar(value='설정할 저장 위치를 선택하세요')
         ttk.Label(right,textvariable=self.location_label,foreground='#1c5295',wraplength=550).pack(anchor='w')
@@ -107,14 +112,15 @@ class RouteChooser:
             ttk.Label(childbar,text="만들 내부폴더:").pack(side="left",padx=(0,10))
         self.child_boxes={}
         for key in ALL_CHILD_KINDS:
-            text={'incoming':'기관별 공문','outgoing':'센터발송','drawings':'협의도면','photos':'현장사진','reply':'기관별 회신'}[key]
+            text={'incoming':'기관별 공문','outgoing':'센터발송','drawings':'협의도면','photos':'현장사진','reply':'기관별 회신','relief':'완화신청자료'}[key]
             box=ttk.Checkbutton(childbar,text=text,variable=self.children[key],command=self.children_changed)
             self.child_boxes[key]=box
             if key in CHILD_KINDS:box.pack(side='left' if self.embedded else 'top',anchor='w',padx=(0,10))
         self.child_edit_button=ttk.Button(childbar,text='폴더 추가 · 순서 변경',command=self.edit_children)
         self.child_edit_button.pack(side='left' if self.embedded else 'top',padx=5)
         area=ttk.Frame(left);area.pack(fill="both",expand=True)
-        self.tree = ttk.Treeview(area, show="tree", selectmode="browse", height=12)
+        from modern_ui import CheckboxTree
+        self.tree = CheckboxTree(area, show="tree", selectmode="browse", height=12)
         scroll=ttk.Scrollbar(area,command=self.tree.yview);self.tree.configure(yscrollcommand=scroll.set)
         self.tree.pack(side="left",fill="both", expand=True);scroll.pack(side="right",fill="y")
         self.tree.bind("<ButtonRelease-1>", self.click)
@@ -125,19 +131,19 @@ class RouteChooser:
         self.examples = tk.Listbox(right, height=3 if self.embedded else 6, font=("맑은 고딕",10))
         self.examples.pack(fill="x", pady=7)
         self.examples.bind("<<ListboxSelect>>", self.select_example)
-        ttk.Label(right, text="생성될 폴더 이름 — 기존 형식 자동 적용", wraplength=500).pack(anchor="w")
+        ttk.Label(preview_area, text="생성될 폴더 이름 — 기존 형식 자동 적용", wraplength=500).pack(anchor="w")
         self.template = tk.StringVar()
         from folder_name_picker import ActualNamePicker
-        self.name_picker=ActualNamePicker(right,self.template,self.folder_title,lambda:self.records.get(self.current),lambda:self.job['date'],lambda:next((t.get('folder_number') for t in self.job.get('routing',{}).get('targets',[]) if t['relative']==self.current),None))
+        self.name_picker=ActualNamePicker(preview_area,self.template,self.folder_title,lambda:self.records.get(self.current),lambda:self.job['date'],lambda:next((t.get('folder_number') for t in self.job.get('routing',{}).get('targets',[]) if t['relative']==self.current),None))
         self.name_picker.pack(fill='x',pady=7);self.template_box=self.name_picker.box
         self.template.trace_add("write", self.changed)
-        buttons = ttk.Frame(right)
+        buttons = ttk.Frame(preview_area)
         if not self.embedded:buttons.pack(fill="x")
         for label, template in (("날짜 + 제목",TEMPLATES[0]),("폴더순번 + 제목",TEMPLATES[4]),("제목만",TEMPLATES[-1])):
             ttk.Button(buttons, text=label, command=lambda t=template:self.template.set(t)).pack(side="left", padx=(0,5))
         if not self.embedded:ttk.Label(right, text="번호·날짜는 기존 폴더를 기준으로 계산합니다.\n폴더 순번은 구글 시트 접수번호와 별개입니다.", wraplength=580).pack(anchor="w", pady=8)
-        ttk.Label(right, text="선택한 모든 위치의 생성 예정 이름", font=("맑은 고딕",11,"bold")).pack(anchor="w", pady=(8,3))
-        self.preview = tk.Text(right, height=9, wrap="word", font=("맑은 고딕",10), padx=8,pady=8)
+        ttk.Label(preview_area, text="선택한 모든 위치의 생성 예정 이름", font=("맑은 고딕",11,"bold")).pack(anchor="w", pady=(4,3))
+        self.preview = tk.Text(preview_area, height=4 if self.embedded else 7, wrap="word", font=("맑은 고딕",10), padx=8,pady=8)
         self.preview.pack(fill="both", expand=True)
         self.status = tk.StringVar(value="먼저 기초센터·중앙센터·시청 중 하나를 고르세요.")
         ttk.Label(outer, textvariable=self.status, wraplength=1050).pack(fill="x", pady=6)
@@ -149,12 +155,15 @@ class RouteChooser:
             ttk.Checkbutton(footer,text="접수 후 발신 공문도 이어서 작성",variable=app.workflow.continue_outgoing).pack(side="left",padx=12)
         else:
             ttk.Button(footer, text="선택만 적용", command=lambda:self.apply(False)).pack(side="right")
-        ttk.Button(footer, text="파일만 다시 저장 (접수번호 유지)" if job.get('receipt_done') and job.get('files_rolled_back') else "저장하고 수신 접수", command=lambda:self.apply(True)).pack(side="right", padx=8)
+        ttk.Button(footer, text="파일만 다시 저장 (접수번호 유지)" if job.get('receipt_done') and job.get('files_rolled_back') else "저장하고 수신 접수", command=lambda:self.apply(True),style='Accent.TButton').pack(side="right", padx=8)
         if self.embedded:footer.pack_configure(side="bottom",before=panes,pady=(6,0))
         self.initial_after = self.win.after(100, self.load) if self.agency.get() else None
 
     def load(self):
         if not self.agency.get(): return
+        if self.agency.get()=='완화공문':
+            self.receipt_type.set('공문');self.receipt_box.configure(state='disabled')
+        elif not (self.job.get('sheet_attempted') or self.job.get('receipt_done')):self.receipt_box.configure(state='readonly')
         if not self.job.get("routing"):
             saved=self.app.config.get("folder_children",{}).get(self.agency.get())
             if saved is not None:
@@ -184,6 +193,10 @@ class RouteChooser:
             if key in old:
                 self.selected.add(key)
                 self.tree.item(key, text="☑ " + Path(key).name)
+            if self.agency.get()=='완화공문' and key==relief.LOCATION:
+                self.selected.add(key);self.tree.item(key,text='☑ '+Path(key).name)
+                if not self.job.get('files_started') and not self.job.get('routing',{}).get('relief_category'):
+                    self.child_sets[key]=['relief'];self.child_orders[key]=['relief']
         self.status.set("저장할 곳을 체크하고 기존 형식과 새 이름을 확인해 주세요. 폴더별 다음 순번을 사용하며 최종 순번은 저장 시 확정합니다.")
         if self.records:self.focus_folder(next(iter(sorted(self.selected)),next(iter(self.records))))
         self.redraw_preview()
@@ -194,7 +207,7 @@ class RouteChooser:
         if 'indicator' in self.tree.identify_element(event.x,event.y):return
         # Clicking a name changes the editing destination; only the checkbox toggles it.
         box_left=self.tree.bbox(key)[0]+(20 if self.records[key].get('parent') else 0)
-        if event.x>box_left+36:
+        if self.tree.identify_element(event.x,event.y)!='image' and event.x>box_left+36:
             self.focus_folder(key);self.redraw_preview();return
         if key in self.selected:
             self.selected.remove(key)
@@ -368,7 +381,7 @@ class RouteChooser:
             lines.append(relative+"\n  └ "+name)
             children=child_folders(self.agency.get(),self.child_sets.get(relative,CHILD_KINDS),self.child_orders.get(relative))
             lines.extend("       └ "+child for child in children.values())
-            lines.append("       첨부 저장: "+children.get("incoming","상위 공문 폴더"))
+            lines.append("       첨부 저장: "+(children.get("incoming") or children.get('relief') or "상위 공문 폴더"))
         self.preview.configure(state="normal")
         self.preview.delete("1.0","end")
         self.preview.insert("1.0","\n\n".join(lines) or "체크한 저장 위치가 여기에 표시됩니다.")
@@ -396,7 +409,7 @@ class RouteChooser:
         except (ValueError,TypeError,KeyError) as error:
             return messagebox.showerror("폴더 이름 확인",str(error),parent=self.win)
         self.app.busy = True
-        self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"folder_title":"","children":[],"relief":self.relief_values()},
+        self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"folder_title":"","children":[],"relief":self.relief_values(),'relief_category':self.agency.get()=='완화공문'},
                                              "fields":{**{k:self.job.get(k,"") for k in ("date","recipient","issuer")},"title":self.registration_title(),"receipt_type":self.receipt_type.get()},
                                              "outgoing":self.outgoing,"execute":execute}))
         self.close()
