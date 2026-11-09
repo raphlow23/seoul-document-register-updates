@@ -33,8 +33,9 @@ EXTENSIONS = {".pdf", ".hwp", ".hwpx", ".zip"}
 
 
 def digest(path):
+    from fs_paths import io_path
     h = hashlib.sha256()
-    with open(path, "rb") as f:
+    with open(io_path(path), "rb") as f:
         for b in iter(lambda: f.read(1024 * 1024), b""):
             h.update(b)
     return h.hexdigest()
@@ -62,7 +63,8 @@ def clean_hwp_text(payload):
 
 
 def extract(path, with_meta=False, progress=None):
-    path = Path(path)
+    from fs_paths import io_path
+    path = io_path(path)
     metadata = {}
     if path.stat().st_size > 100 * 1024 * 1024:
         raise ValueError("100MB를 넘는 파일은 직접 확인해 주세요.")
@@ -263,6 +265,7 @@ def receipt_markers(job):
 
 def copy_files(job, root, subfolders=None,on_progress=None):
     from attachment_files import storage_files
+    from fs_paths import io_path
     root = Path(root)
     if not root.is_dir():
         raise ValueError("공유폴더에 접근할 수 없습니다. 탐색기에서 연결을 확인해 주세요.")
@@ -276,11 +279,11 @@ def copy_files(job, root, subfolders=None,on_progress=None):
             raise ValueError(f"저장 폴더가 없습니다: {folder}")
         for f in storage_files(job):
             source = Path(f["path"])
-            if not source.is_file() or digest(source) != f["hash"]:
+            if not io_path(source).is_file() or digest(source) != f["hash"]:
                 raise ValueError(f"원본이 없거나 내용이 바뀌었습니다: {source.name}")
             target = folder / source.name
             key=str(target).casefold()
-            if (target.exists() and digest(target) != f["hash"]) or (key in reserved and reserved[key]!=f["hash"]):
+            if (io_path(target).exists() and digest(target) != f["hash"]) or (key in reserved and reserved[key]!=f["hash"]):
                 target = folder / f"{source.stem}_{f['hash'][:12]}{source.suffix}"
             key=str(target).casefold()
             if key in reserved and reserved[key]!=f["hash"]:
@@ -289,16 +292,16 @@ def copy_files(job, root, subfolders=None,on_progress=None):
             planned.append((source, target, f["hash"]))
     results = []
     for source, target, hash_ in planned:
-        if target.exists():
+        if io_path(target).exists():
             if digest(target) != hash_:
                 raise ValueError(f"같은 이름의 다른 파일이 있습니다: {target}")
         else:
             # Exclusive creation never overwrites an existing file, even after a race.
             created = False
             try:
-                with target.open("xb") as out:
+                with io_path(target).open("xb") as out:
                     created = True
-                    with source.open("rb") as src:
+                    with io_path(source).open("rb") as src:
                         shutil.copyfileobj(src, out)
                         out.flush()
                         os.fsync(out.fileno())
@@ -307,10 +310,10 @@ def copy_files(job, root, subfolders=None,on_progress=None):
                     raise ValueError(f"저장 중 이름 충돌: {target}")
             except Exception:
                 # Keep a failed partial copy distinguishable; original downloads stay intact.
-                if created and target.exists():
+                if created and io_path(target).exists():
                     try:
                         incomplete=target.with_name(target.name + ".incomplete-" + uuid.uuid4().hex[:8])
-                        target.rename(incomplete)
+                        io_path(target).rename(io_path(incomplete))
                         from file_rollback import track_file
                         track_file(job,incomplete,digest(incomplete),'receipt')
                         if on_progress:on_progress()

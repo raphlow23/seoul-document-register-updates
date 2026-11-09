@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='설치 폴더 내 임시 보관·기존 공유폴더 이전·완료 자료 정리'
-RELEASE_BODY='되돌리기 파일과 브라우저 임시 이력을 설치된 EXE 옆 임시보관 폴더에 저장합니다. 기존 공유폴더의 두 보관 폴더도 내용 검증과 경로 갱신 후 이전·정리합니다. 등록 결과가 확인된 임시 JSON은 삭제하고 최소 중복 등록 확인 정보만 로컬 DB에 유지합니다. 정상 재저장이 끝난 변경 없는 백업은 정리하며 미완료 작업과 마지막 첨부 사본은 보호합니다. 복사 실패·파일 변경·중단 시 원본을 유지하며 설정에서 정리를 재시도할 수 있습니다. 220개 검사와 실제 설치 EXE의 이전·정리, 자동 업데이트·재실행·기존 설정 보존을 검증합니다.'
+RELEASE_TITLE='긴 공문 경로의 보관 폴더 이전 오류 수정'
+RELEASE_BODY='공문 제목이 긴 보관 자료를 설치 폴더로 이전할 때 발생하던 WinError 3 오류를 수정합니다. Windows 확장 경로로 복사·검증·이전·정리를 수행하며 화면과 기록에는 일반 경로를 유지합니다. 이전에 중단된 작업은 같은 기록에서 이어서 처리하며 원본과 마지막 첨부 사본을 보호합니다. 222개 검사와 실제 설치 EXE의 400자 이상 한글 경로 이전·정리, 자동 업데이트·재실행·설정 보존을 검증합니다.'
 _release_id = None
 
 
@@ -98,7 +98,7 @@ def build():
     storage=out/'program-storage-check.json'
     subprocess.run([str(exe),'--test-program-storage',str(storage)],check=True,timeout=90)
     storage_result=json.loads(storage.read_text(encoding='utf-8'))
-    assert storage_result['shared_folders_removed_after_verified_migration'] and storage_result['normal_completion_backup_cleanup']
+    assert storage_result['shared_folders_removed_after_verified_migration'] and storage_result['normal_completion_backup_cleanup'] and storage_result['long_unicode_paths_verified']
     print('Installed-folder migration and cleanup verification:',storage.read_text(encoding='utf-8'))
     from updater import restart_target
     print("Frozen post-update GUI readiness:", restart_target(exe,out,VERSION,test=True))

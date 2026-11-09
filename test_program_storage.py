@@ -5,6 +5,7 @@ import core
 import program_storage as storage
 from file_rollback import inventory
 from browser_journal import Journal
+from fs_paths import io_path,logical_path
 
 
 class ProgramStorageTests(unittest.TestCase):
@@ -53,6 +54,41 @@ class ProgramStorageTests(unittest.TestCase):
         self.assertTrue(legacy.exists());self.assertEqual(self.store.get('case')['files'],job['files'])
         storage.migrate_rollbacks(self.config,self.store);self.assertFalse(legacy.exists())
         self.assertEqual(Path(self.store.get('case')['files'][0]['path']).read_bytes(),b'only source copy')
+
+    def test_long_korean_paths_resume_after_failed_rename_without_losing_source(self):
+        legacy=self.shared/'.수발신-되돌리기'
+        backup=legacy/('b'*64)/('a'*32)/'0'/('긴공문제목_'*16)
+        document=backup/('첨부문서제목_'*18+'.pdf')
+        io_path(backup).mkdir(parents=True);io_path(document).write_bytes(b'original long attachment')
+        job={'hash':'long','id':'b'*64,'files':[{'path':str(document),'hash':core.digest(document)}],
+             'files_rolled_back':True,'rollback_history':[{'id':'a'*32,'scope':'receipt','moves':[
+                 {'source':str(self.shared/backup.name),'backup':str(backup),'backup_root':str(self.shared),'slot':'0','inventory':inventory(backup),'done':True}]}]}
+        self.store.put(job);real_replace=storage.os.replace
+        def interrupted(src,dst):
+            if Path(src).suffix=='.part':raise FileNotFoundError(3,'simulated interrupted long rename')
+            return real_replace(src,dst)
+        with patch.object(storage.os,'replace',side_effect=interrupted),self.assertRaises(FileNotFoundError):
+            storage.migrate_rollbacks(self.config,self.store)
+        self.assertEqual(io_path(document).read_bytes(),b'original long attachment')
+        self.assertEqual(self.store.get('long')['files'],job['files'])
+        def windows_limit(src,dst):
+            if sys.platform=='win32' and len(str(dst))>=260:
+                self.assertTrue(str(dst).startswith('\\\\?\\'),str(dst))
+            return real_replace(src,dst)
+        with patch.object(storage.os,'replace',side_effect=windows_limit):storage.migrate_rollbacks(self.config,self.store)
+        updated=self.store.get('long');local=Path(updated['files'][0]['path'])
+        self.assertGreater(len(str(local)),400);self.assertFalse(str(local).startswith('\\\\?\\'))
+        self.assertEqual(io_path(local).read_bytes(),b'original long attachment');self.assertFalse(legacy.exists())
+        updated['files_rolled_back']=False;storage.cleanup_rollbacks(updated,self.config,self.store)
+        self.assertTrue(io_path(local).exists())
+        original=self.base/'original.pdf';original.write_bytes(b'original long attachment');updated['files'][0]['path']=str(original)
+        storage.cleanup_rollbacks(updated,self.config,self.store);self.assertFalse(io_path(local).exists())
+
+    @unittest.skipUnless(sys.platform=='win32','Windows namespace conversion')
+    def test_local_and_unc_namespace_round_trip_keeps_record_paths_readable(self):
+        for path in (self.program/'긴제목.pdf',Path(r'\\server\share\긴제목.pdf')):
+            self.assertEqual(logical_path(io_path(path)),path)
+            self.assertTrue(str(io_path(path)).startswith('\\\\?\\'))
 
     def entry(self,complete=True):return {'sid':'fixture','tab':'ledger','row':6,'before':[''],'after':['document'],'writes':{'0':'document'},'markers':['SDR:case'],'complete':complete}
 

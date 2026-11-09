@@ -8,17 +8,19 @@ import re
 from attachment_files import storage_files
 from pathlib import Path
 import uuid
+from fs_paths import io_path,logical_path
 
 
 def linked(path):
+    path=io_path(path)
     return path.is_symlink() or (hasattr(path,'is_junction') and path.is_junction())
 
 
 def checked(path):
-    path=Path(path)
+    path=logical_path(path)
     if not path.is_absolute():raise ValueError('되돌릴 경로가 절대 경로가 아닙니다.')
     if any(linked(p) for p in (path,*path.parents)):raise ValueError('연결·바로가기 경로는 자동으로 되돌리지 않습니다: '+str(path))
-    return path.resolve()
+    return logical_path(path.resolve())
 
 
 def track_root(job,path,scope):
@@ -84,10 +86,11 @@ def _roots(job,config,scope):
 def inventory(path):
     from core import digest
     path=checked(path)
-    if path.is_file():return {'files':{'':digest(path)},'dirs':[]}
+    if io_path(path).is_file():return {'files':{'':digest(path)},'dirs':[]}
     files={};dirs=['']
-    for base,children,names in os.walk(path,followlinks=False):
-        base=Path(base)
+    def unreadable(error):raise error
+    for base,children,names in os.walk(io_path(path),followlinks=False,onerror=unreadable):
+        base=logical_path(base)
         for name in children:
             child=checked(base/name);dirs.append(str(child.relative_to(path)))
         for name in names:
@@ -185,9 +188,9 @@ def execute(job,config,store,scope):
             if not move.get('local') or not (local_base==root or (local_base.parent==root and re.fullmatch(r'legacy-[0-9a-f]{32}',local_base.name))):raise ValueError('설치 폴더 내 보관 경로를 확인하지 못했습니다.')
             expected=local_base/str(job['id'])/transaction['id']/move['slot']/source.name
             if backup!=expected.resolve():raise ValueError('파일 되돌리기 보관 경로가 달라 중단합니다.')
-            if not source.exists() and not backup.exists():raise ValueError('되돌릴 파일이 없습니다: '+str(source))
-            if source.exists() and not subset(inventory(source),move['inventory']):raise ValueError('원본 파일이 변경되어 중단합니다: '+str(source))
-            if backup.exists() and not subset(inventory(backup),move['inventory']):raise ValueError('보관 파일이 변경되어 중단합니다: '+str(backup))
+            if not io_path(source).exists() and not io_path(backup).exists():raise ValueError('되돌릴 파일이 없습니다: '+str(source))
+            if io_path(source).exists() and not subset(inventory(source),move['inventory']):raise ValueError('원본 파일이 변경되어 중단합니다: '+str(source))
+            if io_path(backup).exists() and not subset(inventory(backup),move['inventory']):raise ValueError('보관 파일이 변경되어 중단합니다: '+str(backup))
         for move in transaction['moves']:
             source,backup=checked(move['source']),checked(move['backup'])
             copy_verified(source,backup,move['inventory'])
@@ -201,7 +204,7 @@ def execute(job,config,store,scope):
             from core import digest
             for file in storage_files(job):
                 original=Path(file['path'])
-                if original.is_file() and digest(original)==file['hash']:continue
+                if io_path(original).is_file() and digest(original)==file['hash']:continue
                 copies=[Path(m['backup'])/rel if m['inventory']['dirs'] else Path(m['backup']) for m in transaction['moves'] for rel,hash_ in m['inventory']['files'].items() if hash_==file['hash']]
                 if copies:
                     file.setdefault('original_source_path',file['path']);file['path']=str(copies[0])
