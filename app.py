@@ -996,6 +996,15 @@ class App:
 
 
 def main():
+    if len(sys.argv)==3 and sys.argv[1]=='--test-update-fallback':
+        try:
+            from update_fallback_smoke import run
+            run(sys.argv[2])
+        except Exception:
+            import traceback
+            Path(sys.argv[2]+'.error.txt').write_text(traceback.format_exc(),encoding='utf-8')
+            sys.exit(1)
+        return
     if len(sys.argv)==3 and sys.argv[1]=='--test-program-storage':
         from program_storage_smoke import run
         run(sys.argv[2]);return

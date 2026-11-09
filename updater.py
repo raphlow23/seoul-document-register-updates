@@ -14,9 +14,13 @@ import time
 import uuid
 from urllib.parse import urlsplit,urljoin
 
-from release_info import PRODUCT, UPDATE_PUBLIC_KEY, VERSION
+from release_info import PRODUCT, UPDATE_PUBLIC_KEY, VERSION, UPDATE_REPOSITORY
 
 MAX_EXE = 150 * 1024 * 1024
+
+
+class OnlineUnavailable(ValueError):
+    """Transport/HTTP failure; never used for trust, size or signature failures."""
 
 
 def fresh_environment():
@@ -79,7 +83,7 @@ def read_online(url,limit,target=None):
     else:raise ValueError("온라인 업데이트 주소의 이동 횟수가 너무 많습니다.")
     try:
         for item in [*response.history,response]:trusted_url(item.url)
-        if response.status_code!=200:raise ValueError(f"온라인 업데이트 파일을 받지 못했습니다(HTTP {response.status_code}). 인터넷 연결과 GitHub 배포 상태를 확인해 주세요.")
+        if response.status_code!=200:raise OnlineUnavailable(f"온라인 업데이트 파일을 받지 못했습니다(HTTP {response.status_code}). 인터넷 연결과 GitHub 배포 상태를 확인해 주세요.")
         length=response.headers.get("Content-Length")
         if length and int(length)>limit:raise ValueError("온라인 배포 파일이 허용 크기를 넘습니다.")
         collected=bytearray();count=0
@@ -94,9 +98,21 @@ def read_online(url,limit,target=None):
 
 def read_manifest(source,public_key=UPDATE_PUBLIC_KEY):
     if remote(source):
+        import requests
         base=str(source).rstrip("/")
         if base.endswith("/latest.json"):base=base[:-len("/latest.json")]
-        raw=read_online(base+"/latest.json",32768)
+        urls=[base+"/latest.json"]
+        # The release-asset route sometimes returns 504 while repository files work.
+        # Only this product's default feed may use its own repository mirror.
+        if base=='https://github.com/'+UPDATE_REPOSITORY+'/releases/latest/download':
+            urls.append('https://raw.githubusercontent.com/'+UPDATE_REPOSITORY+'/main/latest.json')
+        for index,url in enumerate(urls):
+            try:raw=read_online(url,32768)
+            except (OnlineUnavailable,requests.RequestException):
+                if index+1==len(urls):raise
+                continue
+            # A response that arrived but is untrusted must stop immediately.
+            return verify_manifest(json.loads(raw.decode('utf-8-sig')),public_key)
     else:
         path=Path(source)/"latest.json"
         try:
