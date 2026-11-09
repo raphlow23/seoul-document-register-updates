@@ -84,7 +84,7 @@ class WorkflowShell:
         for frame in self.pages.values():frame.pack_forget()
         self.pages[page].pack(fill="both",expand=True)
         self.section,self.step=section,step
-        labels=("첨부파일","제목 확인","저장 위치","접수 완료") if section=="receipt" else ("수신 문서","양식 선택","발신 정보","등록 · HWP 저장")
+        labels=("첨부파일","제목 확인","저장 위치","접수 완료") if section=="receipt" else ("새 발신 · 수신 문서","양식 선택","발신 정보","등록 · HWP 저장")
         self.steps.set("   →   ".join(("● " if i==step else "")+label for i,label in enumerate(labels,1)) if section!="history" else "등록된 문서와 저장 결과")
         for key,button in self.nav.items():button.configure(state="disabled" if key==section else "normal",style='NavSelected.TButton' if key==section else 'TButton')
         self.back_button.configure(state="disabled" if section=="history" or step==1 else "normal")
@@ -118,8 +118,8 @@ class WorkflowShell:
     def build_history(self):
         for name in ("history","outgoing_list"):
             page=self.pages[name]
-            heading(page,"처리 이력" if name=="history" else "발신할 수신 문서를 고르세요","수신 접수가 끝난 문서에서 발신 공문을 이어서 작성할 수 있습니다. 수신 접수는 반복하지 않습니다.")
-            tree=table(page,[("date","접수일",110),("title","제목",520),("number","수신 / 발신번호",175),("state","상태",180)],extended=name=='history')
+            heading(page,"처리 이력" if name=="history" else "새 발신을 작성하거나 수신 문서를 고르세요","새 발신 작성은 수신 없이 시작합니다. 기존 수신 문서를 선택하면 이어서 발신 공문을 작성합니다.")
+            tree=table(page,[("date","접수 / 발신일",110),("title","제목",520),("number","수신 / 발신번호",175),("state","상태",180)],extended=name=='history')
             setattr(self,name+"_tree",tree)
             tree.bind("<<TreeviewSelect>>",self.app.select)
             bar=ttk.Frame(page);bar.pack(fill="x",pady=12)
@@ -131,6 +131,8 @@ class WorkflowShell:
                 tree.bind('<Control-a>',lambda event,t=tree:(t.selection_set(t.get_children('')),'break')[-1])
                 ttk.Label(page,text='Ctrl·Shift로 여러 항목 선택 → 목록 삭제. 파일·시트·접수번호는 유지됩니다.',foreground='#667085').pack(fill='x',before=bar,pady=(6,0))
             else:
+                self.new_outgoing_button=ttk.Button(bar,text='＋ 새 발신 작성',command=self.start_new_outgoing,style='Accent.TButton')
+                self.new_outgoing_button.pack(side='left',padx=(0,8))
                 ttk.Button(bar,text='발신 초기화 · 다시 시작',command=self.restart_outgoing).pack(side='left')
                 ttk.Button(bar,text='목록에서 삭제',command=lambda:self.restart_outgoing(hide=True)).pack(side='left',padx=6)
                 tree.bind('<Delete>',lambda event:self.restart_outgoing(hide=True))
@@ -162,10 +164,12 @@ class WorkflowShell:
         self.row(self.app.tree,key,not hidden,vals)
         self.sort_queue()
         out=job.get("outgoing",{})
-        numbers=str(job.get("number", ""))+(" / "+str(out["number"]) if out.get("number") else "")
-        vals=(job.get("date",""),job["title"],numbers,job["state"])
-        self.row(self.history_tree,key,received and not alias and not job.get('history_hidden'),vals)
-        self.row(self.outgoing_list_tree,key,received and not alias and not job.get('outgoing_list_hidden'),vals)
+        standalone=job.get('standalone_outgoing',False)
+        numbers=str(out.get('number','')) if standalone else str(job.get("number", ""))+(" / "+str(out["number"]) if out.get("number") else "")
+        vals=(job.get("date",""),job["title"] or ('새 발신 공문 (작성 중)' if standalone else ''),numbers,job["state"])
+        listed=received or standalone
+        self.row(self.history_tree,key,listed and not alias and not job.get('history_hidden'),vals)
+        self.row(self.outgoing_list_tree,key,listed and not alias and not job.get('outgoing_list_hidden'),vals)
 
     def restart_outgoing(self,hide=False):
         if not self.available():return
@@ -173,7 +177,7 @@ class WorkflowShell:
         if len(jobs)!=1:return messagebox.showinfo('발신 문서 선택','초기화하거나 목록에서 삭제할 문서 한 개를 선택하세요.')
         job=jobs[0]
         text=('이 문서의 발신 진행을 초기화하고 발신 목록에서 제외할까요?' if hide else '이 문서의 발신 진행을 초기화하고 양식 선택부터 다시 시작할까요?')
-        text+='\n\n기존 발신번호·직인 등록 진행은 다시 사용하지 않습니다. 다음 등록 때 구글시트를 다시 읽어 새 발신번호를 받습니다.\n수신 접수·기존 시트 행·저장된 파일은 그대로 유지합니다.'
+        text+='\n\n기존 발신번호·직인 등록 진행은 다시 사용하지 않습니다. 다음 등록 때 구글시트를 다시 읽어 새 발신번호를 받습니다.\n'+('기존 시트 행·저장된 파일은 그대로 유지합니다.' if job.get('standalone_outgoing') else '수신 접수·기존 시트 행·저장된 파일은 그대로 유지합니다.')
         if not messagebox.askyesno('발신 초기화 확인',text,parent=self.app.root):return
         self.app.send('outgoing_restart',{'hash':job['hash'],'expected_id':job.get('outgoing',{}).get('id'),'hide':hide})
 
@@ -428,6 +432,16 @@ class WorkflowShell:
         if len(jobs)!=1:return messagebox.showinfo("수신 문서 선택","발신에 사용할 수신 문서를 한 개 선택하세요.")
         self.start_outgoing(jobs[0])
 
+    def start_new_outgoing(self):
+        if not self.available():return
+        self.app.send('outgoing_new',{})
+
+    def outgoing_created(self,data):
+        def ready():
+            if not self.available():return self.app.root.after(50,ready)
+            self.start_outgoing(self.app.jobs[data['hash']])
+        self.app.root.after(50,ready)
+
     def start_outgoing(self,job):
         if not self.available():return
         self.clear_editor();self.focus(job["hash"])
@@ -439,8 +453,9 @@ class WorkflowShell:
             return open_pick_template(self.app,on_added=lambda _:self.start_outgoing(job))
         try:recommended=hwp_docs.suggested_style(job)['id']
         except ValueError:recommended=available[0]['id']
+        if job.get('standalone_outgoing') and any(item['id']=='1' for item in available):recommended='1'
         page=self.empty("outgoing_types");self.show("outgoing_types","outgoing",2)
-        heading(page,"사용할 HWP 양식을 고르세요",job["title"])
+        heading(page,"사용할 HWP 양식을 고르세요",job["title"] or '수신 없이 새로 보낼 공문의 양식을 선택하세요.')
         self.style_choice=tk.StringVar(value=self.drafts.get(job["hash"],{}).get("template_id") or job.get("outgoing",{}).get("template_id") or recommended)
         bar=ttk.Frame(page);bar.pack(fill="x",pady=16)
         bar.pack_configure(side="bottom")
@@ -477,7 +492,7 @@ class WorkflowShell:
             open_pick_template(self.app,on_added=reload)
         reload()
         ttk.Button(bar,text="HWP 양식 넣기",command=add).pack(side="left",padx=8)
-        ttk.Button(bar,text="이전: 수신 문서",command=self.outgoing_home).pack(side="left")
+        ttk.Button(bar,text="이전: 발신 목록",command=self.outgoing_home).pack(side="left")
         ttk.Button(bar,text="다음: 발신 정보",command=lambda:self.outgoing_form(self.app.jobs[self.current],self.style_choice.get())).pack(side="right")
 
     def outgoing_form(self,job,style_id=None):
@@ -514,8 +529,10 @@ class WorkflowShell:
         source=ttk.Combobox(sourcebar,values=[f"{i+1}. {Path(f['path']).name}" for i,f in enumerate(job["files"])],state="readonly")
         source.pack(side="left",fill="x",expand=True)
         main_hash=job.get("title_source",{}).get("file_hash",job["hash"])
-        source.current(next((i for i,f in enumerate(job["files"]) if f["hash"]==main_hash),0))
-        ttk.Button(sourcebar,text="정리된 본문 확인 · 복사",command=lambda:self.request_excerpt(job,job["files"][max(0,source.current())])).pack(side="right",padx=8)
+        if job['files']:
+            source.current(next((i for i,f in enumerate(job["files"]) if f["hash"]==main_hash),0))
+            ttk.Button(sourcebar,text="정리된 본문 확인 · 복사",command=lambda:self.request_excerpt(job,job["files"][max(0,source.current())])).pack(side="right",padx=8)
+        else:sourcebar.pack_forget()
         ttk.Button(page,text="발신 정보 · 저장 위치 확인",command=lambda:self.outgoing_form(self.app.jobs[job["hash"]])).pack(anchor="w",pady=6)
         ttk.Button(page,text="다른 문서 작성",command=self.outgoing_home).pack(anchor="e",side="bottom",pady=12)
         if self.pending_open==job["hash"]:
@@ -607,7 +624,7 @@ class SimpleOutgoing(OutgoingEditor):
         if style_id or not self.vars["template_id"].get():self.choose_style(True)
         elif not self.body.get("1.0","end").strip():self.use_template_body(True)
         if self.reuse_receipt_case:self.use_receipt_location()
-        heading(panel,item["label"],"수신 제목을 기본으로 가져옵니다. 필요한 항목만 수정하세요.")
+        heading(panel,item["label"],"발신 제목과 수신 기관을 입력하세요. 선택한 양식을 한글에서 열어 본문을 작성합니다." if job.get('standalone_outgoing') else "수신 제목을 기본으로 가져옵니다. 필요한 항목만 수정하세요.")
         ttk.Label(panel,text="발신대장: "+self.family.get()+"  ·  직인 분류: "+item["family"]+" ○",foreground="#1c5295").pack(anchor="w",pady=(0,12))
         fields=ttk.Frame(panel);fields.pack(fill="x")
         self.controls=[]
@@ -616,7 +633,8 @@ class SimpleOutgoing(OutgoingEditor):
             widget=ttk.Entry(fields,textvariable=self.vars[key]);widget.grid(row=row,column=1,sticky="ew",padx=12)
             self.controls.append(widget)
         fields.columnconfigure(1,weight=1)
-        same=ttk.Checkbutton(panel,text="수신 제목과 동일",variable=self.same,command=self.use_receipt_title);same.pack(anchor="w",padx=80,pady=4);self.controls.append(same)
+        if not job.get('standalone_outgoing'):
+            same=ttk.Checkbutton(panel,text="수신 제목과 동일",variable=self.same,command=self.use_receipt_title);same.pack(anchor="w",padx=80,pady=4);self.controls.append(same)
         ttk.Label(panel,text="저장 폴더").pack(anchor="w",pady=(12,2))
         route=ttk.Frame(panel);route.pack(fill="x")
         ttk.Entry(route,textvariable=self.vars["save_folder"]).pack(side="left",fill="x",expand=True)
@@ -657,11 +675,13 @@ class SimpleOutgoing(OutgoingEditor):
         method=ttk.Combobox(detail,textvariable=self.vars["method"],values=METHODS if item["family"]=="공문" else [x for x in METHODS if x!="문서24"],state="readonly");method.grid(row=4,column=1,sticky="ew",padx=12);self.controls.append(method)
         detail.columnconfigure(1,weight=1)
         source=ttk.Frame(panel);source.pack(fill="x",pady=8)
-        self.file_var=tk.StringVar(value="1. "+Path(job["files"][0]["path"]).name)
+        self.file_var=tk.StringVar(value="1. "+Path(job["files"][0]["path"]).name if job['files'] else '')
         self.file_box=ttk.Combobox(source,textvariable=self.file_var,values=[f"{i+1}. {Path(f['path']).name}" for i,f in enumerate(job["files"])],state="readonly")
         self.file_box.pack(side="left",fill="x",expand=True);self.file_box.bind("<<ComboboxSelected>>",self.load_source)
-        self.file_box.current(next((i for i,file in enumerate(job['files']) if file['hash']==job.get('text_file_hash',job['hash'])),0))
-        ttk.Button(source,text="정리된 본문 확인 · 복사",command=self.prepare_excerpt).pack(side="right",padx=6)
+        if job['files']:
+            self.file_box.current(next((i for i,file in enumerate(job['files']) if file['hash']==job.get('text_file_hash',job['hash'])),0))
+            ttk.Button(source,text="정리된 본문 확인 · 복사",command=self.prepare_excerpt).pack(side="right",padx=6)
+        else:source.pack_forget()
         self.status=tk.StringVar(value="대장에서 실제 발신번호를 받은 뒤 원본 양식의 HWP를 저장하고 한글에서 편집합니다.")
         ttk.Label(panel,textvariable=self.status,wraplength=900).pack(anchor="w",pady=8)
         ttk.Button(actions,text="이전: 양식 선택",command=app.workflow.back).pack(side="left")

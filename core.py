@@ -590,6 +590,13 @@ def process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, st
 
 def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, stamp_factory=None):
     from outgoing import validate as validate_outgoing, finish as finish_outgoing
+    if job.get('standalone_outgoing'):
+        out=validate_outgoing(job,config)
+        if not out['enabled']:raise ValueError('새 발신 공문의 발신 등록을 선택하세요.')
+        finish_outgoing(job,config,store,outgoing_factory,stamp_factory)
+        job.update(state='완료',reason='발신·직인날인대장 등록 완료')
+        store.put(job)
+        return job
     if job.get('receipt_done') and job.get('files_rolled_back'):
         from folder_naming import copy_to_subfolders
         job['destinations']=copy_to_subfolders(job,config['root'],on_progress=lambda:store.put(job))

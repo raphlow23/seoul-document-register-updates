@@ -65,6 +65,13 @@ def run():
             walk(flow.content)
             root.withdraw()
         def process(job,config,db):
+            if job.get('standalone_outgoing'):
+                writes.append('new_outgoing')
+                assert not job.get('receipt_done') and not job['files'] and not job.get('number')
+                out=job['outgoing'];assert out['title']=='새로 보내는 공문' and not out['title_same']
+                out.update(number='13',document_number='서울센터2026-013',complete=True,sheet_attempted=True)
+                out['stamp'].update(complete=True,sheet_attempted=True)
+                job.update(state='완료',reason='fixture outgoing-only registered');db.put(job);return job
             if not job.get("receipt_done") and fail_receipt[0]:
                 fail_receipt[0]=False
                 raise ConnectionError("fixture: connection failed before writing")
@@ -263,13 +270,29 @@ def run():
                     assert review.source.get('1.0','end').strip()==source_text
                     assert original.read_bytes()==original_bytes
                     review.close()
+                flow.outgoing_home();check_actions();flow.new_outgoing_button.invoke()
+                wait(lambda:flow.section=='outgoing' and flow.step==2);idle()
+                new_key=flow.current;new_job=app.jobs[new_key]
+                assert new_job['standalone_outgoing'] and not new_job['files'] and not new_job.get('receipt_done')
+                assert flow.outgoing_list_tree.exists(new_key) and not app.tree.exists(new_key)
+                flow.outgoing_form(new_job,'1');editor=app.outgoing_editor
+                editor.vars['title'].set('새로 보내는 공문');editor.vars['receiver'].set('수신 기관')
+                editor.folder_mode='direct';editor.vars['save_folder'].set(str(shared));check_actions()
+                editor.register();wait(lambda:flow.step==4);idle()
+                assert writes[-1]=='new_outgoing' and app.jobs[new_key]['outgoing']['number']=='13'
+                assert 'number' not in app.jobs[new_key] and not app.jobs[new_key].get('receipt_done')
+                assert app.jobs[new_key]['title']=='새로 보내는 공문' and not errors,errors
+                flow.outgoing_home();flow.outgoing_list_tree.selection_set(new_key)
+                with patch('workflow_ui.messagebox.askyesno',return_value=True):flow.restart_outgoing(hide=True)
+                wait(lambda:not flow.outgoing_list_tree.exists(new_key));idle()
+                assert not app.jobs[new_key].get('receipt_done')
         finally:
             app.commands.put(("quit",None));app.worker.join(timeout=5)
             for token in root.tk.call('after','info'):root.after_cancel(token)
             root.destroy()
     from rollback_smoke import run as rollback_check
     rollback_check()
-    print("Guided receipt, grouped attachments, independent numbering, history, outgoing + stamp, settings: OK")
+    print("Guided receipt, grouped attachments, independent numbering, history, new outgoing without receipt + stamp, settings: OK")
 
 
 if __name__=="__main__":run()

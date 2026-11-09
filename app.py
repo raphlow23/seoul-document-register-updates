@@ -112,6 +112,11 @@ class Worker(threading.Thread):
                         message=maintain(self.config,self.store)
                         for job in self.store.all():self.emit('job',job)
                         self.emit('status',message)
+                    elif cmd == 'outgoing_new':
+                        from outgoing_new import create
+                        job=create(self.config,self.store)
+                        self.emit('job',job)
+                        self.emit('outgoing_new_done',{'hash':job['hash']})
                     elif cmd == 'outgoing_restart':
                         from outgoing_restart import restart
                         job=self.store.get(data['hash'])
@@ -172,7 +177,7 @@ class Worker(threading.Thread):
                         from outgoing import merge_edit
                         job=self.store.get(data["hash"])
                         if not job:raise ValueError("해당 문서 이력을 찾지 못했습니다.")
-                        if not job.get("sheet_attempted") and not job.get("receipt_done"):
+                        if not job.get('standalone_outgoing') and not job.get("sheet_attempted") and not job.get("receipt_done"):
                             if not job.get("files_started"):job.update(data.get("receipt_fields",{}))
                             elif data.get("receipt_fields",{}).get("receipt_type"):job["receipt_type"]=data["receipt_fields"]["receipt_type"]
                         merge_edit(job,data["outgoing"])
@@ -437,9 +442,9 @@ class Worker(threading.Thread):
     def execute(self, job,register_outgoing=False):
         # A queued UI snapshot must not undo a completed/attempted database transaction.
         saved = self.store.get(job["hash"])
-        if saved and (saved["state"] in ("완료", "묶음 처리 완료", "묶음에 포함") or saved.get("sheet_attempted")):
+        if saved and (saved.get('standalone_outgoing') or saved["state"] in ("완료", "묶음 처리 완료", "묶음에 포함") or saved.get("sheet_attempted")):
             job = saved
-        self.emit("status", "저장·접수등록 중: " + job["title"])
+        self.emit("status", ("발신·직인날인대장 등록 중: " if job.get('standalone_outgoing') else "저장·접수등록 중: ") + job["title"])
         try:
             if (register_outgoing or not job.get('receipt_done')) and job.get("outgoing",{}).get("enabled") and job["outgoing"].get("open_hwp_after_registration") and not job["outgoing"].get("complete"):
                 from hwp_documents import check_template
@@ -447,7 +452,7 @@ class Worker(threading.Thread):
                 if job["outgoing"].get("folder_plan"):
                     from outgoing_folders import validate
                     validate(job["outgoing"]["folder_plan"],job["outgoing"])
-            if not job.get("routing") and not job.get("receipt_done"):
+            if not job.get('standalone_outgoing') and not job.get("routing") and not job.get("receipt_done"):
                 raise ValueError("‘저장 위치 선택’에서 공문 종류와 저장할 폴더를 먼저 골라 주세요.")
             files_only=bool(job.get('receipt_done') and job.get('files_rolled_back') and not register_outgoing)
             result = process(job,{**self.config,'_register_outgoing_after_restore':True} if register_outgoing else self.config,self.store)
@@ -577,13 +582,17 @@ class App:
                     self.busy=False
                     self.workflow.attachments_added(data['job'])
                     self.status.set(data['job']['reason'])
+                elif kind == 'outgoing_new_done':
+                    self.busy=False
+                    self.workflow.outgoing_created(data)
+                    self.status.set('수신 없이 새 발신 공문을 작성합니다. 사용할 양식을 선택하세요.')
                 elif kind == 'outgoing_restart_done':
                     self.busy=False
                     self.workflow.outgoing_restarted(data)
                     self.status.set(data['job']['reason']+' · 기존 구글시트 행과 파일은 유지합니다.')
                 elif kind in ("completed","files_resaved"):
                     out=data.get("outgoing",{})
-                    detail=f"수신 {data['number']}"+(f" · 발신 {out.get('number','')} · 직인대장 등록 완료" if out.get("enabled") else " · 저장·수신등록 완료")
+                    detail=(f"발신 {out.get('number','')} · 직인대장 등록 완료" if data.get('standalone_outgoing') else f"수신 {data['number']}"+(f" · 발신 {out.get('number','')} · 직인대장 등록 완료" if out.get("enabled") else " · 저장·수신등록 완료"))
                     if kind=='files_resaved':detail=f"수신 {data['number']} · 파일 다시 저장 완료 · 기존 대장 유지"
                     self.status.set(detail+" · "+data["title"])
                     self.workflow.completed(data)
@@ -702,7 +711,7 @@ class App:
         for k, var in self.fields.items():
             var.set(job.get(k,"공문" if k=="receipt_type" else ""))
         self.outgoing_enabled.set(job.get("outgoing",{}).get("enabled",False))
-        self.detail.set(f"{job['reason']}\n첨부 {len(job['files'])}개 · {Path(job['files'][0]['path']).name}")
+        self.detail.set(f"{job['reason']}\n첨부 {len(job['files'])}개"+(" · "+Path(job['files'][0]['path']).name if job['files'] else ' · 수신 없이 새 발신'))
 
     def edited(self):
         jobs = self.selected()
@@ -833,10 +842,11 @@ class App:
             from ocr_text_editor import OcrTextEditor
             source=next((f for f in job['files'] if f['hash']==job.get('text_file_hash',job['hash'])),job['files'][0])
             OcrTextEditor(self,job.get("text",""),parent=dialog,source_file=source)
-        ttk.Button(buttons,text="자동 정리된 본문 확인 · 복사",command=excerpt).pack(side="left")
+        if job['files']:ttk.Button(buttons,text="자동 정리된 본문 확인 · 복사",command=excerpt).pack(side="left")
         text = tk.Text(dialog, wrap="word", font=("맑은 고딕", 11), padx=15, pady=15)
         text.pack(fill="both", expand=True)
         content = f"등록번호: {job.get('number', '')}\n상태: {job['state']}\n{job['reason']}\n\n첨부파일\n"
+        if job.get('standalone_outgoing'):content=f"발신번호: {job.get('outgoing',{}).get('document_number') or job.get('outgoing',{}).get('number','')}\n상태: {job['state']}\n{job['reason']}\n\n수신 없이 새로 작성한 발신 공문\n"
         content += "\n".join(f["path"] for f in job["files"])
         content += "\n\n저장 위치\n" + "\n".join(job.get("destinations", []))
         if job.get('rollback_history'):

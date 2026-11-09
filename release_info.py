@@ -1,5 +1,5 @@
-VERSION = "2.8.3"
-# Signed manifest failover, alternate asset route and verified official release API.
+VERSION = "2.8.4"
+# New outgoing documents without receipt registration or source attachments.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
 UPDATE_REPOSITORY = "raphlow23/seoul-document-register-updates"

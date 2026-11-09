@@ -16,6 +16,7 @@ def defaults(job,config):
             "kind":"발송문서","method":"Email","body":"","attachments":"","reference":"","summary":"",
             "purpose":"전달·안내","template_path":config.get("document_template",""),**job.get("outgoing",{})}
     out["stamp"]={"department":"편의증진부","applicant":out["sender"],"person":"","date":out["date"],**out.get("stamp",{})}
+    if job.get('standalone_outgoing'):out['title_same']=False
     if out.get("title_same",True) and not out.get("sheet_attempted"):out["title"]=job.get("title",out["title"])
     return out
 
@@ -75,6 +76,10 @@ def merge_edit(job,edited):
     for key in ("row","number","sheet_attempted","complete"):
         if key in old.get("stamp",{}):edited["stamp"][key]=old["stamp"][key]
     job["outgoing"]=edited
+    if job.get('standalone_outgoing'):
+        job.update(title=edited.get('title',''),date=edited.get('date',job.get('date','')))
+        if not (edited.get('complete') and edited.get('stamp',{}).get('complete')):job['state']='발신 등록 대기'
+        return job
     if edited.get("enabled") and not (edited.get("complete") and edited.get("stamp",{}).get("complete")) and job["state"]=="완료":
         job["receipt_done"]=True
         job["state"]="수신 완료·발신 등록 대기"
