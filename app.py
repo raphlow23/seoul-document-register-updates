@@ -106,6 +106,12 @@ class Worker(threading.Thread):
                         self.hide_list(data)
                     elif cmd == 'hide_history':
                         self.hide_list(data,history=True)
+                    elif cmd == 'maintenance':
+                        from program_storage import maintain
+                        self.emit('status','기존 공유폴더의 보관 자료를 설치 폴더로 옮기고 확인하는 중…')
+                        message=maintain(self.config,self.store)
+                        for job in self.store.all():self.emit('job',job)
+                        self.emit('status',message)
                     elif cmd == 'outgoing_restart':
                         from outgoing_restart import restart
                         job=self.store.get(data['hash'])
@@ -468,6 +474,7 @@ class App:
             elif self.config.get("auth_mode")=="oauth" and not self.config.get("oauth_client_path"):
                 self.config["auth_mode"]="browser"
         self.config["_auth_data_dir"] = str(self.data)
+        self.config['_program_dir']=str(Path(sys.executable).resolve().parent if getattr(sys,'frozen',False) else (self.data/'Program').resolve())
         history = Store(self.data / "history.sqlite")
         self.jobs = {x["hash"]: x for x in history.all()}
         history.db.close()
@@ -862,6 +869,8 @@ class App:
         webbrowser.open("https://docs.google.com/spreadsheets/d/" + self.config["spreadsheet_id"] + "/edit")
 
     def start_watch(self):
+        if not getattr(self,'maintenance_queued',False):
+            self.maintenance_queued=True;self.commands.put(('maintenance',None))
         watch = True
         resume = self.data / "watch-resume.json"
         if resume.exists():
@@ -987,6 +996,9 @@ class App:
 
 
 def main():
+    if len(sys.argv)==3 and sys.argv[1]=='--test-program-storage':
+        from program_storage_smoke import run
+        run(sys.argv[2]);return
     if len(sys.argv)==3 and sys.argv[1]=='--test-taskbar':
         try:
             from taskbar_smoke import run

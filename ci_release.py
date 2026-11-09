@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='아이콘 확대·하단 안내·발신 초기화·완화공문 양식 관리'
-RELEASE_BODY='투명 아이콘의 작은 크기용 그림 너비를 약 33% 키웠으며 메인 화면 하단 안내의 높이·줄바꿈을 수정했습니다. 발신 초기화·다시 시작과 목록 삭제는 이전 발신·직인 진행을 이어 쓰지 않고 최신 대장에서 번호를 다시 받도록 합니다. 수신 접수·기존 시트 행·파일은 보존합니다. 설정에 완화공문 양식(일반 공문, 기본 위치 3.완화신청), 원본 HWP 연결, 양식 이름 변경·목록 삭제를 추가했습니다. 삭제한 양식의 기존 공문 연결과 파일은 보존하고 업데이트 후 목록에서 되살리지 않습니다. 212개 검사와 실제 설치 파일의 화면·아이콘·발신 초기화·양식 관리·자동 업데이트와 재실행을 검증하며 최신·직전 릴리스만 보관합니다.'
+RELEASE_TITLE='설치 폴더 내 임시 보관·기존 공유폴더 이전·완료 자료 정리'
+RELEASE_BODY='되돌리기 파일과 브라우저 임시 이력을 설치된 EXE 옆 임시보관 폴더에 저장합니다. 기존 공유폴더의 두 보관 폴더도 내용 검증과 경로 갱신 후 이전·정리합니다. 등록 결과가 확인된 임시 JSON은 삭제하고 최소 중복 등록 확인 정보만 로컬 DB에 유지합니다. 정상 재저장이 끝난 변경 없는 백업은 정리하며 미완료 작업과 마지막 첨부 사본은 보호합니다. 복사 실패·파일 변경·중단 시 원본을 유지하며 설정에서 정리를 재시도할 수 있습니다. 220개 검사와 실제 설치 EXE의 이전·정리, 자동 업데이트·재실행·기존 설정 보존을 검증합니다.'
 _release_id = None
 
 
@@ -85,7 +85,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_template_management"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_template_management","test_program_storage"],check=True,timeout=90)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:
@@ -95,6 +95,11 @@ def build():
     taskbar_result=json.loads(taskbar.read_text(encoding='utf-8'))
     assert taskbar_result['big_icon'] and taskbar_result['small_icon'] and taskbar_result['owned_shortcut_repaired']
     print('Native taskbar and shortcut verification:',taskbar.read_text(encoding='utf-8'))
+    storage=out/'program-storage-check.json'
+    subprocess.run([str(exe),'--test-program-storage',str(storage)],check=True,timeout=90)
+    storage_result=json.loads(storage.read_text(encoding='utf-8'))
+    assert storage_result['shared_folders_removed_after_verified_migration'] and storage_result['normal_completion_backup_cleanup']
+    print('Installed-folder migration and cleanup verification:',storage.read_text(encoding='utf-8'))
     from updater import restart_target
     print("Frozen post-update GUI readiness:", restart_target(exe,out,VERSION,test=True))
     startup=out/"browser-startup.json"

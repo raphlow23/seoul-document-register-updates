@@ -32,7 +32,7 @@ class FileRollbackTests(unittest.TestCase):
         for name in AGENCIES['중앙센터 공문']:(self.root/name).mkdir()
         self.source=self.base/'original.pdf';self.source.write_bytes(b'original attachment')
         self.store=core.Store(self.base/'history.sqlite');self.addCleanup(self.store.db.close)
-        self.config={'root':str(self.root),'recipient':'담당자'}
+        self.config={'root':str(self.root),'recipient':'담당자','_program_dir':str(self.base/'Program')}
         self.job={'hash':core.digest(self.source),'id':'receipt-fixture','state':'확인 필요','files':[{'path':str(self.source),'hash':core.digest(self.source)}],'title':'공문 제목','category':'중앙센터 공문','receipt_type':'공문','recipient':'담당자','date':'2026-11-03','issuer':'중앙센터','number':'','routing':{'agency':'중앙센터 공문','targets':[{'relative':'0.중앙센터 공문','template':'{number:03d}. {title}'}],'children':['incoming','outgoing','reply']}}
         self.factory=Mock()
         def register(job,store):job['sheet_attempted']=True;store.put(job);return 6,'581'
@@ -125,12 +125,13 @@ class FileRollbackTests(unittest.TestCase):
 
     def test_partial_move_can_resume_without_changing_ledger_or_duplicating_backup(self):
         self.job['routing']['targets'].append({'relative':'8.실태조사','template':'{number:03d}. {title}'})
-        self.save();rename=Path.rename;calls=[0]
-        def failing(path,target):
+        self.save();calls=[0]
+        from program_storage import remove_verified as real_remove
+        def failing(path,expected):
             calls[0]+=1
             if calls[0]==2:raise OSError('fixture disconnect')
-            return rename(path,target)
-        with patch.object(Path,'rename',new=failing),self.assertRaises(OSError):rollback.execute(self.job,self.config,self.store,'receipt')
+            return real_remove(path,expected)
+        with patch('program_storage.remove_verified',side_effect=failing),self.assertRaises(OSError):rollback.execute(self.job,self.config,self.store,'receipt')
         saved=self.store.get(self.job['hash']);self.assertIn('rollback_pending',saved)
         rollback.execute(saved,self.config,self.store,'receipt')
         self.assertEqual(len(saved['rollback_history'][-1]['moves']),2);self.assertEqual(saved['number'],'581')

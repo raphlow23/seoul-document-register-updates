@@ -14,7 +14,7 @@ def run():
         base=Path(temporary).resolve();shared=base/'shared';shared.mkdir()
         for name in AGENCIES['중앙센터 공문']:(shared/name).mkdir()
         source=base/'original.pdf';source.write_bytes(b'original fixture')
-        config={'root':str(shared),'recipient':'담당자','downloads':str(base),'_guided_ui':True}
+        config={'root':str(shared),'recipient':'담당자','downloads':str(base),'_guided_ui':True,'_program_dir':str(base/'Program')}
         key=core.digest(source)
         job={'hash':key,'id':'rollback-fixture','state':'확인 필요','files':[{'path':str(source),'hash':key}],'text':'시험 공문 본문','title':'기존 접수 제목','category':'중앙센터 공문','receipt_type':'공문','recipient':'담당자','date':'2026-11-03','issuer':'중앙센터','routing':{'agency':'중앙센터 공문','targets':[{'relative':'0.중앙센터 공문','template':'{number:03d}. {title}'}],'children':['incoming','outgoing','reply']}}
         class Forbidden:

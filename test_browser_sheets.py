@@ -59,7 +59,7 @@ class BrowserTests(unittest.TestCase):
         rows[2]=["연번","일자","문서","번호","발신처","제목","담당자","방법"]
         rows[4]=["1","2026-11-01","서울센터2026-","20","서울시청","기존 제목","담당자","Email"]
         self.ui=UI(rows)
-        self.session=BrowserSession({"root":str(self.base),"spreadsheet_id":"test-id"},self.owner,ui=self.ui)
+        self.session=BrowserSession({"root":str(self.base),"spreadsheet_id":"test-id",'_program_dir':str(self.base/'Program')},self.owner,ui=self.ui)
         self.owner.browser=self.session
         self.store=core.Store(self.base/"history.sqlite");self.addCleanup(self.store.db.close)
         self.job={"hash":"abc","files":[{"hash":"abc","path":"not-used.pdf"}],"date":"2026-11-02","title":"새 공문","issuer":"중앙센터","recipient":"담당자","state":"확인 필요"}
@@ -71,7 +71,8 @@ class BrowserTests(unittest.TestCase):
         count=len(self.ui.writes)
         self.assertEqual(self.owner.register(self.job,self.store),(6,"21"))
         self.assertEqual(count,len(self.ui.writes))
-        self.assertTrue(list((self.base/".수발신-브라우저이력").glob("*.json")))
+        self.assertFalse((self.base/'.수발신-브라우저이력').exists());self.assertFalse(self.session.journal.exists())
+        self.assertTrue(self.session.records.database.is_file())
 
     def test_partial_write_recovers_same_row_without_duplicate(self):
         self.ui.fail=4

@@ -1,6 +1,6 @@
 """Google Sheets through the visible browser UI, without Google Cloud/API credentials.
 
-Uses only sheet tabs, the name box, copy/paste and a shared write-ahead journal.
+Uses sheet tabs, the name box, copy/paste and an EXE-local write-ahead journal.
 No Google private network endpoints or browser password/cookie extraction.
 """
 import csv
@@ -224,7 +224,8 @@ class BrowserSession:
     def __init__(self,config,owner,ui=None):
         self.config,self.owner=config,owner
         self.ui=ui or BrowserUI(config).connect()
-        self.journal=Path(config["root"])/".수발신-브라우저이력"
+        from browser_journal import Journal
+        self.records=Journal(config);self.records.migrate();self.journal=self.records.folder
         self.sid=config["spreadsheet_id"]
         self.rows=[]
 
@@ -260,16 +261,11 @@ class BrowserSession:
             entry=json.loads(path.read_text(encoding="utf-8"))
             if entry["sid"]!=self.sid or entry["tab"]!=self.owner.tab or entry.get("complete"):continue
             if not set(markers).intersection(entry["markers"]):continue
-            self._check_entry(entry);entry["complete"]=True;self.save(path,entry)
+            self._check_entry(entry);entry["complete"]=True;self.save(path,entry);self.records.archive(path,entry)
 
     def snapshot(self):
         self.ui.tab(self.owner.tab)
-        self.journal.mkdir(exist_ok=True)
-        found={};entries=[]
-        for path in self.journal.glob("*.json"):
-            entry=json.loads(path.read_text(encoding="utf-8"))
-            if entry["sid"]!=self.sid or entry["tab"]!=self.owner.tab:continue
-            entries.append(entry)
+        found={};entries=[entry for entry in self.records.entries() if entry['sid']==self.sid and entry['tab']==self.owner.tab]
         rows=self.getrows(f"A:{self.owner.last_column}")
         if hasattr(self.owner,'validate_header'):self.owner.validate_header(rows)
         header=rows[self.owner.header_row] if len(rows)>self.owner.header_row else []
@@ -325,8 +321,9 @@ class BrowserSession:
             after[col]=value;writes[str(col)]=write
         entry={"sid":self.sid,"tab":self.owner.tab,"row":row,"before":before,"after":after,"writes":writes,"markers":markers,"complete":False}
         path=self.journal/(hashlib.sha256((self.sid+self.owner.tab+markers[0]).encode()).hexdigest()+".json")
+        path.parent.mkdir(parents=True,exist_ok=True)
         self.save(path,entry)  # Durable intent BEFORE any sheet edit; partial writes recover conditionally.
         self.intent_written=True
         self._check_entry(entry)
-        entry["complete"]=True;self.save(path,entry)
+        entry["complete"]=True;self.save(path,entry);self.records.archive(path,entry)
         return {}

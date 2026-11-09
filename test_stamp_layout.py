@@ -21,7 +21,7 @@ class StampLayoutTests(unittest.TestCase):
         rows[4]=['432','2026-11-02','○','','','서울센터2026-440','이전 공문','수신 기관','편의증진부','담당자','']
         rows[5][0]='433';rows=[['']*11 for _ in range(shift)]+rows
         owner=StampSheets.__new__(StampSheets);owner.tab=STAMP_TAB;ui=UI(rows)
-        owner.browser=BrowserSession({'root':str(folder),'spreadsheet_id':'fixture-sheet'},owner,ui=ui)
+        owner.browser=BrowserSession({'root':str(folder),'spreadsheet_id':'fixture-sheet','_program_dir':str(folder/'Program')},owner,ui=ui)
         job={'hash':'fixture-'+kind,'state':'발신 완료·직인 등록 대기','outgoing':{'id':'out-'+kind,'complete':True,'document_number':'서울센터2026-441','title':'새 발신 공문','receiver':'수신 기관','ledger_type':kind,'stamp':{'department':'편의증진부','applicant':'담당자','person':'','date':'2026-11-05'}}}
         return owner,ui,job
 

@@ -577,7 +577,12 @@ def registration_lock(root):
 
 def process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, stamp_factory=None):
     with registration_lock(config["root"]):
-        return _process(job, config, store, sheets_factory, outgoing_factory, stamp_factory)
+        result=_process(job, config, store, sheets_factory, outgoing_factory, stamp_factory)
+        from program_storage import cleanup_rollbacks
+        try:cleanup_rollbacks(result,config,store)
+        except (OSError,ValueError) as error:
+            result['cleanup_warning']=str(error);store.put(result)
+        return result
 
 
 def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, stamp_factory=None):

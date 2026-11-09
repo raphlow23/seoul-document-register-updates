@@ -143,9 +143,11 @@ def plan(job,config,scope):
         for owner in job.get('storage_roots',[]):
             owned=checked(owner['path'])
             if path.is_relative_to(owned) and owned.parent in anchor.parents:anchor=owned.parent
-        slot=str(len(moves));backup=anchor/'.수발신-되돌리기'/str(job['id'])/token/slot/path.name
-        if not backup.resolve().is_relative_to((anchor/'.수발신-되돌리기').resolve()):raise ValueError('복구 보관 경로가 올바르지 않습니다.')
-        moves.append({'source':str(path),'backup':str(backup),'backup_root':str(anchor),'slot':slot,'inventory':before,'done':False})
+        from program_storage import temporary_root
+        local_base=temporary_root(config,'수발신-되돌리기').resolve()
+        slot=str(len(moves));backup=local_base/str(job['id'])/token/slot/path.name
+        if not backup.resolve().is_relative_to(local_base):raise ValueError('복구 보관 경로가 올바르지 않습니다.')
+        moves.append({'source':str(path),'backup':str(backup),'backup_root':str(anchor),'slot':slot,'inventory':before,'done':False,'local':True,'local_base':str(local_base)})
     return {'scope':scope,'id':token,'moves':moves,'started':datetime.now().isoformat(timespec='seconds')}
 
 
@@ -159,8 +161,17 @@ def execute(job,config,store,scope):
         if not base.is_relative_to(checked(config['root'])):locks.add(base)
     with ExitStack() as stack:
         for root in sorted(locks,key=str):stack.enter_context(registration_lock(root))
+        from program_storage import migrate_rollbacks,temporary_root,copy_verified,remove_verified,subset
+        store.put(job);migrate_rollbacks(config,store)
+        refreshed=store.get(job['hash']);job.clear();job.update(refreshed)
         transaction=job.get('rollback_pending')
         if transaction and transaction['scope']!=scope:raise ValueError('시작한 파일 되돌리기를 먼저 마쳐 주세요.')
+        if transaction:
+            for move in transaction['moves']:
+                if not move.get('local') and not Path(move['backup']).exists():
+                    local_base=temporary_root(config,'수발신-되돌리기').resolve()
+                    move.update(backup=str(local_base/str(job['id'])/transaction['id']/move['slot']/Path(move['source']).name),local=True,local_base=str(local_base))
+            store.put(job)
         if not transaction:
             transaction=plan(job,config,scope);job['rollback_pending']=transaction;store.put(job)
         if not re.fullmatch(r'[0-9a-f]{32}',transaction['id']):raise ValueError('되돌리기 작업 ID가 올바르지 않습니다.')
@@ -169,18 +180,19 @@ def execute(job,config,store,scope):
             source,backup=checked(move['source']),checked(move['backup'])
             anchor=checked(move['backup_root'])
             if anchor not in source.parents or move['slot']!=str(index):raise ValueError('복구 보관 기준 경로가 올바르지 않습니다.')
-            expected=anchor/'.수발신-되돌리기'/str(job['id'])/transaction['id']/move['slot']/source.name
+            local_base=checked(move.get('local_base',str(temporary_root(config,'수발신-되돌리기'))))
+            root=temporary_root(config,'수발신-되돌리기').resolve()
+            if not move.get('local') or not (local_base==root or (local_base.parent==root and re.fullmatch(r'legacy-[0-9a-f]{32}',local_base.name))):raise ValueError('설치 폴더 내 보관 경로를 확인하지 못했습니다.')
+            expected=local_base/str(job['id'])/transaction['id']/move['slot']/source.name
             if backup!=expected.resolve():raise ValueError('파일 되돌리기 보관 경로가 달라 중단합니다.')
-            current=source if source.exists() else backup
-            if source.exists() and backup.exists():raise ValueError('원본과 복구 보관 파일이 모두 존재해 중단합니다.')
-            if not current.exists() or inventory(current)!=move['inventory']:raise ValueError('파일이 변경되어 되돌리기를 중단합니다: '+str(current))
+            if not source.exists() and not backup.exists():raise ValueError('되돌릴 파일이 없습니다: '+str(source))
+            if source.exists() and not subset(inventory(source),move['inventory']):raise ValueError('원본 파일이 변경되어 중단합니다: '+str(source))
+            if backup.exists() and not subset(inventory(backup),move['inventory']):raise ValueError('보관 파일이 변경되어 중단합니다: '+str(backup))
         for move in transaction['moves']:
             source,backup=checked(move['source']),checked(move['backup'])
-            if source.exists():
-                if inventory(source)!=move['inventory']:raise ValueError('저장 파일이 변경되었습니다: '+str(source))
-                backup.parent.mkdir(parents=True,exist_ok=True)
-                checked(backup.parent)
-                source.rename(backup)
+            copy_verified(source,backup,move['inventory'])
+            move['copied']=True;store.put(job)
+            remove_verified(source,move['inventory'])
             move['done']=True;store.put(job)
         scopes={'receipt','outgoing'} if scope=='receipt' else {'outgoing'}
         job['storage_roots']=[r for r in job.get('storage_roots',[]) if r['scope'] not in scopes]
@@ -210,4 +222,6 @@ def execute(job,config,store,scope):
         job['reason']='파일·폴더 저장 취소 · 구글시트 등록과 번호 유지'
         from core import attachment_aliases
         store.put_many([job,*attachment_aliases(job,store,'묶음 처리 완료' if job.get('receipt_done') else '묶음에 포함')])
+        from program_storage import clean_copy_parts
+        clean_copy_parts(config)
     return job
