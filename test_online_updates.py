@@ -82,6 +82,30 @@ class OnlineTests(unittest.TestCase):
             self.assertEqual(updater.read_manifest(self.official()+'/latest.json',self.public),self.manifest)
         self.assertEqual(get.call_count,2)
 
+    def test_binary_http_504_retries_download_route_with_verified_hash(self):
+        seen=[]
+        def get(url,**kwargs):
+            seen.append(url)
+            if url.endswith('latest.json'):return Response(url,json.dumps(self.manifest).encode())
+            return Response(url,self.bytes) if url.endswith('?download=1') else Response(url,status=504)
+        with patch('requests.get',side_effect=get):
+            update=updater.check_and_stage(self.source,self.root,current='1.3.0',public_key=self.public)
+        self.assertEqual(Path(update['staged']).read_bytes(),self.bytes)
+        self.assertEqual(seen[-1],seen[-2]+'?download=1')
+
+    def test_interrupted_asset_retry_discards_partial_bytes_and_rejects_corruption(self):
+        import requests
+        class Interrupted(Response):
+            def iter_content(self,chunk_size):
+                yield b'partial bytes'
+                raise requests.ConnectionError('connection reset')
+        def get(url,**kwargs):
+            if url.endswith('latest.json'):return Response(url,json.dumps(self.manifest).encode())
+            return Response(url,b'MZcorrupt') if url.endswith('?download=1') else Interrupted(url)
+        with patch('requests.get',side_effect=get):
+            with self.assertRaises(ValueError):updater.check_and_stage(self.source,self.root,current='1.3.0',public_key=self.public)
+        self.assertFalse(list(self.root.rglob('*.exe')));self.assertFalse(list(self.root.rglob('*.part')))
+
     def test_custom_feed_does_not_silently_switch_to_product_repository(self):
         with patch('requests.get',return_value=Response(self.source,status=504)) as get:
             with self.assertRaisesRegex(ValueError,'504'):updater.read_manifest(self.source,self.public)

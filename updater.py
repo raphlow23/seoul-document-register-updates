@@ -124,8 +124,16 @@ def read_manifest(source,public_key=UPDATE_PUBLIC_KEY):
 
 def download_to(source,manifest,filename,size,output):
     if remote(source):
+        import requests
         base=manifest.get("download_base") or str(source).rstrip("/").removesuffix("/latest.json")
-        with Path(output).open("xb") as dst:read_online(trusted_url(base.rstrip("/")+"/"+filename),size,dst)
+        url=trusted_url(base.rstrip("/")+"/"+filename)
+        with Path(output).open("xb") as dst:
+            try:read_online(url,size,dst)
+            except (OnlineUnavailable,requests.RequestException):
+                # A fresh route avoids stale/error responses from GitHub's edge.
+                # Discard partial bytes before retrying; signed size/hash checks follow.
+                dst.seek(0);dst.truncate()
+                read_online(url+'?download=1',size,dst)
     else:
         with (Path(source)/filename).open("rb") as src,Path(output).open("xb") as dst:
             count=0
