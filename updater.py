@@ -67,7 +67,8 @@ def remote(source):
 def trusted_url(url):
     value=urlsplit(url)
     host=(value.hostname or "").lower()
-    if value.scheme!="https" or value.username or value.password or value.port not in (None,443) or not (host=="github.com" or host.endswith(".githubusercontent.com")):
+    release_api=host=='api.github.com' and value.path.startswith('/repos/'+UPDATE_REPOSITORY+'/releases/')
+    if value.scheme!="https" or value.username or value.password or value.port not in (None,443) or not (host=="github.com" or host.endswith(".githubusercontent.com") or release_api):
         raise ValueError("GitHub HTTPS 업데이트 주소를 확인해 주세요.")
     return url
 
@@ -76,7 +77,9 @@ def read_online(url,limit,target=None):
     import requests
     trusted_url(url)
     for hop in range(6):
-        response=requests.get(trusted_url(url),stream=True,allow_redirects=False,timeout=(10,30),headers={"Cache-Control":"no-cache","User-Agent":PRODUCT+"/"+VERSION})
+        headers={"Cache-Control":"no-cache","User-Agent":PRODUCT+"/"+VERSION}
+        if urlsplit(url).hostname=='api.github.com':headers['Accept']='application/octet-stream' if '/releases/assets/' in urlsplit(url).path else 'application/vnd.github+json'
+        response=requests.get(trusted_url(url),stream=True,allow_redirects=False,timeout=(10,30),headers=headers)
         if response.status_code not in (301,302,303,307,308):break
         try:url=trusted_url(urljoin(url,response.headers.get("Location","")))
         finally:response.close()
@@ -133,7 +136,19 @@ def download_to(source,manifest,filename,size,output):
                 # A fresh route avoids stale/error responses from GitHub's edge.
                 # Discard partial bytes before retrying; signed size/hash checks follow.
                 dst.seek(0);dst.truncate()
-                read_online(url+'?download=1',size,dst)
+                try:read_online(url+'?download=1',size,dst)
+                except (OnlineUnavailable,requests.RequestException):
+                    prefix='https://github.com/'+UPDATE_REPOSITORY+'/releases/download/'
+                    tag=base.removeprefix(prefix)
+                    if not base.startswith(prefix) or not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',tag):raise
+                    api='https://api.github.com/repos/'+UPDATE_REPOSITORY+'/releases/'
+                    release=json.loads(read_online(api+'tags/'+tag,2*1024*1024))
+                    if release.get('draft') or release.get('tag_name')!=tag:raise ValueError('공개된 배포 버전을 확인하지 못했습니다.')
+                    asset=next((a for a in release.get('assets',[]) if a.get('name')==filename),None)
+                    expected=manifest if filename==manifest['filename'] else next((c for c in manifest.get('components',{}).values() if c.get('filename')==filename),{})
+                    if not asset or type(asset.get('id')) is not int or asset['id']<=0 or asset.get('state')!='uploaded' or asset.get('size')!=size or asset.get('digest')!='sha256:'+expected.get('sha256',''):raise ValueError('공식 배포 파일이 서명된 안내와 다릅니다.')
+                    dst.seek(0);dst.truncate()
+                    read_online(api+'assets/'+str(asset['id'])+'?download=1',size,dst)
     else:
         with (Path(source)/filename).open("rb") as src,Path(output).open("xb") as dst:
             count=0

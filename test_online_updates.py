@@ -106,6 +106,35 @@ class OnlineTests(unittest.TestCase):
             with self.assertRaises(ValueError):updater.check_and_stage(self.source,self.root,current='1.3.0',public_key=self.public)
         self.assertFalse(list(self.root.rglob('*.exe')));self.assertFalse(list(self.root.rglob('*.part')))
 
+    def test_official_release_api_recovers_both_failed_binary_routes(self):
+        self.manifest['download_base']='https://github.com/'+updater.UPDATE_REPOSITORY+'/releases/download/v9.0.0'
+        self.manifest['signature']=base64.b64encode(self.key.sign(updater.canonical(self.manifest))).decode()
+        api='https://api.github.com/repos/'+updater.UPDATE_REPOSITORY+'/releases/'
+        asset={'id':123,'name':self.manifest['filename'],'state':'uploaded','size':len(self.bytes),'digest':'sha256:'+self.manifest['sha256']}
+        seen=[]
+        def get(url,**kwargs):
+            seen.append(url)
+            if url.endswith('latest.json'):return Response(url,json.dumps(self.manifest).encode())
+            if url==api+'tags/v9.0.0':return Response(url,json.dumps({'draft':False,'tag_name':'v9.0.0','assets':[asset]}).encode())
+            if url==api+'assets/123?download=1':
+                self.assertEqual(kwargs['headers']['Accept'],'application/octet-stream')
+                return Response(url,self.bytes)
+            return Response(url,status=504)
+        with patch('requests.get',side_effect=get):
+            update=updater.check_and_stage(self.official(),self.root,current='1.3.0',public_key=self.public)
+        self.assertEqual(Path(update['staged']).read_bytes(),self.bytes);self.assertEqual(len(seen),5)
+
+    def test_release_api_asset_hash_mismatch_stops_before_download(self):
+        self.manifest['download_base']='https://github.com/'+updater.UPDATE_REPOSITORY+'/releases/download/v9.0.0'
+        self.manifest['signature']=base64.b64encode(self.key.sign(updater.canonical(self.manifest))).decode()
+        def get(url,**kwargs):
+            if url.endswith('latest.json'):return Response(url,json.dumps(self.manifest).encode())
+            if '/tags/' in url:return Response(url,json.dumps({'draft':False,'tag_name':'v9.0.0','assets':[{'id':123,'name':self.manifest['filename'],'state':'uploaded','size':len(self.bytes),'digest':'sha256:'+'0'*64}]}).encode())
+            return Response(url,status=504)
+        with patch('requests.get',side_effect=get) as get_mock:
+            with self.assertRaisesRegex(ValueError,'서명된'):updater.check_and_stage(self.official(),self.root,current='1.3.0',public_key=self.public)
+        self.assertEqual(get_mock.call_count,4);self.assertFalse(list(self.root.rglob('*.exe')))
+
     def test_custom_feed_does_not_silently_switch_to_product_repository(self):
         with patch('requests.get',return_value=Response(self.source,status=504)) as get:
             with self.assertRaisesRegex(ValueError,'504'):updater.read_manifest(self.source,self.public)

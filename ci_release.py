@@ -16,7 +16,7 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
 RELEASE_TITLE='업데이트 안내·실행 파일 HTTP 504 우회 및 긴 경로 수정'
-RELEASE_BODY='GitHub 릴리스의 업데이트 안내가 HTTP 504 또는 연결 오류로 실패하면 같은 저장소의 서명된 안내를 다른 GitHub 경로에서 읽습니다. 실행 파일과 구성 파일 다운로드도 실패 시 다른 다운로드 경로로 재시도하며 부분 파일은 초기화하고 서명·크기·해시를 검증합니다. 사용자 지정 안내 경로는 다른 저장소로 전환하지 않습니다. 긴 한글 경로의 보관 자료 이전 오류 수정도 포함합니다. 235개 검사와 실제 EXE의 HTTP 504 우회·400자 이상 한글 경로·업데이트 후 재실행·설정 보존을 검증합니다. 업데이트가 막힌 구버전은 설치 ZIP 전체 압축을 풀고 install.cmd를 한 번 실행하면 됩니다.'
+RELEASE_BODY='GitHub 릴리스의 업데이트 안내가 HTTP 504 또는 연결 오류로 실패하면 같은 저장소의 서명된 안내를 다른 GitHub 경로에서 읽습니다. 실행 파일과 구성 파일 다운로드도 실패 시 다른 다운로드 경로와 GitHub 공식 배포 API로 재시도하며 부분 파일은 초기화하고 서명·크기·해시를 검증합니다. 사용자 지정 안내 경로는 다른 저장소로 전환하지 않습니다. 긴 한글 경로의 보관 자료 이전 오류 수정도 포함합니다. 237개 검사와 실제 EXE의 HTTP 504 우회·400자 이상 한글 경로·업데이트 후 재실행·설정 보존을 검증합니다. 업데이트가 막힌 구버전은 설치 ZIP 전체 압축을 풀고 install.cmd를 한 번 실행하면 됩니다.'
 _release_id = None
 
 
