@@ -60,6 +60,6 @@ class ReimportTests(unittest.TestCase):
         (self.base/'watch-resume.json').write_text(json.dumps({'watch':False}))
         app=App.__new__(App);app.data=self.base;app.commands=queue.Queue();app.watching=Mock();app.toggle_watch=Mock()
         app.start_watch();app.watching.set.assert_called_once_with(True);app.toggle_watch.assert_not_called()
-        self.assertEqual(app.commands.get_nowait(),('watch',True));self.assertEqual(app.commands.get_nowait(),('maintenance',None))
+        self.assertEqual(app.commands.get_nowait(),('watch',True));self.assertTrue(app.commands.empty())
         inventory={'old.zip':(100,1),'old.pdf':(100,1)}
         self.assertEqual(resume_downloads({'watch':False,'seen':{}},inventory),inventory)

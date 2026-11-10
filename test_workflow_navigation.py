@@ -24,12 +24,11 @@ class NavigationTests(unittest.TestCase):
         shell=self.shell('receipt',3,{'hash':'fixture'})
         shell.back();shell.title_step.assert_called_once()
 
-    def test_receipt_keeps_transaction_after_writes_started(self):
+    def test_receipt_cancels_registration_and_files_after_writes_started(self):
         for marker in ('files_started','sheet_attempted'):
             job={'hash':'fixture',marker:True,'number':'581','title':'기존 제목'}
             shell=self.shell('receipt',3,job);shell.back()
-            if marker=='files_started':shell.app.send.assert_called_once_with('file_rollback',{'hash':'fixture','scope':'receipt','step':3})
-            else:shell.receipt_review.assert_called_once_with(job)
+            shell.app.send.assert_called_once_with('cancel_registration',{'hash':'fixture','scope':'receipt','step':3})
             shell.app.settings.assert_not_called();shell.title_step.assert_not_called()
             self.assertEqual(job['number'],'581');self.assertTrue(job[marker])
 
@@ -38,11 +37,11 @@ class NavigationTests(unittest.TestCase):
         shell=self.shell('outgoing',3,job);shell.back();shell.start_outgoing.assert_called_once_with(job)
         job['outgoing'].update(sheet_attempted=True,number='12')
         shell=self.shell('outgoing',3,job);shell.back()
-        shell.outgoing_review.assert_called_once_with(job);shell.app.settings.assert_not_called();shell.start_outgoing.assert_not_called();self.assertEqual(job['outgoing']['number'],'12')
+        shell.app.send.assert_called_once_with('cancel_registration',{'hash':'fixture','scope':'outgoing','step':3});shell.app.settings.assert_not_called();shell.start_outgoing.assert_not_called();self.assertEqual(job['outgoing']['number'],'12')
 
     def test_completed_outgoing_goes_to_existing_form(self):
         job={'hash':'fixture','outgoing':{'number':'12','sheet_attempted':True}}
-        shell=self.shell('outgoing',4,job);shell.back();shell.outgoing_form.assert_called_once_with(job)
+        shell=self.shell('outgoing',4,job);shell.back();shell.app.send.assert_called_once_with('cancel_registration',{'hash':'fixture','scope':'outgoing','step':4})
 
     def test_reconfigure_keeps_registered_records(self):
         for section in ('receipt','outgoing'):
@@ -54,7 +53,25 @@ class NavigationTests(unittest.TestCase):
     def test_completed_receipt_back_visits_saved_location_step(self):
         job={'hash':'fixture','receipt_done':True,'number':'581'}
         shell=self.shell('receipt',4,job);shell.back()
-        shell.resume_receipt.assert_called_once_with(job);shell.app.settings.assert_not_called()
+        shell.app.send.assert_called_once_with('cancel_registration',{'hash':'fixture','scope':'receipt','step':4});shell.app.settings.assert_not_called()
+
+    def test_back_waits_for_active_export_and_deduplicates_cancel_request(self):
+        shell=self.shell('outgoing',4,{'hash':'fixture','outgoing':{'complete':True}})
+        shell.available=lambda:False;shell.app.root=SimpleNamespace(after=Mock())
+        shell.app.worker=SimpleNamespace(cancelled_exports=set())
+        shell.back();shell.back();shell.app.send.assert_not_called()
+        self.assertEqual(shell.app.root.after.call_count,1);self.assertIn('fixture',shell.app.worker.cancelled_exports)
+        shell.available=lambda:True;shell._back_when_ready()
+        shell.app.send.assert_called_once_with('cancel_registration',{'hash':'fixture','scope':'outgoing','step':4})
+
+    def test_cancel_completion_discards_stale_number_draft_and_navigates_once(self):
+        job={'hash':'fixture','receipt_done':True,'outgoing':{'id':'new'}}
+        shell=self.shell('outgoing',4,job);shell.pending_back={'hash':'fixture'}
+        shell.drafts={'fixture':{'number':'452'}};shell.clear_editor=Mock();shell.focus=Mock()
+        shell.app.root=SimpleNamespace(after=lambda delay,fn:fn())
+        shell.cancel_finished({'hash':'fixture','scope':'outgoing','step':4})
+        self.assertIsNone(shell.pending_back);self.assertNotIn('fixture',shell.drafts)
+        shell.outgoing_form.assert_called_once_with(job);shell.app.send.assert_not_called()
 
     def test_back_never_opens_settings_for_any_step_or_saved_state(self):
         for section in ('receipt','outgoing'):

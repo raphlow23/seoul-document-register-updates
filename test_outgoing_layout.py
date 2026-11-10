@@ -10,6 +10,13 @@ from test_browser_sheets import UI
 
 
 class OutgoingLayoutTests(unittest.TestCase):
+    def test_decomposed_korean_and_invisible_header_spacing_preserve_columns(self):
+        import unicodedata
+        for family in ('공문','업무연락','처리지침'):
+            owner,ui,job=self.fixture(family)
+            ui.rows[:4]=[[unicodedata.normalize('NFD',value).replace(' ','\u2060 ') for value in row] for row in ui.rows[:4]]
+            before=deepcopy(ui.rows[:4]);self.assertEqual(owner.register(job,self.store),(6,'438'));self.assertEqual(ui.rows[:4],before)
+
     def test_hwp_filename_uses_actual_number_and_today_without_extra_gap(self):
         from hwp_documents import filename
         for prefix,suffix in (('',''),('처리지침','(센터-발송)')):

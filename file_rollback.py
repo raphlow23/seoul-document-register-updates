@@ -41,7 +41,7 @@ def has_files(job,scope):
     return bool(job.get('rollback_pending') or any(r['scope'] in scopes for r in job.get('storage_roots',[])) or
                 any(f['scope'] in scopes for f in job.get('file_artifacts',[])) or
                 (scope=='receipt' and (job.get('files_started') or job.get('destinations'))) or
-                job.get('outgoing',{}).get('hwp_path') or job.get('outgoing',{}).get('folder_plan',{}).get('created'))
+                job.get('outgoing',{}).get('hwp_path') or (job.get('outgoing',{}).get('folder_plan') or {}).get('created'))
 
 
 def _roots(job,config,scope):
@@ -56,7 +56,7 @@ def _roots(job,config,scope):
             path=checked(file)
             for parent in path.parents:
                 if (parent/'.수신등록.json').is_file():candidates.append(parent);break
-    out=job.get('outgoing',{});plan=out.get('folder_plan',{})
+    out=job.get('outgoing',{});plan=out.get('folder_plan') or {}
     if plan.get('created') and plan.get('path'):candidates.append(Path(plan['path']))
     roots=[];allowed_dirs=set();markers={}
     from folder_naming import child_folders
@@ -158,14 +158,14 @@ def execute(job,config,store,scope):
     from core import registration_lock
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',str(job.get('id',''))):raise ValueError('공문 파일 이력 ID가 올바르지 않습니다.')
     locks={checked(config['root'])}
-    base=job.get('outgoing',{}).get('folder_plan',{}).get('base')
+    base=(job.get('outgoing',{}).get('folder_plan') or {}).get('base')
     if base:
         base=checked(base)
         if not base.is_relative_to(checked(config['root'])):locks.add(base)
     with ExitStack() as stack:
         for root in sorted(locks,key=str):stack.enter_context(registration_lock(root))
-        from program_storage import migrate_rollbacks,temporary_root,copy_verified,remove_verified,subset
-        store.put(job);migrate_rollbacks(config,store)
+        from program_storage import temporary_root,copy_verified,remove_verified,subset
+        store.put(job)
         refreshed=store.get(job['hash']);job.clear();job.update(refreshed)
         transaction=job.get('rollback_pending')
         if transaction and transaction['scope']!=scope:raise ValueError('시작한 파일 되돌리기를 먼저 마쳐 주세요.')
@@ -216,7 +216,7 @@ def execute(job,config,store,scope):
         if out:
             out['files_rolled_back']=True
             for key in ('hwp_path','hwp_saved_number','hwp_created_sha256'):out.pop(key,None)
-            folder=out.get('folder_plan',{})
+            folder=out.get('folder_plan') or {}
             if folder.get('base'):out['save_folder']=folder['base']
             for key in ('folder_number','folder_name','created','path','save_path'):folder.pop(key,None)
         transaction['finished']=datetime.now().isoformat(timespec='seconds')

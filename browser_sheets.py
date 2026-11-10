@@ -107,7 +107,7 @@ class BrowserUI:
     def ready(self):
         deadline=time.monotonic()+12
         while time.monotonic()<deadline:
-            if self.evaluate("!!document.querySelector('#t-name-box')"):return
+            if self.matches_document() and self.evaluate("!!document.querySelector('#t-name-box')"):return
             time.sleep(.25)
         raise ValueError("시트 편집 화면을 확인하지 못했습니다. 로그인이 필요하면 이 전용 브라우저 창을 모두 닫고 ‘시트 로그인’을 누르세요. 일반 브라우저에서 직접 로그인하고 시트 표시 확인 후 창을 닫은 다음 ‘연결 확인’을 누르세요.")
 
@@ -134,6 +134,7 @@ class BrowserUI:
 
     def select(self,range_):
         self.call("Page.bringToFront")
+        if not self.matches_document():raise ValueError('연결한 스프레드시트와 현재 브라우저 문서가 다릅니다. 입력하지 않았습니다.')
         point=self.evaluate("""(()=>{const e=document.querySelector('#t-name-box');if(!e)return null;const r=e.getBoundingClientRect();return r.width&&r.height?{x:r.x+r.width/2,y:r.y+r.height/2}:null})()""")
         if not point:raise ValueError("시트의 범위 입력란을 찾지 못했습니다.")
         self.call("Input.dispatchMouseEvent",{"type":"mousePressed","button":"left","buttons":1,"clickCount":1,**point})
@@ -147,6 +148,11 @@ class BrowserUI:
             if state.get("range") and state.get("active")!="t-name-box":return state["range"]
             time.sleep(.1)
         raise ValueError("셀 범위 선택이 끝나지 않았습니다. 시트 창의 열려 있는 메뉴나 안내창을 닫아 주세요.")
+
+    def matches_document(self):
+        expression='location.pathname.includes('+json.dumps('/spreadsheets/d/'+self.sid+'/')+')'
+        if getattr(self,'_owned_fixture',False):expression+=" || location.href==='about:blank'"
+        return bool(self.evaluate(expression))
 
     def selection(self):
         return self.evaluate("({range:document.querySelector('#t-name-box')?.value||'',active:document.activeElement?.id||''})") or {}
@@ -231,7 +237,7 @@ class BrowserSession:
         self.config,self.owner=config,owner
         self.ui=ui or BrowserUI(config).connect()
         from browser_journal import Journal
-        self.records=Journal(config);self.records.migrate();self.journal=self.records.folder
+        self.records=Journal(config);self.journal=self.records.folder
         self.sid=config["spreadsheet_id"]
         self.rows=[]
 
@@ -304,7 +310,7 @@ class BrowserSession:
         # Identity fields prove matches; handwritten stamp-person and other later edits stay editable.
         identity={0,self.owner.title_column,5 if self.owner.marker_prefix=="SDS:" else getattr(self.owner,"number_col",3)}
         for entry in entries:
-            if entry.get("complete") and entry["row"]<=len(rows) and all(rows[entry["row"]-1][c]==entry["after"][c] for c in identity):
+            if entry.get("complete") and not entry.get('cancelled') and entry["row"]<=len(rows) and all(rows[entry["row"]-1][c]==entry["after"][c] for c in identity):
                 for marker in entry["markers"]:found[marker]=entry["row"]
         self.rows=rows;self.owner.notes={}
         return {"sheetId":0,"gridProperties":{"rowCount":getattr(self.ui,"_grid_row_count",max(len(rows),1000))}},rows,found

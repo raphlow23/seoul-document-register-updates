@@ -2,6 +2,7 @@
 import ctypes,os,tempfile,threading,unittest
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 import hwp_documents as docs
 
 
@@ -30,7 +31,7 @@ class HwpLockingTests(unittest.TestCase):
     def run_export(self,share=0,clear_fails=False,save_fails=False,delayed=False):
         owner=self
         class Hancom:
-            def Open(self,*args):owner.events.append('open');return True
+            def Open(self,*args):owner.assertTrue(window.Visible);owner.events.append('open');return True
             def SaveAs(self,path,*args):
                 owner.native=Path(path);owner.native.write_bytes(b'new fixture HWP');owner.lock(owner.native,share);owner.events.append('save');return not save_fails
             def Clear(self,*args):
@@ -41,6 +42,7 @@ class HwpLockingTests(unittest.TestCase):
                 if delayed:
                     timer=threading.Timer(.15,owner.release);timer.start();owner.addCleanup(timer.join)
                 else:owner.release()
+        window=SimpleNamespace(Visible=False);Hancom.XHwpWindows=SimpleNamespace(Item=lambda index:window)
         values=docs.native_values(self.item,self.out)
         def extract(path):
             self.events.append('extract');self.assertEqual(Path(path).read_bytes(),b'new fixture HWP')

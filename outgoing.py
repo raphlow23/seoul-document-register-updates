@@ -69,7 +69,7 @@ def merge_edit(job,edited):
         if any(edited.get("stamp",{}).get(k)!=old["stamp"].get(k) for k in ("date","department","applicant","person")):
             raise ValueError("직인날인대장 등록을 시도한 내용은 바꿀 수 없습니다.")
     edited={**edited}
-    for key in ("id","row","number","document_number","tab","sheet_attempted","complete"):
+    for key in ("id","row","number","document_number","tab","sheet_attempted","complete","sheet_connection","sheet_connection_override"):
         if key in old:edited[key]=old[key]
     edited['file_number']=str(edited.get('number','')) if edited.get('complete') else ''
     if old.get("complete"):
@@ -86,7 +86,7 @@ def merge_edit(job,edited):
                 edited['folder_plan']=plan
                 if plan.get('base'):edited['save_folder']=plan['base']
     edited["stamp"]={**edited.get("stamp",{})}
-    for key in ("row","number","sheet_attempted","complete"):
+    for key in ("row","number","sheet_attempted","complete","sheet_connection","sheet_connection_override"):
         if key in old.get("stamp",{}):edited["stamp"][key]=old["stamp"][key]
     job["outgoing"]=edited
     if job.get('standalone_outgoing'):
@@ -131,7 +131,7 @@ class OutgoingSheets(Sheets):
     marker_prefix="SDO:"
 
     def validate_header(self,rows):
-        compact=lambda value:re.sub(r'[\s\u200b-\u200d\ufeff]+','',str(value or ''))
+        from sheet_connections import header_text as compact
         matches=[];width=8 if self.compact else 11
         for index,row in enumerate(rows[:50]):
             cells=[compact(v) for v in row]+['']*width
@@ -160,7 +160,7 @@ class OutgoingSheets(Sheets):
             self.note_column="E"
         self.prefix_col=2 if self.compact else 5
         self.number_col=3 if self.compact else 6
-        super().__init__({**config,"tab":OUTGOING_TABS[family]})
+        super().__init__({**config,"tab":config.get('_target_tab') or OUTGOING_TABS[family]})
 
     def register(self,job,store):
         out=validate(job)
@@ -214,8 +214,11 @@ def finish(job,config,store,factory=None,stamp_factory=None):
     out=validate(job,config)
     if not out["enabled"]: return job
     if factory is None: factory=OutgoingSheets
+    from sheet_connections import bind
+    stamp_config=bind(config,job,'stamp',out['ledger_type'])
     if not out.get("complete"):
-        row,number=factory({**config,"_outgoing_family":out["ledger_type"]}).register(job,store)
+        outgoing_config=bind(config,job,'outgoing',out['ledger_type'])
+        row,number=factory({**outgoing_config,"_outgoing_family":out["ledger_type"]}).register(job,store)
         out=job["outgoing"]
         out.update(row=row,number=number,complete=True)
     if not out["stamp"].get("complete"):
@@ -224,7 +227,7 @@ def finish(job,config,store,factory=None,stamp_factory=None):
             stamp_factory=StampSheets
         job.update(state="발신 완료·직인 등록 대기",reason="발신 등록 완료 · 직인날인대장 등록 중")
         store.put(job)
-        row,number=stamp_factory(config).register(job,store)
+        row,number=stamp_factory(stamp_config).register(job,store)
         job["outgoing"]["stamp"].update(row=row,number=number,complete=True)
     store.put(job)
     return job

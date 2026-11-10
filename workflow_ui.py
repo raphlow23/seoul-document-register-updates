@@ -30,7 +30,7 @@ def table(parent, columns, extended=False):
 class WorkflowShell:
     def __init__(self, app, outer):
         self.app=app;self.section="receipt";self.step=1;self.current=None
-        self.pending_register=None;self.pending_open=None;self.draft_active=False;self.drafts={}
+        self.pending_register=None;self.pending_open=None;self.pending_back=None;self.draft_active=False;self.drafts={}
         self.excerpt_request=None;self.receipt_drafts={};self.route_drafts={}
         self.continue_outgoing=tk.BooleanVar(value=False)
         header=ttk.Frame(outer,style='App.TFrame');header.pack(fill="x")
@@ -40,7 +40,7 @@ class WorkflowShell:
         self.nav={}
         for key,label,fn in (("receipt","수신 접수",self.receipt_home),("outgoing","발신 작성",self.outgoing_home),("history","처리 이력",self.history_home)):
             button=ttk.Button(nav,text=label,command=fn);button.pack(side="left",padx=(0,8));self.nav[key]=button
-        self.back_button=ttk.Button(nav,text="← 이전 단계 (파일 취소)",command=self.back);self.back_button.pack(side="left",padx=4)
+        self.back_button=ttk.Button(nav,text="← 이전 단계 (등록·파일 취소)",command=self.back);self.back_button.pack(side="left",padx=4)
         ttk.Button(nav,text="선택 내용 다시 확인",command=self.reconfigure).pack(side="left",padx=4)
         app.watching=tk.BooleanVar(value=True)
         ttk.Checkbutton(nav,text="다운로드 자동 확인",variable=app.watching,command=app.toggle_watch).pack(side="right")
@@ -65,7 +65,7 @@ class WorkflowShell:
 
     def available(self):
         app=self.app
-        return not (app.busy or app.updating or app.startup_gate or (hasattr(app,"worker") and app.worker.working.is_set()))
+        return not (app.busy or app.updating or app.startup_gate or (hasattr(app,"worker") and app.worker.working.is_set() and getattr(app.worker,'active_command','unknown') is not None))
 
     def clear_editor(self):
         for name in ("title_dialog","route_dialog","outgoing_editor"):
@@ -216,12 +216,35 @@ class WorkflowShell:
         self.clear_editor();self.current=None;self.show("queue","receipt",1)
 
     def back(self):
-        if not self.available():return
+        if getattr(self,'pending_back',None):
+            self.app.status.set('이전 단계로 돌아가기 위해 진행 중인 작업 또는 등록 취소가 끝나기를 기다립니다.');return
         job=self.app.jobs.get(self.current) if self.current else None
+        if not job or self.section not in ('receipt','outgoing'):return self._navigate_back(job)
+        data={'hash':job['hash'],'scope':self.section,'step':self.step}
+        self.pending_back=data;self.pending_open=self.pending_register=None
+        worker=getattr(self.app,'worker',None)
+        if worker is not None:worker.cancelled_exports.add(job['hash'])
+        self._back_when_ready()
+
+    def _back_when_ready(self):
+        data=getattr(self,'pending_back',None)
+        if not data:return
+        if not self.available():
+            self.app.status.set('진행 중인 작업이 끝나면 등록 내용과 생성 파일·폴더를 취소하고 이전 단계로 돌아갑니다.')
+            return self.app.root.after(100,self._back_when_ready)
+        job=self.app.jobs.get(data['hash'])
         from file_rollback import has_files
-        if job and self.section in ('receipt','outgoing') and has_files(job,self.section):
-            self.pending_open=self.pending_register=None
-            return self.app.send('file_rollback',{'hash':job['hash'],'scope':self.section,'step':self.step})
+        from sheet_connections import locked
+        scopes=('outgoing','stamp')+ (('receipt',) if data['scope']=='receipt' else ())
+        registered=job and any(locked(job,scope) for scope in scopes if scope=='receipt' or job.get('outgoing'))
+        if job and (registered or job.get('registration_cancel_pending') or has_files(job,data['scope'])):
+            if self.app.send('cancel_registration',data) is not False:return
+            self.pending_back=None;return
+        self.pending_back=None
+        if worker:=getattr(self.app,'worker',None):worker.cancelled_exports.discard(data['hash'])
+        return self._navigate_back(job)
+
+    def _navigate_back(self,job):
         if self.section=="receipt":
             if self.step==2:return self.receipt_home()
             if self.step==3 and job:
@@ -235,6 +258,16 @@ class WorkflowShell:
                 return self.start_outgoing(job)
             if self.step==4 and job:return self.outgoing_form(job)
 
+    def cancel_finished(self,data):
+        def ready():
+            if not self.available():return self.app.root.after(50,ready)
+            self.pending_back=None;self.pending_open=self.pending_register=None
+            if worker:=getattr(self.app,'worker',None):worker.cancelled_exports.discard(data['hash'])
+            self.clear_editor();self.drafts.pop(data['hash'],None)
+            self.current=data['hash'];self.section=data['scope'];self.step=data['step']
+            self.focus(data['hash']);self._navigate_back(self.app.jobs[data['hash']])
+        self.app.root.after(50,ready)
+
     def rollback_finished(self,data):
         def ready():
             if not self.available():return self.app.root.after(50,ready)
@@ -247,7 +280,7 @@ class WorkflowShell:
                     if name in job.get('outgoing',{}):draft[name]=job['outgoing'][name]
             self.current=key;self.section=data['scope'];self.step=data['step']
             self.focus(key)
-            self.back()
+            self._navigate_back(job)
         self.app.root.after(50,ready)
 
     def reconfigure(self):
@@ -272,7 +305,7 @@ class WorkflowShell:
     def receipt_review(self,job):
         self.clear_editor();self.current=job["hash"]
         page=self.empty("title");self.show("title","receipt",2)
-        heading(page,"접수 제목과 첨부파일 확인","이미 저장·등록을 시작한 문서는 기존 선택 내용을 표시합니다. 이전 단계로 이동해도 접수번호와 이력은 유지됩니다.")
+        heading(page,"접수 제목과 첨부파일 확인","이미 저장·등록을 시작한 문서는 기존 선택 내용을 표시합니다. 이전 단계 버튼은 등록 내용과 생성한 파일·폴더를 취소합니다.")
         ttk.Label(page,text=job["title"],font=("맑은 고딕",14,"bold"),wraplength=950).pack(anchor="w",pady=12)
         ttk.Label(page,text=" / ".join(str(job.get(k,"")) for k in ("category","receipt_type","date","recipient")),wraplength=950).pack(anchor="w",pady=8)
         box=tk.Text(page,height=8,wrap="word");box.pack(fill="both",expand=True,pady=12)
@@ -362,6 +395,9 @@ class WorkflowShell:
         """A failed worker request must leave a usable screen, even if its panel already closed."""
         self.pending_register=None
         self.pending_open=None
+        pending=getattr(self,'pending_back',None)
+        if pending and (worker:=getattr(self.app,'worker',None)):worker.cancelled_exports.discard(pending['hash'])
+        self.pending_back=None
         if self.section=="receipt" and self.current:
             if self.step==3 and getattr(self.app,"route_dialog",None) is None:
                 self.resume_receipt(self.app.jobs[self.current])
@@ -394,6 +430,12 @@ class WorkflowShell:
 
     def route_step(self):
         self.clear_editor();page=self.empty("route");self.show("route","receipt",3)
+        from sheet_connection_ui import open_document
+        def receipt_connection():
+            dialog=getattr(self.app,'route_dialog',None)
+            family=dialog.receipt_type.get() if dialog and hasattr(dialog,'receipt_type') else self.app.fields['receipt_type'].get()
+            open_document(self.app,self.current,'receipt',family or '공문')
+        ttk.Button(page,text='이 문서의 수신대장 연결 확인 · 변경',command=receipt_connection).pack(anchor='w',pady=4)
         from route_chooser import RouteChooser
         job=self.app.jobs[self.current].copy()
         if self.current in self.route_drafts:job["routing"]=self.route_drafts[self.current]
@@ -562,6 +604,9 @@ class WorkflowShell:
 
     def export_registered(self,job):
         # Use the ledger-authoritative saved metadata, never a suggested or sample number.
+        worker=getattr(self.app,'worker',None)
+        if job['hash'] in getattr(self.app,'hwp_pending',set()) or (getattr(worker,'active_command',None)=='draft_export' and getattr(worker,'active_document',None)==job['hash']):
+            self.app.status.set('이 공문의 HWP를 작성 중입니다. 한글 접근 확인창과 작업표시줄의 한글 창을 확인하세요.');return
         out=job["outgoing"]
         from outgoing import require_registered_number
         try:require_registered_number(out)
@@ -582,7 +627,9 @@ class WorkflowShell:
             try:os.startfile(str(folder/name))
             except OSError as error:messagebox.showerror("한글 열기",str(error))
             return
-        self.app.send("draft_export",{"hash":job["hash"],"outgoing":out,"path":str(folder/name),"copy_only":False,"native_hwp":True})
+        payload={"hash":job["hash"],"outgoing":out,"path":str(folder/name),"copy_only":False,"native_hwp":True}
+        if hasattr(self.app,'queue_hwp_export'):self.app.queue_hwp_export(payload)
+        else:self.app.send('draft_export',payload)
 
 
 class SimpleOutgoing(OutgoingEditor):
@@ -639,6 +686,10 @@ class SimpleOutgoing(OutgoingEditor):
             widget=ttk.Entry(fields,textvariable=self.vars[key]);widget.grid(row=row,column=1,sticky="ew",padx=12)
             self.controls.append(widget)
         fields.columnconfigure(1,weight=1)
+        links=ttk.Frame(panel);links.pack(fill='x',pady=6)
+        from sheet_connection_ui import open_document
+        for scope,label in (('outgoing','이 문서의 발신대장 연결'),('stamp','이 문서의 직인대장 연결')):
+            ttk.Button(links,text=label,command=lambda s=scope:open_document(self.app,self.job['hash'],s,FAMILY_LABELS[self.family.get()])).pack(side='left',padx=(0,8))
         title_actions=ttk.Frame(panel);title_actions.pack(fill='x',pady=4)
         ttk.Button(title_actions,text='현재 제목을 이 양식 기본 제목으로 저장',command=self.save_default_title).pack(side='left')
         load_title=ttk.Button(title_actions,text='기본 제목 불러오기',command=self.load_default_title);load_title.pack(side='left',padx=8);self.controls.append(load_title)

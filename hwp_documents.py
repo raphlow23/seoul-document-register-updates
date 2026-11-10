@@ -369,6 +369,8 @@ def export_hwp(item, out, output, factory=None):
             except Exception as error:
                 raise RuntimeError("HWP 저장에는 이 PC에 설치된 한컴 한글(편집 가능한 Windows 버전)이 필요합니다. 한글 설치 상태를 확인해 주세요.") from error
         else: hwp = factory()
+        try:hwp.XHwpWindows.Item(0).Visible=True
+        except Exception:pass
         # Hancom may request its normal file-access permission on first use; do not suppress it.
         with tempfile.TemporaryDirectory(prefix="seoul-hwp-",ignore_cleanup_errors=True) as temporary:
             work = Path(temporary)

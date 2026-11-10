@@ -12,6 +12,7 @@ def check():
     import websocket
     with tempfile.TemporaryDirectory(prefix="sdr-browser-check-",ignore_cleanup_errors=True) as temporary:
         ui=BrowserUI({"_auth_data_dir":temporary,"spreadsheet_id":"startup-test"})
+        ui._owned_fixture=True
         process=launch([str(ui.executable()),"--headless=new","--no-first-run","--no-default-browser-check","--remote-debugging-port=0","--remote-debugging-address=127.0.0.1",f"--user-data-dir={ui.profile}","about:blank"],Path(temporary)/"launch.log")
         socket=None
         try:

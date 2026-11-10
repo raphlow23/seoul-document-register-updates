@@ -27,12 +27,22 @@ class Journal:
     def archive(self,path,entry):
         if not self.valid(entry) or not entry['complete']:raise ValueError('완료된 등록 확인 기록이 아닙니다.')
         compact={k:entry[k] for k in ('sid','tab','row','after','markers','complete')}
+        for field in ('before','cancelled'):
+            if field in entry:compact[field]=entry[field]
         key=hashlib.sha256((str(entry['sid'])+str(entry['tab'])+str(entry['markers'][0])).encode()).hexdigest()
         with self._db() as db:
             db.execute('INSERT INTO registrations VALUES (?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload',(key,json.dumps(compact,ensure_ascii=False)))
-        if path.exists():
+        if path is not None and path.exists():
             if json.loads(path.read_text(encoding='utf-8'))!=entry:raise ValueError('정리 전 등록 이력이 변경되었습니다.')
             path.unlink();prune_empty(path.parent,program_root(self.config))
+
+    def mark_cancelled(self,entry):
+        cancelled={**entry,'complete':True,'cancelled':True};self.archive(None,cancelled)
+        if not self.folder.is_dir():return
+        for path in self.folder.glob('*.json'):
+            raw=json.loads(path.read_text(encoding='utf-8'))
+            if raw.get('sid')==entry['sid'] and raw.get('tab')==entry['tab'] and set(raw.get('markers',[])).intersection(entry['markers']):
+                raw.update(complete=True,cancelled=True);save_json(path,raw);self.archive(path,raw)
 
     def entries(self):
         records=[]

@@ -30,3 +30,25 @@ class SettingsLayoutTests(unittest.TestCase):
         win.settings_parts['tabs'].select(1);self.root.update()
         panel=win.settings_parts['advanced'];panel.canvas.yview_moveto(1)
         self.assertGreater(panel.canvas.yview()[0],0);win.destroy()
+
+    def test_nine_ledger_connection_cards_scroll_and_keep_save_visible(self):
+        from sheet_connection_ui import open_defaults
+        win=open_defaults(self.app);win.geometry('760x480');self.root.update()
+        self.assertEqual(len(win.connection_fields),9)
+        footer=win.winfo_children()[0]
+        for button in footer.winfo_children():
+            self.assertGreaterEqual(button.winfo_height(),button.winfo_reqheight())
+            self.assertLessEqual(button.winfo_rooty()+button.winfo_height(),win.winfo_rooty()+win.winfo_height())
+        win.destroy()
+
+    def test_document_connection_controls_respect_attempted_registration(self):
+        from sheet_connection_ui import open_document
+        self.app.config={'spreadsheet_id':'fixture-sheet'}
+        self.app.jobs={'fixture':{'hash':'fixture','files':[],'receipt_type':'공문'}}
+        win=open_document(self.app,'fixture','receipt','공문');self.root.update()
+        self.assertEqual(win.connection_fields['spreadsheet_id'].get(),'fixture-sheet');win.destroy()
+        self.app.jobs['fixture']['sheet_attempted']=True
+        win=open_document(self.app,'fixture','receipt','공문');self.root.update()
+        def entries(widget):
+            return [widget] if isinstance(widget,ttk.Entry) else [e for child in widget.winfo_children() for e in entries(child)]
+        self.assertTrue(all(e.instate(['readonly']) for e in entries(win)));win.destroy()

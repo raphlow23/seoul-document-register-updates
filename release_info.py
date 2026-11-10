@@ -1,5 +1,5 @@
-VERSION = "2.9.0"
-# Explicit HWP-only/case-folder saving and persistent titles for each outgoing template.
+VERSION = "2.10.0"
+# Per-ledger sheet connections, queued HWP export, verified registration cancellation.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
 UPDATE_REPOSITORY = "raphlow23/seoul-document-register-updates"

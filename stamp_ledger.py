@@ -37,10 +37,10 @@ class StampSheets(Sheets):
     marker_prefix="SDS:"
 
     def __init__(self,config):
-        super().__init__({**config,"tab":STAMP_TAB})
+        super().__init__({**config,"tab":config.get('_target_tab') or STAMP_TAB})
 
     def validate_header(self,rows):
-        compact=lambda value:re.sub(r'\s+','',str(value))
+        from sheet_connections import header_text as compact
         matches=[]
         for index,row in enumerate(rows[:50]):
             values=[compact(v) for v in row]+['']*11

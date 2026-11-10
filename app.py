@@ -35,6 +35,8 @@ class Worker(threading.Thread):
         self.watch, self.seen, self.pending = False, {}, {}
         self.source_visibility={};self.last_list_sync=0
         self.working = threading.Event()
+        self.active_command=None;self.active_document=None
+        self.cancelled_exports=set()
 
     def emit(self, kind, data):
         self.events.put((kind, data))
@@ -47,11 +49,14 @@ class Worker(threading.Thread):
             try:
                 cmd, data = self.commands.get(timeout=1)
                 self.working.set()
+                self.active_command=cmd;self.active_document=data.get('hash') if isinstance(data,dict) else None
                 try:
                     if cmd == "quit":
                         self.store.db.close()
                         return
                     if cmd == "config":
+                        from sheet_connections import pin_existing
+                        for job in pin_existing(self.store,self.config):self.emit('job',job)
                         from copy import deepcopy
                         from folder_naming import preserve_changed_profiles
                         previous_downloads=self.config.get("downloads")
@@ -117,6 +122,12 @@ class Worker(threading.Thread):
                         job=create(self.config,self.store)
                         self.emit('job',job)
                         self.emit('outgoing_new_done',{'hash':job['hash']})
+                    elif cmd == 'sheet_override':
+                        from sheet_connections import set_override
+                        job=self.store.get(data['hash'])
+                        if not job:raise ValueError('공문 이력을 찾지 못했습니다.')
+                        set_override(job,self.config,data['scope'],data['target']);self.store.put(job)
+                        self.emit('job',job);self.emit('status','이 문서의 대장 연결을 저장했습니다.')
                     elif cmd == 'outgoing_restart':
                         from outgoing_restart import restart
                         job=self.store.get(data['hash'])
@@ -132,13 +143,15 @@ class Worker(threading.Thread):
                         self.emit("google_login_success", {"config": config, "message": result})
                     elif cmd == "browser_login":
                         from browser_sheets import BrowserUI
+                        from sheet_connections import browser_config
                         config={**self.config,"auth_mode":"browser"}
-                        BrowserUI(config).open_login()
+                        BrowserUI(browser_config(config)).open_login()
                         self.config=config
                         self.emit("google_login_success",{"config":config,"message":"일반 브라우저에서 직접 로그인해 시트가 보이는지 확인하세요. 그 브라우저 창을 모두 닫은 뒤 프로그램의 ‘연결 확인’을 눌러 주세요. Cloud/API 설정은 필요하지 않습니다."})
                     elif cmd == "browser_open":
                         from browser_sheets import BrowserUI
-                        ui=BrowserUI(self.config)
+                        from sheet_connections import browser_config
+                        ui=BrowserUI(browser_config(self.config))
                         if ui.available()[0] is not None:ui.connect().close()
                         else:ui.open_login()
                     elif cmd == "google_logout":
@@ -210,10 +223,13 @@ class Worker(threading.Thread):
                             self.emit("ocr_clean_result",{**data,**result})
                         except Exception as error:self.emit("ocr_clean_result",{**data,"error":str(error)})
                     elif cmd == "draft_export":
+                        if data['hash'] in self.cancelled_exports:continue
+                        self.emit('status','한글 양식을 열고 HWP를 저장하는 중입니다. 한글 접근 확인창이 뜨면 접근 허용을 누르세요.')
                         from outgoing import merge_edit
                         from document_draft import fill_hwpx,field_values,template_copy
                         job=self.store.get(data["hash"])
                         if not job:raise ValueError("문서 이력을 찾지 못했습니다.")
+                        if job.get('registration_cancel_pending'):raise ValueError('시작한 등록 취소를 이전 단계 버튼으로 먼저 완료하세요.')
                         if data.get('native_hwp'):
                             from outgoing import require_registered_number
                             require_registered_number(job.get('outgoing',{}))
@@ -243,7 +259,16 @@ class Worker(threading.Thread):
                             fill_hwpx(out["template_path"],data["path"],field_values(job,out))
                         self.store.put(job)
                         self.emit("job",job)
-                        self.emit("draft_exported",{"path":data["path"],"copy_only":data["copy_only"],"open_after":data.get("native_hwp",False),"body_paste_needed":out.get("hwp_body_paste_needed",False) if data.get("native_hwp") else False})
+                        self.emit("draft_exported",{"hash":job['hash'],"path":data["path"],"copy_only":data["copy_only"],"open_after":data.get("native_hwp",False),"body_paste_needed":out.get("hwp_body_paste_needed",False) if data.get("native_hwp") else False})
+                    elif cmd == 'cancel_registration':
+                        from registration_cancel import execute as cancel
+                        job=self.store.get(data['hash'])
+                        if not job:raise ValueError('취소할 공문을 찾지 못했습니다.')
+                        self.emit('status','등록 내용과 생성 파일·폴더를 취소하는 중입니다. 다른 문서의 번호와 서식은 유지합니다.')
+                        try:result=cancel(job,self.config,self.store,data['scope'])
+                        except Exception:
+                            self.emit('job',self.store.get(data['hash']));raise
+                        self.emit('job',result);self.emit('registration_cancelled',data)
                     elif cmd == "title_prepare":
                         from title_document import prepare
                         result=prepare(data['file'],self.store,self.config,data['page'],progress=lambda t:self.emit('status',t))
@@ -319,11 +344,23 @@ class Worker(threading.Thread):
                         for job in data:
                             self.execute(job,register_outgoing=cmd=='process_outgoing')
                     elif cmd == "test":
-                        Sheets(self.config).snapshot()
+                        from sheet_connections import browser_config
+                        Sheets(browser_config(self.config)).snapshot()
                         exists = Path(self.config["root"]).is_dir()
                         missing = [p for p in dict.fromkeys(p for paths in CATEGORIES.values() for p in paths)
                                    if not (Path(self.config["root"]) / p).is_dir()]
                         self.emit("notice", "구글 시트 읽기 연결 성공.\n" + ("공유폴더와 저장 하위폴더 확인 완료." if exists and not missing else "공유폴더 또는 저장 하위폴더에 접근할 수 없습니다.\n" + "\n".join(missing)))
+                    elif cmd == 'test_sheet_target':
+                        from sheet_connections import normalized,SCOPES
+                        target=normalized(data['target']);config={**self.config,**target,'_target_tab':target['tab'],'_outgoing_family':data['family']}
+                        if data['scope']=='outgoing':
+                            from outgoing import OutgoingSheets
+                            ledger=OutgoingSheets(config)
+                        elif data['scope']=='stamp':
+                            from stamp_ledger import StampSheets
+                            ledger=StampSheets(config)
+                        else:ledger=Sheets(config)
+                        ledger.snapshot();self.emit('notice',SCOPES[data['scope']]+' 읽기 연결과 열 구성 확인 완료.\n'+target['tab']+'\n시트에 쓰지는 않았습니다.')
                     elif cmd == "group":
                         primary, others = data
                         if primary.get("sheet_attempted") or any(x.get("sheet_attempted") for x in others):
@@ -343,14 +380,18 @@ class Worker(threading.Thread):
                 except Exception as e:
                     self.emit("error", str(e))
                 finally:
+                    if cmd=='draft_export':
+                        self.cancelled_exports.discard(self.active_document)
+                        self.emit('hwp_export_finished',{'hash':self.active_document})
+                    self.active_command=None;self.active_document=None
                     self.working.clear()
                     self.emit("idle", None)
             except queue.Empty:
                 pass
-            if time.monotonic()-self.last_list_sync>=2:
+            if self.commands.empty() and time.monotonic()-self.last_list_sync>=2:
                 self.last_list_sync=time.monotonic()
                 self.sync_sources()
-            if self.watch:
+            if self.watch and self.commands.empty():
                 self.working.set()
                 try:
                     self.scan()
@@ -445,6 +486,9 @@ class Worker(threading.Thread):
             job = saved
         self.emit("status", ("발신·직인날인대장 등록 중: " if job.get('standalone_outgoing') else "저장·접수등록 중: ") + job["title"])
         try:
+            from sheet_connections import preflight as check_connections
+            if job.get('registration_cancel_pending'):raise ValueError('시작한 등록 취소를 이전 단계 버튼으로 먼저 완료하세요.')
+            check_connections(self.config,job)
             if (register_outgoing or not job.get('receipt_done')) and job.get("outgoing",{}).get("enabled") and job["outgoing"].get("open_hwp_after_registration") and not job["outgoing"].get("complete"):
                 from hwp_documents import check_template
                 check_template(job["outgoing"]["template_id"])
@@ -550,12 +594,21 @@ class App:
         if self.startup_gate:
             messagebox.showinfo("시작 준비 중", "새 버전 확인·설치가 끝나면 업무를 시작할 수 있습니다.")
             return False
-        if self.busy or (hasattr(self, "worker") and self.worker.working.is_set()):
+        if self.busy or (hasattr(self, "worker") and self.worker.working.is_set() and getattr(self.worker,'active_command','unknown') is not None):
             messagebox.showinfo("처리 중", "진행 중인 작업이 끝난 뒤 다시 시도해 주세요.")
             return False
         self.busy = True
         self.commands.put((cmd, data))
         return True
+
+    def queue_hwp_export(self,data):
+        if getattr(self,'closing',False) or self.updating or self.startup_gate:return False
+        key=data['hash'];pending=getattr(self,'hwp_pending',set())
+        if key in pending or (getattr(self.worker,'active_command',None)=='draft_export' and getattr(self.worker,'active_document',None)==key):
+            self.status.set('이 공문의 한글 작성이 진행 중입니다. 한글 접근 확인창과 작업표시줄의 한글 창을 확인하세요.');return True
+        pending.add(key);self.hwp_pending=pending;self.busy=True
+        self.status.set('현재 작업이 끝나면 이 공문의 HWP 저장·열기를 이어갑니다. 대장은 다시 등록하지 않습니다.')
+        self.commands.put(('draft_export',data));return True
 
     def poll(self):
         try:
@@ -613,13 +666,22 @@ class App:
                     if editor is not None:editor.deliver_preview(data)
                     elif data.get('image') is not None:data['image'].close()
                 elif kind == "draft_exported":
+                    back=getattr(self.workflow,'pending_back',None)
+                    if back and back['hash']==data.get('hash'):continue
                     self.status.set("한글 문서를 새 파일로 저장했습니다: "+data["path"])
                     if data.get("open_after"):
                         self.status.set("번호·오늘 날짜를 넣은 HWP를 엽니다. OCR 또는 한글에서 복사한 문구를 붙여넣고 Ctrl+S로 저장하세요.")
                     else:messagebox.showinfo("새 공문 저장",data["path"])
                     if data["copy_only"] or data.get("open_after"):
                         try:os.startfile(data["path"])
-                        except OSError:pass
+                        except OSError as error:
+                            self.status.set('HWP는 저장됐지만 한글을 실행하지 못했습니다: '+data['path'])
+                            messagebox.showerror('저장된 HWP 열기',str(error)+'\n\n저장 파일: '+data['path'])
+                elif kind == 'hwp_export_finished':
+                    getattr(self,'hwp_pending',set()).discard(data['hash'])
+                elif kind == 'registration_cancelled':
+                    self.status.set('해당 공문의 시트 등록 내용과 생성 파일·폴더를 취소했습니다. 다시 등록하면 최신 번호를 확인합니다.')
+                    self.workflow.cancel_finished(data)
                 elif kind == "google_login_success":
                     self.config.update(data["config"])
                     self.persist_config()
@@ -880,8 +942,6 @@ class App:
     def start_watch(self):
         self.watching.set(True)
         self.commands.put(('watch',True))
-        if not getattr(self,'maintenance_queued',False):
-            self.maintenance_queued=True;self.commands.put(('maintenance',None))
 
     def startup(self):
         if self.config.get("auto_update", True):

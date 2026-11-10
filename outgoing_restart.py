@@ -5,6 +5,7 @@ from outgoing import defaults
 
 
 def restart(job,config,store,hide=False,expected_id=None):
+    if job.get('registration_cancel_pending'):raise ValueError('시작한 등록 취소를 이전 단계 버튼으로 먼저 완료하세요.')
     if not (job.get('standalone_outgoing') or job.get('receipt_done') or job.get('state')=='완료'):
         raise ValueError('수신 접수가 끝난 문서에서 발신을 다시 시작할 수 있습니다.')
     previous=job.get('outgoing',{})

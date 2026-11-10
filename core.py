@@ -277,6 +277,7 @@ def receipt_markers(job):
         return ["SDR:"+file["hash"] for file in files]
     identity={"files":sorted({file["hash"] for file in files}),"archives":sorted({file["hash"] for file in job.get("archive_files",[])})}
     if job.get('reimport_id'):identity['reimport_id']=job['reimport_id']
+    if job.get('registration_epoch'):identity['registration_epoch']=job['registration_epoch']
     marker="SDR:group:"+hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()
     job["receipt_registration_markers"]=[marker]
     return [marker]
@@ -393,6 +394,7 @@ class Sheets:
     header_row = 2
     notes_start = 5
     def validate_header(self,rows):
+        from sheet_connections import header_text
         if self.marker_prefix!='SDR:':
             header=rows[self.header_row] if len(rows)>self.header_row else []
             if len(header)<=self.title_column or '제' not in header[self.title_column] or self.header_word not in header[2]:
@@ -400,10 +402,10 @@ class Sheets:
             return
         matches=[]
         for i,row in enumerate(rows[:50]):
-            cells=[re.sub(r'\s+','',str(v)) for v in row]+['']*8
+            cells=[header_text(v) for v in row]+['']*8
             if not re.fullmatch(r'(?:(?:문서|공문|수신|접수)?제목|건명|문서명)(?:\([^)]*\))?',cells[5]):continue
             # A:D may be merged vertically or C:D may share one document-number heading.
-            columns=[''.join(re.sub(r'\s+','',str(r[c])) for r in rows[max(0,i-2):i+1] if len(r)>c) for c in range(8)]
+            columns=[''.join(header_text(r[c]) for r in rows[max(0,i-2):i+1] if len(r)>c) for c in range(8)]
             if '연번' not in columns[0] or not any(w in columns[1] for w in ('일자','일','날짜')):continue
             if not any(w in columns[2]+columns[3] for w in ('문서','업무연락','처리지침','접수번호','번호')):continue
             if not any(w in columns[4] for w in ('발신','발송','보낸')):continue
@@ -640,7 +642,8 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
         return job
     receipt_type=job.get("receipt_type") or "공문"
     if receipt_type not in RECEIPT_TABS: raise ValueError("수신 등록 유형을 선택해 주세요.")
-    receipt_config={**config,"tab":RECEIPT_TABS[receipt_type]}
+    from sheet_connections import bind
+    receipt_config=bind(config,job,'receipt',receipt_type)
     if not job["title"].strip() or not job["recipient"].strip():
         raise ValueError("제목과 수신자(담당자)를 입력해 주세요.")
     date.fromisoformat(job["date"])
@@ -663,7 +666,7 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
         row, number = sheets_factory(receipt_config).register(job, store)
     job["receipt_type"]=receipt_type
     job['files_rolled_back']=False
-    job["receipt_tab"]=RECEIPT_TABS[receipt_type]
+    job["receipt_tab"]=receipt_config['tab']
     job.update(state="수신 완료·발신 등록 대기" if out["enabled"] else "완료", row=row, number=number, receipt_done=True, reason="저장·수신등록 완료")
     store.put(job)
     finish_outgoing(job,config,store,outgoing_factory,stamp_factory)

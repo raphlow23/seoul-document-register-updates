@@ -1,0 +1,73 @@
+"""Ledger defaults and explicit per-document overrides; no Google writes in this dialog."""
+import tkinter as tk
+from tkinter import ttk,messagebox
+from sheet_connections import FAMILIES,SCOPES,default_connection,normalized,chosen,locked,spreadsheet_id
+
+
+def open_defaults(app,parent=None):
+    parent=parent or app.root;win=tk.Toplevel(parent);win.title('대장별 구글 시트 연결')
+    win.geometry(f"960x{min(760,win.winfo_screenheight()-100)}");win.minsize(760,480);win.transient(parent);win.grab_set()
+    footer=ttk.Frame(win,padding=12);footer.pack(side='bottom',fill='x')
+    ttk.Label(win,text='공문·업무연락·처리지침의 수신·발신·직인대장을 따로 연결합니다. 주소나 탭을 비우면 기존 기본 설정을 사용합니다.\n현재와 같은 대장 열 구성이어야 합니다. 기존 등록 건은 당시 연결을 유지하며 새로 등록할 문서부터 변경한 기본 연결을 사용합니다.',wraplength=880,padding=14).pack(fill='x')
+    from modern_ui import ScrollablePanel
+    panel=ScrollablePanel(win);panel.pack(fill='both',expand=True);body=panel.body;body.columnconfigure(1,weight=1)
+    fields={};win.connection_fields=fields
+    for index,(scope,family) in enumerate((s,f) for f in FAMILIES for s in SCOPES):
+        key=scope+':'+family;old=app.config.get('ledger_connections',{}).get(key,{})
+        fields[key]={name:tk.StringVar(value=old.get(name,'')) for name in ('spreadsheet_id','tab')}
+        ttk.Label(body,text=family+' · '+SCOPES[scope]).grid(row=index*2,column=0,sticky='w',padx=10,pady=(12,4))
+        ttk.Entry(body,textvariable=fields[key]['spreadsheet_id']).grid(row=index*2,column=1,sticky='ew',padx=10,pady=(12,4))
+        ttk.Label(body,text='하단 탭 이름').grid(row=index*2+1,column=0,sticky='w',padx=10,pady=(0,10))
+        ttk.Entry(body,textvariable=fields[key]['tab']).grid(row=index*2+1,column=1,sticky='ew',padx=10,pady=(0,10))
+        def test(scope=scope,family=family,key=key):
+            target=default_connection(app.config,scope,family)
+            target.update({k:v.get().strip() for k,v in fields[key].items() if v.get().strip()})
+            try:target=normalized(target)
+            except ValueError as error:return messagebox.showerror('연결 확인',str(error),parent=win)
+            if app.send('test_sheet_target',{'scope':scope,'family':family,'target':target}):close()
+        ttk.Button(body,text='읽기 확인',command=test).grid(row=index*2,column=2,padx=8)
+    def close():
+        win.destroy()
+        if isinstance(parent,tk.Toplevel) and parent.winfo_exists():parent.grab_set()
+    def save():
+        result={}
+        try:
+            for key,values in fields.items():
+                item={k:v.get().strip() for k,v in values.items() if v.get().strip()}
+                if item.get('spreadsheet_id'):item['spreadsheet_id']=spreadsheet_id(item['spreadsheet_id'])
+                if item.get('tab') and any(c in item['tab'] for c in '\r\n\t'):raise ValueError('탭 이름은 한 줄로 입력하세요.')
+                if item:result[key]=item
+        except ValueError as error:return messagebox.showerror('연결 설정',str(error),parent=win)
+        app.config['ledger_connections']=result;app.persist_config();app.commands.put(('config',app.config.copy()));close()
+        app.status.set('대장별 기본 연결을 저장했습니다. 새 문서부터 적용합니다.')
+    win.protocol('WM_DELETE_WINDOW',close)
+    ttk.Button(footer,text='닫기',command=close).pack(side='left')
+    ttk.Button(footer,text='기본 연결 저장',command=save).pack(side='right')
+    return win
+
+
+def open_document(app,key,scope,family,parent=None):
+    parent=parent or app.root;job=app.jobs[key];target=chosen(app.config,job,scope,family)
+    win=tk.Toplevel(parent);win.title('이 문서의 '+SCOPES[scope]+' 연결');win.transient(parent);win.grab_set()
+    win.geometry('820x300');box=ttk.Frame(win,padding=18);box.pack(fill='both',expand=True);box.columnconfigure(1,weight=1)
+    values={k:tk.StringVar(value=target.get(k,'')) for k in ('spreadsheet_id','tab')};win.connection_fields=values
+    fixed=locked(job,scope)
+    for row,(field,label) in enumerate((('spreadsheet_id','스프레드시트 주소 또는 ID'),('tab','하단 탭 이름'))):
+        ttk.Label(box,text=label).grid(row=row,column=0,sticky='w',pady=10)
+        ttk.Entry(box,textvariable=values[field],state='readonly' if fixed else 'normal').grid(row=row,column=1,sticky='ew',padx=12)
+    ttk.Label(box,text='이 대장은 등록을 시작해 당시 연결을 유지합니다.' if fixed else '이 문서에만 적용합니다. 등록을 시작한 뒤에는 해당 연결을 유지합니다.',wraplength=740).grid(row=2,column=0,columnspan=2,sticky='w',pady=12)
+    actions=ttk.Frame(box);actions.grid(row=3,column=0,columnspan=2,sticky='ew',pady=12)
+    def close():win.destroy()
+    def save(reset=False):
+        try:target=None if reset else normalized({k:v.get() for k,v in values.items()})
+        except ValueError as error:return messagebox.showerror('연결 설정',str(error),parent=win)
+        if app.send('sheet_override',{'hash':key,'scope':scope,'target':target}):close()
+    def test():
+        try:target=normalized({k:v.get() for k,v in values.items()})
+        except ValueError as error:return messagebox.showerror('연결 확인',str(error),parent=win)
+        if app.send('test_sheet_target',{'scope':scope,'family':family,'target':target}):close()
+    ttk.Button(actions,text='닫기',command=close).pack(side='left')
+    ttk.Button(actions,text='읽기 확인',command=test).pack(side='left',padx=8)
+    ttk.Button(actions,text='기본 연결 사용',command=lambda:save(True),state='disabled' if fixed else 'normal').pack(side='right')
+    ttk.Button(actions,text='이 문서에 적용',command=save,state='disabled' if fixed else 'normal').pack(side='right',padx=8)
+    return win

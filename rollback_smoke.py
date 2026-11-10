@@ -39,7 +39,7 @@ def run():
         try:
             with patch('workflow_ui.os.startfile'),patch('app.messagebox.showerror',side_effect=lambda *a,**k:errors.append(a)),patch('app.process',side_effect=local_process),patch.object(app,'settings',side_effect=AssertionError('Back opened settings')):
                 wait(lambda:key in app.jobs);idle()
-                flow.completed(app.jobs[key]);flow.back()
+                flow.completed(app.jobs[key]);app.send('file_rollback',{'hash':key,'scope':'receipt','step':4})
                 wait(lambda:flow.step==3 and getattr(app,'route_dialog',None) is not None and bool(app.route_dialog.records));idle()
                 assert not folder.exists() and source.exists()
                 assert app.jobs[key]['number']=='581' and app.jobs[key]['receipt_done']
@@ -92,13 +92,34 @@ def run():
                 db=core.Store(base/'history.sqlite');output=prepare(saved,app.config,db)/'012. fixture.hwp';output.write_bytes(b'generated output fixture')
                 out.update(hwp_path=str(output),hwp_saved_number='12',hwp_created_sha256=core.digest(output))
                 track_file(saved,output,core.digest(output),'outgoing');db.put(saved);db.db.close()
-                app.render(saved);flow.outgoing_form(saved);flow.back()
-                wait(lambda:flow.section=='outgoing' and flow.step==2 and not output.exists());idle()
+                # Back cancels owned outgoing/stamp cells as well as generated output.
+                # All spreadsheet operations below use private in-memory fixture rows.
+                from browser_journal import Journal
+                from registration_cancel import markers
+                from types import SimpleNamespace
+                import re
+                rows={}
+                for scope in ('outgoing','stamp'):
+                    before=['']*11;before[0]='7';after=before.copy()
+                    if scope=='outgoing':before[5:7]=['서울센터2026-','12'];after=before.copy();after[1]='2026-11-03';after[2]='○';after[7:]=['발신 파일','수신 기관','담당자','Email']
+                    else:after[1:]=['2026-11-03','○','','','서울센터2026-12','발신 파일','수신 기관','편의증진부','담당자','']
+                    rows[scope]=[['']*11 for _ in range(5)]+[after.copy()]
+                    Journal(app.config).archive(None,{'sid':'fixture-sheet','tab':scope,'row':6,'before':before,'after':after,'markers':markers(saved,scope),'complete':True})
+                def fixture_owner(config,target):
+                    data=rows[target['scope']]
+                    def write(cell,value):data[int(cell[1:])-1][ord(cell[0])-65]=value
+                    browser=SimpleNamespace(ui=SimpleNamespace(write=write),getrows=lambda address:[data[int(re.search(r'\d+',address).group())-1].copy()],close=lambda:None)
+                    return SimpleNamespace(snapshot=lambda:(None,data,{}),header_row=2,last_column='K',browser=browser)
+                app.render(saved);flow.outgoing_form(saved)
+                with patch('registration_cancel.owner',side_effect=fixture_owner):
+                    flow.back()
+                    wait(lambda:flow.section=='outgoing' and flow.step==2 and not output.exists());idle()
                 assert all(Path(p).is_file() for p in app.jobs[key]['destinations'])
-                assert app.jobs[key]['outgoing']['number']=='12' and app.jobs[key]['outgoing']['stamp']['complete']
+                assert 'number' not in app.jobs[key]['outgoing'] and not app.jobs[key]['outgoing']['stamp'].get('complete')
+                assert app.jobs[key]['number']=='581' and rows['outgoing'][5][7]=='' and rows['stamp'][5][6]==''
                 assert not errors
         finally:
             flow.clear_editor();app.commands.put(('quit',None));app.worker.join(timeout=5)
             for token in root.tk.call('after','info'):root.after_cancel(token)
             root.destroy()
-    print('Real file rollback, no ledger calls, same-number resave and attachment addition: OK')
+    print('Real file rollback, same-number file-only resave, attachments and Back cancellation of owned fixture ledger cells: OK')
