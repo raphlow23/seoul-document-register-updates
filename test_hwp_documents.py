@@ -161,7 +161,7 @@ class HwpTests(unittest.TestCase):
         out={**self.values(),"number":"438","ledger_type":"공문"}
         output=self.base/docs.filename(item,out)
         text="\n".join((out["title"],docs.template_body(item["id"]),out["receiver"],out["sender"],"서울센터 "+str(date.today().year)+"-438",f"({date.today():%Y. %m. %d.})"))
-        with patch("core.extract",return_value=text),patch.object(docs,"replace_native_fields"),patch("hwp_fidelity.verify"):
+        with patch("core.extract",return_value=text),patch.object(docs,"replace_native_fields"),patch('hwp_export_check.check_baseline'),patch("hwp_fidelity.verify"):
             docs.export_hwp(item,out,output,factory=Hancom)
         self.assertEqual(output.read_bytes(),b"verified native hwp")
         self.assertEqual(events[-1],("quit",))

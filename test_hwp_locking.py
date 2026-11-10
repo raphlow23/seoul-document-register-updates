@@ -33,7 +33,8 @@ class HwpLockingTests(unittest.TestCase):
         class Hancom:
             def Open(self,*args):owner.assertTrue(window.Visible);owner.events.append('open');return True
             def SaveAs(self,path,*args):
-                owner.native=Path(path);owner.native.write_bytes(b'new fixture HWP');owner.lock(owner.native,share);owner.events.append('save');return not save_fails
+                owner.native=Path(path);owner.native.write_bytes(b'new fixture HWP');owner.lock(owner.native,share);owner.events.append('save')
+                return not (save_fails is True or (save_fails=='result' and owner.native.name=='result.hwp'))
             def Clear(self,*args):
                 owner.events.append('clear')
                 if clear_fails:raise RuntimeError('fixture Clear failed')
@@ -49,14 +50,14 @@ class HwpLockingTests(unittest.TestCase):
             return values['number_date']+values['display_date']
         def verify(source,native):
             self.events.append('verify');self.assertEqual(Path(native).read_bytes(),b'new fixture HWP')
-        with patch.object(docs,'template_root',return_value=self.base),patch.object(docs,'template_body',return_value=''),patch.object(docs,'replace_native_fields'),patch('core.extract',side_effect=extract),patch('hwp_fidelity.verify',side_effect=verify):
+        with patch.object(docs,'template_root',return_value=self.base),patch.object(docs,'template_body',return_value=''),patch.object(docs,'replace_native_fields'),patch('core.extract',side_effect=extract),patch('hwp_export_check.check_baseline'),patch('hwp_fidelity.verify',side_effect=verify):
             return docs.export_hwp(self.item,self.out,self.output,factory=Hancom)
 
     def test_saved_document_is_closed_before_validation_copy_and_cleanup(self):
         for share in (0,1):
             with self.subTest(share=share):
                 self.events=[];self.run_export(share=share)
-                self.assertEqual(self.events,['open','save','clear','quit','extract','verify'])
+                self.assertEqual(self.events,['open','save','save','clear','quit','extract','verify'])
                 self.assertEqual(self.output.read_bytes(),b'new fixture HWP');self.output.unlink()
                 self.assertFalse(self.native.parent.exists());self.assertEqual(self.source.read_bytes(),b'original fixture')
 
@@ -69,8 +70,10 @@ class HwpLockingTests(unittest.TestCase):
         self.assertFalse(self.native.parent.exists());self.assertFalse(self.handles)
 
     def test_save_failure_is_not_masked_by_temporary_file_cleanup(self):
-        with self.assertRaisesRegex(RuntimeError,'저장을 완료하지 못했습니다'):self.run_export(save_fails=True)
-        self.assertFalse(self.output.exists());self.assertFalse(self.native.parent.exists());self.assertIn('quit',self.events)
+        for failure in (True,'result'):
+            with self.subTest(stage=failure),self.assertRaisesRegex(RuntimeError,'저장'):
+                self.run_export(save_fails=failure)
+            self.assertFalse(self.output.exists());self.assertFalse(self.native.parent.exists());self.assertIn('quit',self.events)
 
 
 if __name__=='__main__':unittest.main()

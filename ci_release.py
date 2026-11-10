@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='대장별 연결 설정 및 이전 단계 등록 취소'
-RELEASE_BODY='공문·업무연락·처리지침별 수신·발신·직인대장의 스프레드시트 주소와 탭을 기본 설정하고 문서마다 변경할 수 있습니다. 등록을 시작한 문서는 당시 연결을 유지합니다. 이전 단계 버튼은 이 프로그램이 등록한 내용을 확인해 해당 입력 셀을 취소하고 생성한 파일·폴더를 되돌립니다. 행 자체와 번호 기준·서식은 유지하며, 다른 사람이 수정한 내용이나 파일이 있으면 중단합니다. 재등록은 최신 번호를 확인합니다. HWP만 저장한 문서의 뒤로가기 오류와 백그라운드 작업 때문에 한글 열기가 거절되는 문제를 수정했습니다. 실행 시 예전 공유폴더 자료 이전은 더 이상 자동 실행하지 않습니다. 299개 검사와 Windows 화면 흐름·업데이트·재실행을 검증합니다. 실제 업무 시트와 공유폴더는 테스트에서 변경하지 않았으며, 한컴 한글 저장은 한글 설치 PC에서 확인해야 합니다.'
+RELEASE_TITLE='한글 양식 저장 서식 비교 및 찾아바꾸기 수정'
+RELEASE_BODY='한글 양식 저장 중 원본 HWP의 스타일·글자·문단 모양이 달라졌다는 메시지로 중단되는 문제를 수정합니다. 원본을 설치된 한글에서 아무 수정 없이 별도 저장한 기준본과 편집 결과를 비교해, 저장 버전별 내부 데이터 변화를 편집으로 인한 서식 변경과 구분합니다. 원본과 기준본의 내용·스타일 이름·순서·문단 스타일 배치를 확인하고, 기준본과 결과의 글자·문단·스타일·용지 검증은 유지합니다. 찾아바꾸기는 독립된 빈 설정으로 실행해 사용자가 이전에 설정한 글자·문단 서식 옵션을 가져오지 않습니다. 검증에 실패하면 공유폴더에 저장하지 않고 설치 폴더의 임시보관에 확인 자료를 남깁니다. 304개 검사와 Windows 화면 흐름·업데이트·재실행을 검증합니다. 실제 한컴 한글이 설치되지 않은 개발 PC에서 모든 한글 버전을 직접 재현할 수는 없어 실제 업무 PC에서 같은 공문의 HWP 저장을 재시도해 확인해야 합니다. 기존 발신·직인 등록은 반복하지 않습니다.'
 _release_id = None
 
 
@@ -85,7 +85,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_outgoing_options","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage","test_sheet_connections","test_hwp_requests","test_registration_cancel"],check=True,timeout=180)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_outgoing_options","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage","test_sheet_connections","test_hwp_requests","test_registration_cancel","test_hwp_export_check"],check=True,timeout=180)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:

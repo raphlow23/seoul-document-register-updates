@@ -290,17 +290,17 @@ def replace_native_fields(hwp,item,values):
         ordered.append(safe);pending.remove(safe)
     for old,new in ordered:
         hwp.HAction.Run("MoveDocBegin")
-        params=hwp.HParameterSet.HFindReplace
-        hwp.HAction.GetDefault("AllReplace",params.HSet)
-        params.FindString=old;params.ReplaceString=new
-        params.Direction=hwp.FindDir("AllDoc")
-        params.ReplaceMode=1;params.IgnoreMessage=1;params.FindType=1
-        params.UseWildCards=0;params.FindRegExp=0;params.WholeWordOnly=0
-        params.IgnoreFindString=0;params.IgnoreReplaceString=0
-        params.FindStyle="";params.ReplaceStyle=""
+        # GetDefault imports this PC's last find/replace character and paragraph
+        # formatting. Use an independent empty set containing text options only.
+        action=hwp.CreateAction('AllReplace');params=action.CreateSet()
+        options={'FindString':old,'ReplaceString':new,'Direction':hwp.FindDir('AllDoc'),
+                 'ReplaceMode':1,'IgnoreMessage':1,'FindType':1,'UseWildCards':0,
+                 'FindRegExp':0,'WholeWordOnly':0,'IgnoreFindString':0,
+                 'IgnoreReplaceString':0,'FindStyle':'','ReplaceStyle':''}
+        for key,value in options.items():params.SetItem(key,value)
         # Some Hancom versions return False after a successful wrap-around replacement.
         # The saved result is verified below instead of trusting that return value.
-        hwp.HAction.Execute("AllReplace",params.HSet)
+        action.Execute(params)
 
 
 def _close_native(hwp):
@@ -374,11 +374,17 @@ def export_hwp(item, out, output, factory=None):
         # Hancom may request its normal file-access permission on first use; do not suppress it.
         with tempfile.TemporaryDirectory(prefix="seoul-hwp-",ignore_cleanup_errors=True) as temporary:
             work = Path(temporary)
+            baseline=work/'unchanged.hwp'
             native = work/"result.hwp"
             source = template_root()/item["file"]
             try:
                 if not hwp.Open(str(source.resolve()), "HWP", ""):
                     raise RuntimeError("기본 HWP 양식을 열지 못했습니다.")
+                # Let the installed Hancom version serialize the unedited original
+                # first. Compare edits against that same-version representation,
+                # rather than confusing a version conversion with a style edit.
+                if not hwp.SaveAs(str(baseline),'HWP','') or not baseline.is_file():
+                    raise RuntimeError('원본 한글 양식의 무수정 기준본을 저장하지 못했습니다.')
                 replace_native_fields(hwp,item,values)
                 if not hwp.SaveAs(str(native), "HWP", "") or not native.is_file():
                     raise RuntimeError("한글에서 HWP 저장을 완료하지 못했습니다.")
@@ -386,6 +392,7 @@ def export_hwp(item, out, output, factory=None):
                 # Release the saved document BEFORE inspecting, copying or deleting result.hwp.
                 _close_native(hwp);hwp=None
             _wait_native_ready(native)
+            _wait_native_ready(baseline)
             from core import extract
             text = extract(native)
             check_title=not item.get("metadata_only") or bool(item.get("title_fragments"))
@@ -397,7 +404,8 @@ def export_hwp(item, out, output, factory=None):
                 if _compact(values[field]) not in _compact(text):raise RuntimeError("저장된 HWP의 수신처·담당자·시행번호 확인에 실패했습니다.")
             if item["old_date"] and _compact(values["display_date"]) not in _compact(text):raise RuntimeError("저장된 HWP 시행일 확인에 실패했습니다.")
             from hwp_fidelity import verify
-            verify(source,native)
+            from hwp_export_check import verify_export
+            verify_export(source,baseline,native,verify)
             output.parent.mkdir(parents=True, exist_ok=True)
             try:
                 with output.open("xb") as dst, native.open("rb") as src: shutil.copyfileobj(src, dst)

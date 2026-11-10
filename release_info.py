@@ -1,4 +1,4 @@
-VERSION = "2.10.0"
+VERSION = "2.10.1"
 # Per-ledger sheet connections, queued HWP export, verified registration cancellation.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
