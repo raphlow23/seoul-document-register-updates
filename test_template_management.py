@@ -56,10 +56,12 @@ class TemplateManagementTests(unittest.TestCase):
             app=SimpleNamespace(root=root,data=self.base,config={'root':str(self.base)},commands=queue.Queue(),persist_config=lambda:None)
             win=folder_settings_dialog(app,root);win.geometry('850x480');root.update()
             self.assertIn('8',win.template_fields);win.template_fields['1'].set(str(self.base/'unsaved folder'))
+            win.template_title_fields['1'].set('수정 중인 기본 제목')
             body=win.template_panel.body
             button=next(x for x in body.winfo_children() if x.winfo_class()=='TButton' and x.cget('text')=='이름 변경')
             with patch('outgoing_editor.simpledialog.askstring',return_value='새 표시 이름'):button.invoke()
             self.assertEqual(docs.style('1')['label'],'새 표시 이름');self.assertEqual(win.template_fields['1'].get(),str(self.base/'unsaved folder'))
+            self.assertEqual(win.template_title_fields['1'].get(),'수정 중인 기본 제목')
             root.update()
             for child in win.winfo_children():
                 if child.winfo_class()=='TFrame' and child is not win.template_panel:

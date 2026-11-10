@@ -51,9 +51,11 @@ def validate(job,config=None):
 
 
 def merge_edit(job,edited):
+    edited=dict(edited)
+    if edited.get('folder_mode')=='direct':edited['folder_plan']=None
     old=job.get("outgoing",{})
     previous=old.get("folder_plan")
-    if previous and (previous.get("folder_name") or previous.get("created")):
+    if previous and (previous.get("folder_name") or previous.get("created")) and edited.get('folder_mode')!='direct':
         from outgoing_folders import PLAN_FIELDS
         current=edited.get("folder_plan") or {}
         if any(previous.get(key)!=current.get(key) for key in PLAN_FIELDS):raise ValueError("발신 폴더 저장을 시작한 공문입니다. 기존 폴더 구성으로 이어서 저장하세요.")

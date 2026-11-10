@@ -512,6 +512,8 @@ class WorkflowShell:
             self.pending_register=None
             self.app.commands.put(("process_outgoing",[self.app.jobs[key].copy()]))
             self.app.busy=True
+        elif self.pending_open==key:
+            self.outgoing_result(self.app.jobs[key])
 
     def outgoing_result(self,job):
         self.clear_editor();page=self.empty("outgoing_result");self.show("outgoing_result","outgoing",4)
@@ -592,11 +594,12 @@ class SimpleOutgoing(OutgoingEditor):
         self.out=defaults(job,app.config);self.out["enabled"]=True
         from copy import deepcopy
         self.folder_plan=deepcopy(self.out.get("folder_plan"))
-        self.folder_mode=self.out.get("folder_mode","")
+        self.folder_mode=self.out.get('folder_mode') or ('case' if self.folder_plan else 'direct')
+        if self.folder_mode=='direct':self.folder_plan=None
         from outgoing_folders import receipt_case_folders,receipt_send_folders
         self.receipt_roots=receipt_case_folders(job,app.config)
         self.receipt_locations=receipt_send_folders(job,app.config)
-        self.reuse_receipt_case=bool(self.receipt_roots) and not (self.out.get('hwp_path') or (self.folder_plan and (self.folder_plan.get('created') or self.folder_plan.get('folder_name'))))
+        self.reuse_receipt_case=bool(self.receipt_roots) and self.folder_mode!='case' and not (self.out.get('hwp_path') or (self.folder_plan and (self.folder_plan.get('created') or self.folder_plan.get('folder_name'))))
         self.receipt_location=self.out.get('save_folder') if self.out.get('save_folder') in self.receipt_locations else next(iter(self.receipt_locations),'')
         if self.reuse_receipt_case:self.folder_plan=None;self.folder_mode='direct'
         self.changing_folder=False
@@ -627,7 +630,7 @@ class SimpleOutgoing(OutgoingEditor):
         if style_id or not self.vars["template_id"].get():self.choose_style(True)
         elif not self.body.get("1.0","end").strip():self.use_template_body(True)
         if self.reuse_receipt_case:self.use_receipt_location()
-        heading(panel,item["label"],"발신 제목과 수신 기관을 입력하세요. 선택한 양식을 한글에서 열어 본문을 작성합니다." if job.get('standalone_outgoing') else "수신 제목을 기본으로 가져옵니다. 필요한 항목만 수정하세요.")
+        heading(panel,item["label"],"양식별 기본 제목 또는 수신 제목에서 시작합니다. 발신 제목과 필요한 항목을 수정하세요.")
         ttk.Label(panel,text="발신대장: "+self.family.get()+"  ·  직인 분류: "+item["family"]+" ○",foreground="#1c5295").pack(anchor="w",pady=(0,12))
         fields=ttk.Frame(panel);fields.pack(fill="x")
         self.controls=[]
@@ -636,24 +639,33 @@ class SimpleOutgoing(OutgoingEditor):
             widget=ttk.Entry(fields,textvariable=self.vars[key]);widget.grid(row=row,column=1,sticky="ew",padx=12)
             self.controls.append(widget)
         fields.columnconfigure(1,weight=1)
+        title_actions=ttk.Frame(panel);title_actions.pack(fill='x',pady=4)
+        ttk.Button(title_actions,text='현재 제목을 이 양식 기본 제목으로 저장',command=self.save_default_title).pack(side='left')
+        load_title=ttk.Button(title_actions,text='기본 제목 불러오기',command=self.load_default_title);load_title.pack(side='left',padx=8);self.controls.append(load_title)
         if not job.get('standalone_outgoing'):
             same=ttk.Checkbutton(panel,text="수신 제목과 동일",variable=self.same,command=self.use_receipt_title);same.pack(anchor="w",padx=80,pady=4);self.controls.append(same)
-        ttk.Label(panel,text="저장 폴더").pack(anchor="w",pady=(12,2))
+        ttk.Label(panel,text='저장 방식').pack(anchor='w',pady=(12,2))
+        choices=ttk.Frame(panel);choices.pack(fill='x',pady=4)
+        self.storage_mode=tk.StringVar(value=self.folder_mode)
+        ttk.Radiobutton(choices,text='선택한 위치에 HWP 문서만 저장',variable=self.storage_mode,value='direct',command=self.change_storage_mode).pack(side='left')
+        ttk.Radiobutton(choices,text='공문폴더를 만들어 그 안에 저장',variable=self.storage_mode,value='case',command=self.change_storage_mode).pack(side='left',padx=18)
+        ttk.Label(panel,text="저장 위치").pack(anchor="w",pady=(8,2))
         route=ttk.Frame(panel);route.pack(fill="x")
         ttk.Entry(route,textvariable=self.vars["save_folder"]).pack(side="left",fill="x",expand=True)
         ttk.Button(route,text="변경",command=self.choose_destination).pack(side="right",padx=6)
         folderbar=ttk.Frame(panel);folderbar.pack(fill="x",pady=6)
-        ttk.Button(folderbar,text="기존 저장 폴더 선택" if self.reuse_receipt_case else "폴더 이름 형식 · 내부 구성",command=self.configure_folders).pack(side="left")
+        self.folder_button=ttk.Button(folderbar,command=self.configure_folders);self.folder_button.pack(side='left')
         self.folder_summary=tk.StringVar(value=("수신 때 만든 센터발송 폴더에 HWP만 저장합니다." if self.receipt_locations else "수신 공문폴더 안에서 기존 발신 저장 폴더를 선택하세요.") if self.reuse_receipt_case else "기존 폴더 형식을 읽어 새 공문폴더와 내부폴더를 만들 수 있습니다.")
         ttk.Label(folderbar,textvariable=self.folder_summary,wraplength=650).pack(side="left",padx=10)
+        self.refresh_storage_summary()
         def changed_folder(*_):
             if self.changing_folder:return
-            if self.reuse_receipt_case:
-                self.out['receipt_folder_override']=True;self.out['save_folder']=self.vars['save_folder'].get();self.folder_plan=None;self.folder_mode='direct'
-                self.folder_summary.set('선택한 기존 폴더에 HWP만 저장합니다. 새 공문폴더를 만들지 않습니다.')
-                return
+            if self.folder_mode=='direct':
+                self.folder_plan=None
+                if self.reuse_receipt_case:self.out['receipt_folder_override']=True;self.out['save_folder']=self.vars['save_folder'].get()
+                self.refresh_storage_summary();return
             if self.folder_plan and not self.folder_plan.get("folder_name"):
-                self.folder_plan=None;self.folder_mode=""
+                self.folder_plan=None;self.folder_mode="case"
                 self.folder_summary.set("저장 위치가 변경되었습니다. 기존 폴더 형식을 다시 확인합니다.")
         self.vars["save_folder"].trace_add("write",changed_folder)
         detail=ttk.Frame(self.win)
@@ -690,7 +702,7 @@ class SimpleOutgoing(OutgoingEditor):
         ttk.Button(actions,text="이전: 양식 선택",command=app.workflow.back).pack(side="left")
         ttk.Button(actions,text="작성 정보 저장",command=self.save).pack(side="left",padx=8)
         done=self.out.get("complete") and self.out.get("stamp",{}).get("complete")
-        ttk.Button(actions,text="작성한 HWP 열기" if done else "대장 등록 → 번호로 HWP 저장",command=(lambda:app.workflow.export_registered(app.jobs[job["hash"]])) if done else self.register).pack(side="right")
+        ttk.Button(actions,text="작성한 HWP 열기" if done else "대장 등록 → 번호로 HWP 저장",command=self.open_registered if done else self.register).pack(side="right")
         self.vars["title"].trace_add("write",self.title_changed)
         old_sender=[self.vars["sender"].get()]
         def sender_changed(*_):
@@ -710,12 +722,43 @@ class SimpleOutgoing(OutgoingEditor):
         self.folder_plan=None;self.folder_mode='direct'
 
     def choose_style(self,event=None):
-        reuse=getattr(self,'reuse_receipt_case',False)
+        previous=self.vars['template_id'].get()
+        reuse=getattr(self,'reuse_receipt_case',False) and self.folder_mode!='case'
         if reuse:self.changing_folder=True
         try:super().choose_style(event)
         finally:
             if reuse:self.changing_folder=False
         if reuse:self.use_receipt_location()
+        from outgoing_preferences import title_for_choice
+        title=title_for_choice(self.app.config,self.vars['template_id'].get(),previous,self.out)
+        if title is not None:self.vars['title'].set(title);self.same.set(False)
+
+    def save_default_title(self):
+        if not self.app.workflow.available():return
+        from outgoing_preferences import save_default_title
+        save_default_title(self.app.config,self.vars['template_id'].get(),self.vars['title'].get())
+        self.app.persist_config();self.app.commands.put(('config',self.app.config.copy()))
+        self.status.set('이 양식의 기본 제목을 저장했습니다. 다음 새 발신 작성부터 사용합니다.')
+
+    def load_default_title(self):
+        if self.out.get('sheet_attempted'):return
+        from outgoing_preferences import default_title
+        title=default_title(self.app.config,self.vars['template_id'].get())
+        if not title:return messagebox.showinfo('기본 제목','아직 저장한 기본 제목이 없습니다. 제목을 입력하고 기본 제목 저장을 누르세요.',parent=self.app.root)
+        self.same.set(False);self.vars['title'].set(title)
+
+    def refresh_storage_summary(self):
+        if self.folder_mode=='direct':
+            self.folder_button.configure(text='저장 위치 선택')
+            self.folder_summary.set('선택한 위치에 HWP만 저장합니다. 새 폴더를 만들지 않습니다.')
+        else:
+            self.folder_button.configure(text='폴더 이름 형식 · 내부 구성')
+            self.folder_summary.set('공문폴더와 내부 구성을 선택했습니다.' if self.folder_plan else '기존 폴더 형식을 기준으로 새 공문폴더와 내부 구성을 선택하세요.')
+
+    def change_storage_mode(self):
+        self.folder_mode=self.storage_mode.get()
+        if self.folder_mode=='direct':self.folder_plan=None
+        self.refresh_storage_summary()
 
     def register(self):
         if not self.app.workflow.available():return
@@ -725,8 +768,8 @@ class SimpleOutgoing(OutgoingEditor):
             if not Path(out.get("save_folder","")).is_absolute():raise ValueError("HWP를 저장할 공유폴더를 선택하세요.")
             hwp_docs.check_template(out["template_id"])
         except (ValueError,OSError) as error:return messagebox.showerror("발신 정보 확인",str(error),parent=self.app.root)
-        if not self.folder_plan and self.folder_mode!="direct":return self.configure_folders(resume=True)
-        if self.folder_plan:
+        if out.get('folder_mode')=='case' and not self.folder_plan:return self.configure_folders(resume=True)
+        if self.folder_mode=='case' and self.folder_plan:
             try:
                 from outgoing_folders import validate as validate_folder
                 validate_folder(out["folder_plan"],out)
@@ -736,9 +779,20 @@ class SimpleOutgoing(OutgoingEditor):
         self.out["open_hwp_after_registration"]=True
         self.save()
 
+    def open_registered(self):
+        if not self.app.workflow.available():return
+        if self.folder_mode=='case' and not self.folder_plan:return self.configure_folders(resume=True)
+        self.app.workflow.pending_register=None
+        self.app.workflow.pending_open=self.job['hash']
+        self.save()
+
+    def resume_save(self):
+        if self.out.get('complete') and self.out.get('stamp',{}).get('complete'):self.open_registered()
+        else:self.register()
+
     def current(self):
         out=super().current()
-        if self.folder_plan:
+        if self.folder_mode=='case' and self.folder_plan:
             from copy import deepcopy
             plan=deepcopy(self.folder_plan)
             if not plan.get("folder_name"):
@@ -751,21 +805,22 @@ class SimpleOutgoing(OutgoingEditor):
 
     def configure_folders(self,resume=False):
         if not self.app.workflow.available() or getattr(self.app,"outgoing_folder_dialog",None) is not None:return
-        if self.reuse_receipt_case:
-            path=filedialog.askdirectory(parent=self.app.root,title='수신 공문폴더 안의 기존 발신 저장 폴더 선택',initialdir=self.vars['save_folder'].get() or str(self.receipt_roots[0]),mustexist=True)
+        if self.folder_mode=='direct':
+            path=filedialog.askdirectory(parent=self.app.root,title='HWP 문서를 저장할 기존 위치 선택',initialdir=self.vars['save_folder'].get() or self.app.config.get('root',''),mustexist=True)
             if path:self.vars['save_folder'].set(path)
-            if resume and path:self.app.root.after(100,self.register)
+            if resume and path:self.app.root.after(100,self.resume_save)
             return
         from outgoing_folder_chooser import OutgoingFolderChooser
         def applied(plan):
             self.folder_plan=plan;self.folder_mode="case" if plan else "direct"
+            self.storage_mode.set(self.folder_mode)
             if plan:
                 self.changing_folder=True
                 self.vars["save_folder"].set(plan.get("save_path") or plan["base"])
                 self.changing_folder=False
                 self.folder_summary.set("공문폴더와 내부폴더 구성을 선택했습니다. 저장 시 최종 순번을 확정합니다.")
-            else:self.folder_summary.set("공문폴더를 만들지 않고 HWP만 선택한 위치에 저장합니다.")
-            if resume:self.app.root.after(100,self.register)
+            self.refresh_storage_summary()
+            if resume:self.app.root.after(100,self.resume_save)
         OutgoingFolderChooser(self.app,self.job,self.current(),applied)
 
     def prepare_excerpt(self):

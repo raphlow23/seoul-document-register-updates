@@ -448,7 +448,7 @@ class Worker(threading.Thread):
             if (register_outgoing or not job.get('receipt_done')) and job.get("outgoing",{}).get("enabled") and job["outgoing"].get("open_hwp_after_registration") and not job["outgoing"].get("complete"):
                 from hwp_documents import check_template
                 check_template(job["outgoing"]["template_id"])
-                if job["outgoing"].get("folder_plan"):
+                if job["outgoing"].get("folder_plan") and job['outgoing'].get('folder_mode')!='direct':
                     from outgoing_folders import validate
                     validate(job["outgoing"]["folder_plan"],job["outgoing"])
             if not job.get('standalone_outgoing') and not job.get("routing") and not job.get("receipt_done"):

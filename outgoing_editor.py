@@ -16,16 +16,17 @@ def folder_settings_dialog(app,parent,on_save=None):
     win=tk.Toplevel(parent);win.title("발신 HWP 양식 · 이름 · 저장 위치 관리");win.transient(parent);win.grab_set()
     win.geometry(f"{min(1180,win.winfo_screenwidth()-60)}x{min(720,win.winfo_screenheight()-100)}");win.minsize(850,480)
     footer=ttk.Frame(win,padding=12);footer.pack(side="bottom",fill="x")
-    hint=ttk.Label(win,text='이름 변경·목록 삭제·HWP 연결은 즉시 반영됩니다. 저장 경로를 바꾼 뒤에는 아래 설정 저장을 누르세요.',wraplength=1050,padding=12);hint.pack(fill='x')
+    hint=ttk.Label(win,text='이름 변경·목록 삭제·HWP 연결은 즉시 반영됩니다. 저장 경로와 양식별 기본 발신 제목을 바꾼 뒤 아래 설정 저장을 누르세요.',wraplength=1050,padding=12);hint.pack(fill='x')
     hint.bind('<Configure>',lambda e:hint.configure(wraplength=max(100,e.width-24)))
     from modern_ui import ScrollablePanel
     area=ScrollablePanel(win);area.pack(fill='both',expand=True);box=area.body
     box.columnconfigure(1,weight=1)
-    fields={}
+    fields={};title_fields={}
     def reload(_=None):
-        previous={k:v.get() for k,v in fields.items()};fields.clear()
+        previous={k:v.get() for k,v in fields.items()};previous_titles={k:v.get() for k,v in title_fields.items()};fields.clear();title_fields.clear()
         for widget in box.winfo_children():widget.destroy()
-        for row,item in enumerate(hwp_docs.catalog()):
+        for index,item in enumerate(hwp_docs.catalog()):
+            row=index*2
             key=item['id'];fields[key]=tk.StringVar(value=previous.get(key,hwp_docs.destination(app.config,item)))
             ttk.Label(box,text=item['label'],wraplength=185).grid(row=row,column=0,sticky='w',padx=8,pady=5)
             ttk.Entry(box,textvariable=fields[key],width=20).grid(row=row,column=1,sticky='ew',padx=8)
@@ -50,12 +51,18 @@ def folder_settings_dialog(app,parent,on_save=None):
                 open_pick_template(app,parent=win,on_added=reload,replace_id=key)
             for col,label,command in ((2,'폴더 선택',choose),(3,'HWP 연결',connect),(4,'이름 변경',change_name),(5,'삭제',remove)):
                 ttk.Button(box,text=label,command=command).grid(row=row,column=col,padx=3,pady=5)
-    reload();win.template_fields=fields;win.template_panel=area
+            from outgoing_preferences import default_title
+            title_fields[key]=tk.StringVar(value=previous_titles.get(key,default_title(app.config,key)))
+            ttk.Label(box,text='기본 발신 제목').grid(row=row+1,column=0,sticky='w',padx=8,pady=(0,12))
+            ttk.Entry(box,textvariable=title_fields[key]).grid(row=row+1,column=1,columnspan=5,sticky='ew',padx=8,pady=(0,12))
+    reload();win.template_fields=fields;win.template_title_fields=title_fields;win.template_panel=area
     def close():
         win.destroy()
         if isinstance(parent,tk.Toplevel):parent.grab_set()
     def save():
         app.config["outgoing_folders"]={k:v.get().strip() for k,v in fields.items()}
+        from outgoing_preferences import save_default_title
+        for key,var in title_fields.items():save_default_title(app.config,key,var.get())
         app.persist_config();app.commands.put(("config",app.config.copy()))
         if on_save:on_save()
         close()

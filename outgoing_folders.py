@@ -48,7 +48,7 @@ def validate(plan,out):
 
 def prepare(job,config,store):
     out=job["outgoing"];plan=out.get("folder_plan")
-    if not plan:return Path(out["save_folder"])
+    if not plan or out.get('folder_mode')=='direct':return Path(out["save_folder"])
     base,children,title=validate(plan,out)
     from core import registration_lock
     root=Path(config.get("root",str(base))).resolve()

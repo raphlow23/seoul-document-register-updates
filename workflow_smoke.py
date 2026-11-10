@@ -161,6 +161,7 @@ def run():
                 assert errors and writes==["receipt"] and flow.pending_register is None
                 errors.clear()
                 casebase=shared/"발신 기존 폴더";casebase.mkdir();(casebase/"012. 이전 제목").mkdir()
+                editor.storage_mode.set('case');editor.change_storage_mode()
                 editor.vars["save_folder"].set(str(casebase));editor.configure_folders()
                 wait(lambda:getattr(app,"outgoing_folder_dialog",None) is not None and app.outgoing_folder_dialog.record is not None);idle()
                 case=app.outgoing_folder_dialog
@@ -280,13 +281,23 @@ def run():
                 new_key=flow.current;new_job=app.jobs[new_key]
                 assert new_job['standalone_outgoing'] and not new_job['files'] and not new_job.get('receipt_done')
                 assert flow.outgoing_list_tree.exists(new_key) and not app.tree.exists(new_key)
+                app.config['outgoing_default_titles']={'1':'기본 발신 제목(주소)'}
                 flow.outgoing_form(new_job,'1');editor=app.outgoing_editor
+                assert editor.vars['title'].get()=='기본 발신 제목(주소)' and editor.folder_mode=='direct'
                 editor.vars['title'].set('새로 보내는 공문');editor.vars['receiver'].set('수신 기관')
+                editor.save_default_title();idle()
+                assert app.config['outgoing_default_titles']['1']=='새로 보내는 공문'
                 editor.folder_mode='direct';editor.vars['save_folder'].set(str(shared));check_actions()
                 editor.register();wait(lambda:flow.step==4);idle()
                 assert writes[-1]=='new_outgoing' and app.jobs[new_key]['outgoing']['number']=='13'
                 assert 'number' not in app.jobs[new_key] and not app.jobs[new_key].get('receipt_done')
                 assert app.jobs[new_key]['title']=='새로 보내는 공문' and not errors,errors
+                wait(lambda:open_hwp.call_args.args[0]['hash']==new_key);idle()
+                written=list(writes);direct=base/'HWP-only';direct.mkdir()
+                flow.outgoing_form(app.jobs[new_key]);editor=app.outgoing_editor
+                editor.storage_mode.set('direct');editor.change_storage_mode();editor.vars['save_folder'].set(str(direct));editor.open_registered()
+                wait(lambda:open_hwp.call_args.args[0]['outgoing']['save_folder']==str(direct));idle()
+                assert writes==written and not app.jobs[new_key]['outgoing'].get('folder_plan')
                 flow.outgoing_home();flow.outgoing_list_tree.selection_set(new_key)
                 with patch('workflow_ui.messagebox.askyesno',return_value=True):flow.restart_outgoing(hide=True)
                 wait(lambda:not flow.outgoing_list_tree.exists(new_key));idle()

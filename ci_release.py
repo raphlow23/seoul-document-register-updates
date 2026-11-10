@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='한글 저장 후 임시 HWP 파일 잠금 오류 수정'
-RELEASE_BODY='자동작성용 한글 문서를 저장 직후 닫고 종료한 다음 HWP를 검증·복사·정리합니다. Clear가 실패해도 Quit을 시도하며 Windows 읽기·삭제 공유 잠금이 풀리는 것을 제한 시간 동안 확인합니다. 임시파일 정리 실패가 정상 저장이나 원래 저장 오류를 가리지 않도록 수정합니다. 한글의 정상 파일 접근 확인창은 그대로 표시합니다. 실제 Windows 파일 잠금을 사용하는 검사 등 266개 검사와 실행 파일의 업데이트·재실행을 검증합니다. 실제 한컴 한글 저장은 한글이 설치된 업무 PC에서 확인해야 합니다.'
+RELEASE_TITLE='발신 저장 방식 선택 및 양식별 기본 제목 저장'
+RELEASE_BODY='발신 화면에서 HWP 문서만 저장하거나 공문폴더를 만들어 저장하는 방식을 선택합니다. 문서만 저장을 선택하면 이전 폴더 구성은 적용하지 않고 폴더 구성창도 열지 않습니다. 이미 발신번호를 받은 문서도 변경한 저장 설정을 먼저 저장한 뒤 HWP를 엽니다. 양식 설정과 발신 화면에서 양식별 기본 제목을 저장하고 다음 새 발신은 그 제목에서 시작해 수정할 수 있습니다. 작성 중이거나 등록한 제목은 기본 제목 변경으로 덮어쓰지 않습니다. v2.8.9의 HWP 파일 잠금 수정도 포함합니다. 273개 검사와 Windows 화면 흐름·업데이트·재실행을 검증합니다. 실제 한컴 한글 저장은 한글 설치 PC에서 확인해야 합니다.'
 _release_id = None
 
 
@@ -85,7 +85,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_outgoing_options","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage"],check=True,timeout=90)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:
