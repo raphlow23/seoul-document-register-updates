@@ -305,7 +305,8 @@ def run():
                     flow.receipt_home();old_id=app.jobs[mail_key]['id'];app.tree.selection_set(mail_key);app.ignore();idle()
                     assert app.jobs[mail_key]['list_hidden'] and mail_zip.is_file()
                     app.send('add',[str(mail_zip)]);idle()
-                    assert app.jobs[mail_key]['id']!=old_id and app.jobs[mail_key]['number']=='' and app.tree.exists(mail_key)
+                    fresh=next(j for j in app.jobs.values() if j.get('reimported_from')==mail_key)
+                    assert fresh['id']!=old_id and fresh['number']=='' and app.tree.exists(fresh['hash']) and not app.tree.exists(mail_key)
                 assert not errors,errors
         finally:
             app.commands.put(("quit",None));app.worker.join(timeout=5)

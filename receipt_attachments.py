@@ -14,7 +14,7 @@ def load_sources(paths,job,store,progress=None):
         path=Path(path)
         if path.suffix.lower()!='.zip':
             source,_=ingest(path,store,progress=progress);sources.append(source);continue
-        hash_=digest(path);old=store.get(hash_)
+        hash_=digest(path);old=store.intake(hash_)
         if old and (old.get('receipt_done') or old.get('sheet_attempted') or old.get('files_started') or old.get('parent')) and (old.get('parent') or old['hash'])!=job['hash']:
             raise ValueError('다른 공문에 이미 포함된 ZIP입니다. 해당 공문의 이력을 먼저 확인하세요.')
         cache=Path(store.db.execute('PRAGMA database_list').fetchone()[2]).parent/'archive-cache'

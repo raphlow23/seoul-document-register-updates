@@ -182,6 +182,19 @@ class Store:
         row = self.db.execute("SELECT payload FROM jobs WHERE hash=?", (hash_,)).fetchone()
         return json.loads(row[0]) if row else None
 
+    def intake(self,content_hash):
+        self.db.execute('CREATE TABLE IF NOT EXISTS intake_heads (content_hash TEXT PRIMARY KEY, job_hash TEXT NOT NULL)')
+        row=self.db.execute('SELECT job_hash FROM intake_heads WHERE content_hash=?',(content_hash,)).fetchone()
+        return (self.get(row[0]) if row else None) or self.get(content_hash)
+
+    def put_intake(self,job,content_hash):
+        try:
+            self.db.execute('CREATE TABLE IF NOT EXISTS intake_heads (content_hash TEXT PRIMARY KEY, job_hash TEXT NOT NULL)')
+            self.db.execute('INSERT INTO jobs VALUES (?,?) ON CONFLICT(hash) DO UPDATE SET payload=excluded.payload',(job['hash'],json.dumps(job,ensure_ascii=False)))
+            self.db.execute('INSERT INTO intake_heads VALUES (?,?) ON CONFLICT(content_hash) DO UPDATE SET job_hash=excluded.job_hash',(content_hash,job['hash']))
+            self.db.commit()
+        except Exception:self.db.rollback();raise
+
     def put_many(self,jobs):
         try:
             self.db.executemany("INSERT INTO jobs VALUES (?,?) ON CONFLICT(hash) DO UPDATE SET payload=excluded.payload",[(job['hash'],json.dumps(job,ensure_ascii=False)) for job in jobs])
@@ -200,7 +213,7 @@ def ingest(path, store, progress=None):
     from attachment_files import eligible
     if not eligible(path):raise ValueError('문서·ZIP 첨부파일만 추가할 수 있습니다. 이미지와 기타 파일은 제외합니다.')
     hash_ = digest(path)
-    old = store.get(hash_)
+    old = store.intake(hash_)
     if old:
         if old.get("archive_alias"):old=store.get(old["parent"]) or old
         from reimport_document import removed,create

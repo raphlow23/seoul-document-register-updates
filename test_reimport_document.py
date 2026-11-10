@@ -39,7 +39,7 @@ class ReimportTests(unittest.TestCase):
         self.worker.seen=self.worker.files();self.path.unlink();self.worker.scan();self.assertNotIn(str(self.path),self.worker.seen)
         self.path.write_bytes(data);os.utime(self.path,ns=(signature[1],signature[1]))
         self.worker.pending[str(self.path)]=(signature,time.monotonic()-7);self.worker.scan()
-        fresh=self.store.get(old['hash']);self.assertNotEqual(fresh['id'],old['id']);self.assertEqual(fresh['number'],'')
+        fresh=self.store.intake(old['hash']);self.assertNotEqual(fresh['id'],old['id']);self.assertEqual(fresh['number'],'')
 
     def test_same_zip_reimport_uses_new_cache_and_preserves_prior_alias_owners(self):
         path=self.base/'메일함께다운로드.zip'

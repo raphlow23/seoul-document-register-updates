@@ -117,7 +117,7 @@ class QueueVisibilityTests(unittest.TestCase):
         worker.hide_list([job["hash"]])
         moved=self.downloads/"renamed.pdf";self.path.rename(moved)
         worker.add(str(moved))
-        restored=store.get(job["hash"])
+        restored=store.intake(job["hash"])
         self.assertFalse(restored.get("list_hidden"))
         self.assertEqual(restored["state"],"확인 필요");self.assertEqual(restored["number"],"")
         self.assertNotIn('receipt_done',restored);self.assertNotEqual(restored['id'],job['id'])
