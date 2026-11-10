@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='발신대장 머리글 인식 및 실제 발신번호 HWP 저장'
-RELEASE_BODY='발신대장의 띄어쓰기·줄바꿈·두 줄 머리글과 이동한 머리글 행을 확인하도록 수정합니다. 발신대장 등록과 실제 발신번호 확인 후 직인대장에 등록하고 HWP를 저장합니다. 작성한 HWP 파일명은 438.26.11.10. 제목.hwp 형식으로 실제 번호와 당일 날짜를 사용합니다. 번호가 확인되지 않으면 HWP를 만들지 않습니다. 259개 검사와 Windows 실행 파일의 등록 흐름·업데이트·재실행을 검증합니다.'
+RELEASE_TITLE='직인대장 분류·날짜 서식 및 시트 탭 선택 수정'
+RELEASE_BODY='직인날인대장 새 행은 이전 행의 서식을 따르고 분류 칸은 정상 ○ 표시 셀의 서식만 복사합니다. 과거 서울센터2025- 표시 서식이 ○ 앞에 붙어 저장 결과 확인이 실패하던 문제를 수정합니다. 실패한 등록은 다른 데이터 변경이 없는 경우 같은 행에서 복구하며 새 행을 중복 등록하지 않습니다. 시트 탭 선택은 마우스 드래그 없이 관찰된 탭 컨트롤을 활성화합니다. 시청회신 기본 수신처는 서울시청입니다. 262개 검사와 Windows 실행 파일의 등록 흐름·업데이트·재실행을 검증합니다.'
 _release_id = None
 
 

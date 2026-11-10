@@ -2,7 +2,7 @@
 import json
 
 
-def probe(name, scroll=False):
+def probe(name, activate=False):
     return """(()=>{
 const wanted="""+json.dumps(name)+""";
 const norm=s=>String(s||'').normalize('NFKC').replace(/[\\u200b-\\u200d\\ufeff]/g,'').replace(/\\s+/g,' ').trim();
@@ -10,7 +10,7 @@ const nodes=[...document.querySelectorAll('.docs-sheet-tab-name')];
 const matches=nodes.filter(n=>norm(n.textContent)===norm(wanted));
 const active=document.querySelector('.docs-sheet-active-tab .docs-sheet-tab-name');
 const n=matches.length===1?matches[0]:null;
-if(n&&"""+str(scroll).lower()+""")(n.closest('.docs-sheet-tab')||n).scrollIntoView({block:'nearest',inline:'nearest'});
+if(n&&"""+str(activate).lower()+""")(n.closest('.docs-sheet-tab')||n).click();
 const rect=n?.getBoundingClientRect();
 const x=rect?(Math.max(0,rect.left)+Math.min(innerWidth,rect.right))/2:0;
 const y=rect?(Math.max(0,rect.top)+Math.min(innerHeight,rect.bottom))/2:0;

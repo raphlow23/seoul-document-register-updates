@@ -31,6 +31,10 @@ def catalog(root=None):
     items=json.loads(path.read_text(encoding='utf-8')) if path.is_file() else [{"id":key,"label":label,"role":role,"file":f"approved-20261103-{role}.hwp","family":"업무연락" if key=="4" else "처리지침" if key=="5" else "공문","folder":"0.시행문(업무연락)" if key=="4" else "0.시행문(처리지침)" if key=="5" else "0.시행문(센터)","prefix":"처리지침" if key=="5" else "","spacing":" ","suffix":"","receiver":"","blank_body":True,"metadata_only":True} for key,label,role in kinds]
     retired=root/'catalog-retired.json';removed=json.loads(retired.read_text(encoding='utf-8')) if retired.is_file() else []
     if not any(x['id']=='8' or x.get('role')=='relief_reply' for x in items+removed):items.append(relief_template())
+    for item in items:
+        if item.get('role') in ('city_reply','building_reply') or str(item.get('id')) in ('3','6'):
+            if item.get('default_receiver','') in ('','서울특별시장(장애인자립지원과장)','서울특별시장'):
+                item['default_receiver']='서울시청'
     return items
 
 

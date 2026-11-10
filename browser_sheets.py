@@ -97,9 +97,9 @@ class BrowserUI:
         if r.get("exceptionDetails"):raise RuntimeError("시트 화면 조작에 실패했습니다.")
         return r.get("result",{}).get("value")
 
-    def key(self,key,ctrl=False):
+    def key(self,key,ctrl=False,alt=False):
         vk={"Enter":13,"Escape":27,"Delete":46,"End":35,"Home":36,"Tab":9}.get(key,ord(key.upper()) if len(key)==1 else 0)
-        mod=2 if ctrl else 0
+        mod=(2 if ctrl else 0)|(1 if alt else 0)
         code="Key"+key.upper() if len(key)==1 and key.isalpha() else key
         self.call("Input.dispatchKeyEvent",{"type":"keyDown","key":key,"code":code,"windowsVirtualKeyCode":vk,"modifiers":mod})
         self.call("Input.dispatchKeyEvent",{"type":"keyUp","key":key,"code":code,"windowsVirtualKeyCode":vk,"modifiers":mod})
@@ -123,13 +123,8 @@ class BrowserUI:
                 raise ValueError("같은 이름으로 보이는 시트 탭이 여러 개입니다. 시트에서 탭 이름을 확인해 주세요: "+name)
             if state.get("active"):return
             if state.get("matches")==1 and not clicked:
-                state=self.evaluate(probe(name,scroll=True)) or {}
-                if state.get("visible"):
-                    point={"x":state["x"],"y":state["y"]}
-                    self.call("Input.dispatchMouseEvent",{"type":"mouseMoved",**point})
-                    self.call("Input.dispatchMouseEvent",{"type":"mousePressed","button":"left","buttons":1,"clickCount":1,**point})
-                    self.call("Input.dispatchMouseEvent",{"type":"mouseReleased","button":"left","buttons":0,"clickCount":1,**point})
-                    clicked=True
+                # Activate the observed tab control without a pointer drag or scrolling its bar.
+                self.evaluate(probe(name,activate=True));clicked=True
             time.sleep(.2)
         actual=" / ".join(names) if names else "탭 목록이 아직 표시되지 않았습니다"
         raise ValueError("시트 탭을 확인하지 못했습니다: "+name+"\n현재 화면의 탭: "+actual+"\n시트 로딩이 끝난 뒤 ‘연결 확인’을 다시 눌러 주세요. 설정의 구글 시트 ID도 확인해 주세요.")
@@ -198,6 +193,14 @@ class BrowserUI:
                 time.sleep(.1)
         raise ValueError(detail or "시트 내용을 복사하지 못했습니다. 전용 시트 창이 편집 화면인지 확인하고 열린 안내창을 닫은 뒤 다시 연결해 주세요.")
 
+    def copy_format(self,source,target):
+        from browser_ranges import bounds
+        for range_,key,alt in ((source,'c',False),(target,'v',True)):
+            if bounds(self.select(range_))!=bounds(range_):
+                raise ValueError('서식을 맞출 셀 범위와 실제 선택 범위가 다릅니다. 입력하지 않았습니다.')
+            self.key(key,ctrl=True,alt=alt)
+            time.sleep(.25)
+
     def write(self,cell,value):
         from browser_ranges import bounds
         selected=self.select(cell)
@@ -233,13 +236,37 @@ class BrowserSession:
 
     def getrows(self,range_):return [normalized(r,self.owner) for r in self.ui.read(range_)]
 
+    def stamp_formats(self,row):
+        if self.owner.marker_prefix!='SDS:':return []
+        for index in range(row-2,max(self.owner.header_row,row-52),-1):
+            values=self.rows[index]
+            if not values or not str(values[0]).isdigit():continue
+            for col in range(2,min(5,len(values))):
+                if values[col]=='○':
+                    return [(f'A{row-1}:K{row-1}',f'A{row}:K{row}'),
+                            (f'{chr(65+col)}{index+1}',f'C{row}:E{row}')]
+        raise ValueError('직인날인대장에서 ○ 표시가 정상인 이전 기준 셀을 찾지 못했습니다. 서식을 먼저 확인해 주세요.')
+
     def _check_entry(self,entry):
         row=entry["row"]
         current=self.getrows(f"A{row}:{self.owner.last_column}{row}")[0]
         before,after=entry["before"],entry["after"]
-        if any(v not in (before[i],after[i]) for i,v in enumerate(current)):
+        def allowed(i,v):
+            if v in (before[i],after[i]):return True
+            # A legacy TEXT number format can display a prefix even though the cell holds only ○.
+            return self.owner.marker_prefix=='SDS:' and i in (2,3,4) and after[i]=='○' and bool(re.fullmatch(r'서울센터20\d{2}-○',v))
+        if any(not allowed(i,v) for i,v in enumerate(current)):
             raise ValueError(f"브라우저 등록 {row}행이 다른 내용으로 바뀌었습니다. 자동 복구를 중단했습니다.")
         if not entry.get("complete"):
+            formats=self.stamp_formats(row)
+            if formats:
+                source=formats[-1][0]
+                if self.ui.read(f'{source}:{source}')[0][0]!='○':
+                    raise ValueError('직인 분류 서식의 기준 셀이 바뀌었습니다. 다시 확인해 주세요.')
+                for source,target in formats:self.ui.copy_format(source,target)
+                current=self.getrows(f"A{row}:{self.owner.last_column}{row}")[0]
+                if any(v not in (before[i],after[i]) for i,v in enumerate(current)):
+                    raise ValueError(f'브라우저 등록 {row}행의 서식을 맞춘 뒤에도 기존 값이 다릅니다. 자동 복구를 중단했습니다.')
             for col,value in entry["writes"].items():
                 i=int(col)
                 if current[i]!=after[i]:self.ui.write(f"{chr(65+i)}{row}",value)

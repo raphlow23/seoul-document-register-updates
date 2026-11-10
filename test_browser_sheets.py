@@ -14,6 +14,7 @@ class UI:
     def __init__(self,rows):self.rows=rows;self.writes=[];self.fail=None
     def tab(self,name):self.name=name
     def close(self):pass
+    def copy_format(self,source,target):pass
     def read(self,range_):
         if re.fullmatch(r"A:[HK]",range_):return [r.copy() for r in self.rows]
         m=re.fullmatch(r"([A-K])(\d+):([A-K])(\d+)",range_)

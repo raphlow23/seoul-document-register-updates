@@ -11,19 +11,18 @@ FAMILIES=("공문","업무연락","처리지침")
 def requests(sheet_id,row,out,previous,marker,candidate=None):
     stamp=out["stamp"]
     cells=[{"userEnteredValue":{"formulaValue":f"=A{row-1}+1"}},
-           {"userEnteredValue":{"numberValue":(date.fromisoformat(stamp["date"])-date(1899,12,30)).days},"userEnteredFormat":{"numberFormat":{"type":"DATE","pattern":"yyyy.MM.dd"}}},
-           *[value("○" if out["ledger_type"]==kind else "") for kind in FAMILIES],
+           {"userEnteredValue":{"numberValue":(date.fromisoformat(stamp["date"])-date(1899,12,30)).days},"userEnteredFormat":{"numberFormat":{"type":"DATE","pattern":"yyyy-mm-dd"}}},
+           *[{**value("○" if out["ledger_type"]==kind else ""),"userEnteredFormat":{"numberFormat":{"type":"TEXT","pattern":"@"}}} for kind in FAMILIES],
            value(out["document_number"]),value(out["title"]),value(out["receiver"]),
            value(stamp["department"]),value(stamp["applicant"]),value(stamp["person"])]
     source={"sheetId":sheet_id,"startRowIndex":row-2,"endRowIndex":row-1,"startColumnIndex":0,"endColumnIndex":11}
     target={**source,"startRowIndex":row-1,"endRowIndex":row}
     result=[{"copyPaste":{"source":source,"destination":target,"pasteType":kind}} for kind in ("PASTE_FORMAT","PASTE_DATA_VALIDATION")]
     candidate=candidate or []
-    if any(str(x).strip() for x in candidate): result=[]
     for col,cell in enumerate(cells):
         if col==0 and candidate and str(candidate[0]).strip(): continue
         result.append({"updateCells":{"start":{"sheetId":sheet_id,"rowIndex":row-1,"columnIndex":col},
-                                      "rows":[{"values":[cell]}],"fields":"userEnteredValue,userEnteredFormat.numberFormat" if col==1 else "userEnteredValue"}})
+                                      "rows":[{"values":[cell]}],"fields":"userEnteredValue,userEnteredFormat.numberFormat" if col in (1,2,3,4) else "userEnteredValue"}})
     result.append({"updateCells":{"start":{"sheetId":sheet_id,"rowIndex":row-1,"columnIndex":6},"rows":[{"values":[{"note":marker}]}],"fields":"note"}})
     return result
 
