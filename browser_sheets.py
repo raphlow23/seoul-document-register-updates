@@ -98,7 +98,7 @@ class BrowserUI:
         return r.get("result",{}).get("value")
 
     def key(self,key,ctrl=False,alt=False):
-        vk={"Enter":13,"Escape":27,"Delete":46,"End":35,"Home":36,"Tab":9}.get(key,ord(key.upper()) if len(key)==1 else 0)
+        vk={"Enter":13,"Escape":27,"Delete":46,"End":35,"Home":36,"Tab":9,"ArrowUp":38,"ArrowDown":40}.get(key,ord(key.upper()) if len(key)==1 else 0)
         mod=(2 if ctrl else 0)|(1 if alt else 0)
         code="Key"+key.upper() if len(key)==1 and key.isalpha() else key
         self.call("Input.dispatchKeyEvent",{"type":"keyDown","key":key,"code":code,"windowsVirtualKeyCode":vk,"modifiers":mod})
@@ -115,16 +115,19 @@ class BrowserUI:
         from browser_tabs import probe
         self.ready()
         deadline=time.monotonic()+25
-        clicked=False;names=[]
+        focused=False;names=[];steps=0
         while time.monotonic()<deadline:
             state=self.evaluate(probe(name)) or {}
             names=state.get("names",names)
             if state.get("matches",0)>1:
                 raise ValueError("같은 이름으로 보이는 시트 탭이 여러 개입니다. 시트에서 탭 이름을 확인해 주세요: "+name)
             if state.get("active"):return
-            if state.get("matches")==1 and not clicked:
-                # Activate the observed tab control without a pointer drag or scrolling its bar.
-                self.evaluate(probe(name,activate=True));clicked=True
+            current,target=state.get('currentIndex',-1),state.get('targetIndex',-1)
+            if state.get("matches")==1 and current>=0 and target>=0 and current!=target:
+                # Sheets' documented navigation shortcuts select tabs without dragging their controls.
+                if not focused:self.select('A1');focused=True
+                if steps>=len(names)+2:break
+                self.key('ArrowDown' if target>current else 'ArrowUp',alt=True);steps+=1
             time.sleep(.2)
         actual=" / ".join(names) if names else "탭 목록이 아직 표시되지 않았습니다"
         raise ValueError("시트 탭을 확인하지 못했습니다: "+name+"\n현재 화면의 탭: "+actual+"\n시트 로딩이 끝난 뒤 ‘연결 확인’을 다시 눌러 주세요. 설정의 구글 시트 ID도 확인해 주세요.")

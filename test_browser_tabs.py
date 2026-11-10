@@ -11,7 +11,7 @@ class BrowserTabTests(unittest.TestCase):
     def setUp(self):
         temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
         self.ui=BrowserUI({"_auth_data_dir":temporary.name,"spreadsheet_id":"test-sheet"})
-        self.ui.ready=Mock();self.ui.call=Mock()
+        self.ui.ready=Mock();self.ui.call=Mock();self.ui.select=Mock();self.ui.key=Mock()
 
     def test_already_selected_tab_does_not_click_or_open_its_menu(self):
         self.ui.evaluate=Mock(return_value={"matches":1,"active":True,"names":["접수"]})
@@ -24,10 +24,12 @@ class BrowserTabTests(unittest.TestCase):
         sleep.assert_called_once();self.ui.call.assert_not_called()
 
     def test_selects_control_without_pointer_drag_and_verifies_active_tab(self):
-        self.ui.evaluate=Mock(side_effect=[{"matches":1,"active":False,"names":["접수","발행"]},{"matches":1,"visible":True,"x":120,"y":40},{"matches":1,"active":True}])
-        with patch("browser_sheets.time.sleep"):self.ui.tab("발행")
-        self.ui.call.assert_not_called()
-        self.assertIn('.click()',self.ui.evaluate.call_args_list[1].args[0])
+        for current,target,key in ((0,1,'ArrowDown'),(1,0,'ArrowUp')):
+            self.ui.key.reset_mock();self.ui.select.reset_mock()
+            self.ui.evaluate=Mock(side_effect=[{"matches":1,"active":False,"names":["접수","발행"],"currentIndex":current,"targetIndex":target},{"matches":1,"active":True}])
+            with patch("browser_sheets.time.sleep"):self.ui.tab(('접수','발행')[target])
+            self.ui.key.assert_called_once_with(key,alt=True);self.ui.select.assert_called_once_with('A1')
+            self.ui.call.assert_not_called()
 
     def test_ambiguous_names_are_never_clicked(self):
         self.ui.evaluate=Mock(return_value={"matches":2,"names":["접수","접수"]})
@@ -43,7 +45,7 @@ class BrowserTabTests(unittest.TestCase):
     def test_names_are_json_escaped_and_normalized(self):
         script=probe('접수" 시험')
         self.assertIn('normalize(\'NFKC\')',script)
-        self.assertIn('.click()',script)
+        self.assertNotIn('.click()',script)
         self.assertNotIn('scrollIntoView',script)
         self.assertNotIn('접수" 시험',script)
 
