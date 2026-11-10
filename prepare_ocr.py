@@ -2,6 +2,7 @@
 from pathlib import Path
 import hashlib
 import json
+import os
 import re
 import shutil
 import urllib.request
@@ -30,7 +31,9 @@ def download(url, path):
 info = out / "BUILDINFO.json"
 record = json.loads(info.read_text()) if info.exists() else {}
 if not record.get("models_commit"):
-    request = urllib.request.Request("https://api.github.com/repos/tesseract-ocr/tessdata_best/commits/main", headers={"User-Agent": "SeoulDocumentRegister-build"})
+    headers={"User-Agent":"SeoulDocumentRegister-build"}
+    if os.environ.get('GH_TOKEN'):headers['Authorization']='Bearer '+os.environ['GH_TOKEN']
+    request = urllib.request.Request("https://api.github.com/repos/tesseract-ocr/tessdata_best/commits/main", headers=headers)
     record["models_commit"] = json.load(urllib.request.urlopen(request, timeout=30))["sha"]
 for language in ("kor", "eng"):
     target = models / f"{language}.traineddata"

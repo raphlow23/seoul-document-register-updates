@@ -1,5 +1,6 @@
 VERSION = "2.10.1"
 # Same-version HWP baseline checks and isolated text-only replacement settings.
+# Build downloads authenticate to GitHub to avoid shared-runner API rate limits.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
 UPDATE_REPOSITORY = "raphlow23/seoul-document-register-updates"
