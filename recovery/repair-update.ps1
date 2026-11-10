@@ -6,9 +6,9 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSHOME 'Modules\Microsoft.PowerShell.Utility\Microsoft.PowerShell.Utility.psd1') -ErrorAction Stop
 $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$version = '2.10.0'
-$expectedHash = '1fed1f6e651dfbe80142eafee08fa7b3d7868e6469f4e259051915f35137ab3d'
-$expectedSize = 55497371
+$version = '2.10.1'
+$expectedHash = '6bc1c11037875404fd86d1956f30815982abdbb793f416dc5a7ae9026a53ff40'
+$expectedSize = 55498994
 $fileName = 'SeoulDocumentRegister-' + $version + '.exe'
 $api = 'https://api.github.com/repos/raphlow23/seoul-document-register-updates/releases/'
 function Get-RecoveryFile([string]$Uri, [string]$Destination) {
