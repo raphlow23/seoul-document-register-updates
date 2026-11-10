@@ -16,7 +16,7 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
 RELEASE_TITLE='발신대장 머리글 인식 및 실제 발신번호 HWP 저장'
-RELEASE_BODY='발신대장의 띄어쓰기·줄바꿈·두 줄 머리글과 이동한 머리글 행을 확인하도록 수정합니다. 발신대장 등록과 실제 발신번호 확인 후 직인대장에 등록하고 HWP를 저장합니다. 작성한 HWP 파일명은 438.26.11.10. 제목.hwp 형식으로 실제 번호와 당일 날짜를 사용합니다. 번호가 확인되지 않으면 HWP를 만들지 않습니다. 268개 검사와 Windows 실행 파일의 등록 흐름·업데이트·재실행을 검증합니다.'
+RELEASE_BODY='발신대장의 띄어쓰기·줄바꿈·두 줄 머리글과 이동한 머리글 행을 확인하도록 수정합니다. 발신대장 등록과 실제 발신번호 확인 후 직인대장에 등록하고 HWP를 저장합니다. 작성한 HWP 파일명은 438.26.11.10. 제목.hwp 형식으로 실제 번호와 당일 날짜를 사용합니다. 번호가 확인되지 않으면 HWP를 만들지 않습니다. 259개 검사와 Windows 실행 파일의 등록 흐름·업데이트·재실행을 검증합니다.'
 _release_id = None
 
 
@@ -85,7 +85,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_hwp_documents","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage"],check=True,timeout=90)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:

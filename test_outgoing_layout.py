@@ -10,6 +10,12 @@ from test_browser_sheets import UI
 
 
 class OutgoingLayoutTests(unittest.TestCase):
+    def test_hwp_filename_uses_actual_number_and_today_without_extra_gap(self):
+        from hwp_documents import filename
+        for prefix,suffix in (('',''),('처리지침','(센터-발송)')):
+            item={'prefix':prefix,'suffix':suffix,'spacing':' '}
+            self.assertEqual(filename(item,{'number':'9','title':'새 발신 제목'},date(2026,11,10)),f'{prefix}009.26.11.10. 새 발신 제목{suffix}.hwp')
+
     def setUp(self):
         temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);self.base=Path(temp.name)
         self.store=core.Store(self.base/'history.sqlite');self.addCleanup(self.store.db.close)
