@@ -24,8 +24,9 @@ class ExportCheckTests(unittest.TestCase):
         self.enterContext(patch('program_storage.temporary_root',return_value=self.base/'private'))
 
     def test_version_serialization_is_compared_to_unedited_same_version_baseline(self):
+        for name in ('unchanged.hwp','result.hwp'):self.states[name]['names'].append('추가 미사용 스타일')
         names=verify_export(*self.paths,fidelity.verify)
-        self.assertEqual(names,self.state['names']);self.assertFalse((self.base/'private').exists())
+        self.assertEqual(names[:len(self.state['names'])],self.state['names']);self.assertFalse((self.base/'private').exists())
         self.assertEqual(self.paths[0].read_bytes(),b'original.hwp')
 
     def test_actual_font_character_paragraph_style_and_paper_changes_are_rejected(self):

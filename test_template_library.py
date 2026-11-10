@@ -76,9 +76,9 @@ class TemplateLibraryTests(unittest.TestCase):
 
     def test_blank_form_only_replaces_specified_fields(self):
         item={"file":"empty.hwp","title_fragments":[],"receiver":"","old_sender":"","old_number":"서울센터 {{발신번호}}","old_date":"({{발신일}})","metadata_only":True}
-        params=SimpleNamespace(HSet=object());calls=[]
-        actions=SimpleNamespace(Run=lambda *a:None,GetDefault=lambda *a:None,Execute=lambda *a:calls.append((params.FindString,params.ReplaceString)))
-        hwp=SimpleNamespace(HAction=actions,HParameterSet=SimpleNamespace(HFindReplace=params),FindDir=lambda *a:0)
+        values={};calls=[]
+        actions=SimpleNamespace(Run=lambda *a:None,CreateSet=lambda:SimpleNamespace(SetItem=values.__setitem__),Execute=lambda *a:calls.append((values['FindString'],values['ReplaceString'])))
+        hwp=SimpleNamespace(HAction=actions,CreateAction=lambda name:actions,FindDir=lambda *a:0)
         with patch("core.extract",return_value=self.text):docs.replace_native_fields(hwp,item,{"title":"직접 입력 제목","receiver":"기관","sender":"담당자","number_date":"서울센터 2026-012","display_date":"(26. 11. 2)"})
         self.assertCountEqual(calls,[("서울센터 {{발신번호}}","서울센터 2026-012"),("({{발신일}})","(26. 11. 2)")])
 
@@ -92,7 +92,7 @@ class TemplateLibraryTests(unittest.TestCase):
             def SaveAs(self,path,*a):Path(path).write_bytes(b"saved blank HWP");return True
             def Clear(self,*a):pass
             def Quit(self):pass
-        with patch.object(docs,"template_body",return_value=""),patch.object(docs,"replace_native_fields"),patch("core.extract",return_value=values["number_date"]+values["display_date"]),patch("hwp_fidelity.verify"):
+        with patch.object(docs,"template_body",return_value=""),patch.object(docs,"replace_native_fields"),patch("core.extract",return_value=values["number_date"]+values["display_date"]),patch('hwp_export_check.check_baseline'),patch("hwp_fidelity.verify"):
             docs.export_hwp(item,out,output,factory=Hancom)
         self.assertEqual(output.read_bytes(),b"saved blank HWP")
         self.assertFalse(out["hwp_body_paste_needed"])

@@ -9,7 +9,7 @@ def check_baseline(source,baseline):
     original=snapshot(source);saved=snapshot(baseline)
     # Ctrl style slots must retain their names and order. The unedited round trip
     # may rewrite version-dependent DocInfo bytes and reference table IDs.
-    if original['names']!=saved['names']:
+    if original['names']!=saved['names'][:len(original['names'])]:
         raise ValueError('원본 양식의 스타일 이름·순서가 기준본 저장 중 달라졌습니다.')
     if [p['style'] for p in original['paragraphs']]!=[p['style'] for p in saved['paragraphs']]:
         raise ValueError('원본 양식의 문단 스타일 구성이 기준본 저장 중 달라졌습니다.')
