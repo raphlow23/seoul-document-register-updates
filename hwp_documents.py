@@ -3,11 +3,13 @@ from copy import deepcopy
 from datetime import date
 import json
 import io
+import os
 from pathlib import Path
 import re
 import shutil
 import sys
 import tempfile
+import time
 import zipfile
 from functools import lru_cache
 
@@ -301,6 +303,44 @@ def replace_native_fields(hwp,item,values):
         hwp.HAction.Execute("AllReplace",params.HSet)
 
 
+def _close_native(hwp):
+    if hwp is None:return
+    # Quit must still run if this Hancom version rejects Clear.
+    try:hwp.Clear(1)
+    except Exception:pass
+    try:hwp.Quit()
+    except Exception:pass
+
+
+def _probe_native_file(path):
+    if os.name!='nt':
+        with Path(path).open('rb') as stream:stream.read(1)
+        return
+    import ctypes
+    from ctypes import wintypes as w
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    kernel.CreateFileW.argtypes=[w.LPCWSTR,w.DWORD,w.DWORD,w.LPVOID,w.DWORD,w.DWORD,w.HANDLE]
+    kernel.CreateFileW.restype=w.HANDLE
+    kernel.CloseHandle.argtypes=[w.HANDLE];kernel.CloseHandle.restype=w.BOOL
+    # Request read/delete sharing permission only; no delete-on-close flag and no file mutation.
+    handle=kernel.CreateFileW(str(Path(path).resolve()),0x80000000|0x10000,7,None,3,128,None)
+    if handle==ctypes.c_void_p(-1).value:raise ctypes.WinError(ctypes.get_last_error())
+    kernel.CloseHandle(handle)
+
+
+def _wait_native_ready(path,timeout=3):
+    deadline=time.monotonic()+timeout
+    while True:
+        try:
+            _probe_native_file(path)
+            return
+        except OSError as error:
+            if getattr(error,'winerror',None) not in (32,33):raise
+            if time.monotonic()>=deadline:
+                raise RuntimeError('한글 저장 파일의 잠금이 아직 풀리지 않았습니다. 한글의 접근 확인창을 처리한 뒤 HWP 저장을 다시 시도하세요. 발신번호는 유지됩니다.') from error
+            time.sleep(.05)
+
+
 def export_hwp(item, out, output, factory=None):
     """A private Hancom automation instance; original template and existing files are never overwritten."""
     today = date.today()
@@ -330,15 +370,20 @@ def export_hwp(item, out, output, factory=None):
                 raise RuntimeError("HWP 저장에는 이 PC에 설치된 한컴 한글(편집 가능한 Windows 버전)이 필요합니다. 한글 설치 상태를 확인해 주세요.") from error
         else: hwp = factory()
         # Hancom may request its normal file-access permission on first use; do not suppress it.
-        with tempfile.TemporaryDirectory(prefix="seoul-hwp-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="seoul-hwp-",ignore_cleanup_errors=True) as temporary:
             work = Path(temporary)
             native = work/"result.hwp"
             source = template_root()/item["file"]
-            if not hwp.Open(str(source.resolve()), "HWP", ""):
-                raise RuntimeError("기본 HWP 양식을 열지 못했습니다.")
-            replace_native_fields(hwp,item,values)
-            if not hwp.SaveAs(str(native), "HWP", "") or not native.is_file():
-                raise RuntimeError("한글에서 HWP 저장을 완료하지 못했습니다.")
+            try:
+                if not hwp.Open(str(source.resolve()), "HWP", ""):
+                    raise RuntimeError("기본 HWP 양식을 열지 못했습니다.")
+                replace_native_fields(hwp,item,values)
+                if not hwp.SaveAs(str(native), "HWP", "") or not native.is_file():
+                    raise RuntimeError("한글에서 HWP 저장을 완료하지 못했습니다.")
+            finally:
+                # Release the saved document BEFORE inspecting, copying or deleting result.hwp.
+                _close_native(hwp);hwp=None
+            _wait_native_ready(native)
             from core import extract
             text = extract(native)
             check_title=not item.get("metadata_only") or bool(item.get("title_fragments"))
@@ -360,9 +405,7 @@ def export_hwp(item, out, output, factory=None):
                 raise
         return str(output)
     finally:
-        if hwp is not None:
-            try: hwp.Clear(1); hwp.Quit()
-            except Exception: pass
+        _close_native(hwp)
         if coinit:
             import pythoncom
             pythoncom.CoUninitialize()
