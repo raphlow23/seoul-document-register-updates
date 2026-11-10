@@ -75,6 +75,26 @@ def validate_anchors(text,anchors):
         chosen.append(token)
 
 
+def edit_copy(key,config):
+    """Edit a private copy so cancelling an edit cannot damage the installed form."""
+    from program_storage import temporary_root
+    item=docs.style(key)
+    if Path(item['file']).name!=item['file']:raise ValueError('양식 파일 경로를 확인하세요.')
+    source=docs.template_root()/item['file']
+    if not source.is_file():raise ValueError('원본 HWP를 먼저 연결하세요.')
+    return copy_for_edit(source,config)
+
+
+def copy_for_edit(source,config):
+    from program_storage import temporary_root
+    source=Path(source)
+    if source.stat().st_size>100*1024*1024:raise ValueError('양식 파일이 너무 큽니다.')
+    target=temporary_root(config,'HWP-양식수정')/(uuid.uuid4().hex+'.hwp')
+    target.parent.mkdir(parents=True,exist_ok=True)
+    with target.open('xb') as dst:dst.write(source.read_bytes())
+    return target
+
+
 def add(source,settings,storage=None,replace_id=None):
     """Validate before copying, then atomically publish the catalog. Never overwrite a form."""
     source=Path(source)
@@ -126,6 +146,12 @@ def add(source,settings,storage=None,replace_id=None):
           "date_pattern":"({year2:02d}. {month}. {day})","number_pattern":number_pattern(original_number),
           "original_sha256":original_hash,"source_sha256":hashlib.sha256(raw).hexdigest()}
     if previous and previous.get('role'):item['role']=previous['role']
+    if previous and settings.get('_edit_existing'):
+        fragments=previous.get('title_fragments',[])
+        if len(fragments)>1 and anchors['title']==fragments[0] and all(docs._compact(text).count(docs._compact(fragment))==1 for fragment in fragments):item['title_fragments']=fragments.copy()
+        if anchors['date']==previous.get('old_date'):
+            item['date_pattern']=previous.get('date_pattern') or ('({year2:02d}. {month}. {day})' if previous.get('blank_body') else '({year}. {month:02d}. {day:02d}.)')
+        if anchors['number']==previous.get('old_number') and previous.get('number_pattern'):item['number_pattern']=previous['number_pattern']
     temporary=root/("catalog-"+uuid.uuid4().hex+".tmp")
     try:
         with target.open("xb") as dst:dst.write(raw)

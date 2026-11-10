@@ -528,14 +528,37 @@ class WorkflowShell:
             for key in picker.get_children():picker.delete(key)
             for entry in hwp_docs.catalog():picker.insert("","end",iid=entry["id"],values=(entry["label"],entry["family"]))
             key=item["id"] if item else self.style_choice.get()
-            if picker.exists(key):picker.selection_set(key);picker.see(key);selected()
+            if not picker.exists(key):key=next(iter(picker.get_children()),'')
+            if key:picker.selection_set(key);picker.see(key);selected()
+            else:
+                self.style_choice.set('');self.template_photo=None;preview.configure(image='',text='사용할 양식을 추가하세요.');detail.set('')
         def add():
             from template_manager import open_pick_template
             open_pick_template(self.app,on_added=reload)
         reload()
         ttk.Button(bar,text="HWP 양식 넣기",command=add).pack(side="left",padx=8)
+        def edit():
+            keys=picker.selection()
+            if not keys:return messagebox.showinfo('양식 선택','수정할 양식을 선택하세요.')
+            from template_manager import open_edit_template
+            open_edit_template(self.app,keys[0],on_saved=reload)
+        def remove():
+            keys=picker.selection()
+            if not keys:return messagebox.showinfo('양식 선택','삭제할 양식을 선택하세요.')
+            item=hwp_docs.style(keys[0])
+            if not messagebox.askyesno('양식 삭제',item['label']+' 양식을 선택 목록에서 삭제할까요?\n기존 공문용 양식 파일과 기록은 보관합니다.'):return
+            from template_library import remove as retire
+            try:retire(keys[0],self.app.data/'hwp-templates')
+            except (OSError,ValueError) as error:return messagebox.showerror('양식 삭제',str(error))
+            reload();self.app.status.set('양식 선택 목록에서 삭제했습니다: '+item['label'])
+        ttk.Button(bar,text='양식 수정',command=edit).pack(side='left',padx=4)
+        ttk.Button(bar,text='양식 삭제',command=remove).pack(side='left',padx=4)
+        ttk.Button(bar,text='새로고침',command=reload).pack(side='left',padx=4)
         ttk.Button(bar,text="이전: 발신 목록",command=self.outgoing_home).pack(side="left")
-        ttk.Button(bar,text="다음: 발신 정보",command=lambda:self.outgoing_form(self.app.jobs[self.current],self.style_choice.get())).pack(side="right")
+        def proceed():
+            if not self.style_choice.get():return messagebox.showinfo('양식 선택','사용할 HWP 양식을 추가하고 선택하세요.')
+            self.outgoing_form(self.app.jobs[self.current],self.style_choice.get())
+        ttk.Button(bar,text="다음: 발신 정보",command=proceed).pack(side="right")
 
     def outgoing_form(self,job,style_id=None):
         self.clear_editor();page=self.empty("outgoing_form");self.show("outgoing_form","outgoing",3)
