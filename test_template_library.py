@@ -71,7 +71,7 @@ class TemplateLibraryTests(unittest.TestCase):
         values=docs.native_values(item,out,date(2026,11,2))
         self.assertEqual(values["number_date"],"서울센터 2026-012")
         self.assertEqual(values["display_date"],"(26. 11. 2)")
-        self.assertEqual(docs.filename(item,out,date(2026,11,2)),"012. 26.11.02. 안내 공문.hwp")
+        self.assertEqual(docs.filename(item,out,date(2026,11,2)),"012.26.11.02. 안내 공문.hwp")
         with self.assertRaises(ValueError):docs.native_values(item,{**out,"file_number":"13"})
 
     def test_blank_form_only_replaces_specified_fields(self):

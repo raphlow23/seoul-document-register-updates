@@ -1,5 +1,6 @@
 """Independent outgoing ledger transactions; never send email or repeat receipt writes."""
 from datetime import date
+import re
 import uuid
 from urllib.parse import quote
 from core import Sheets, RejectedWrite, value
@@ -10,12 +11,21 @@ KINDS=("발송문서","내부결재","처리지침")
 METHODS=("Email","문서24","우편","FAX","인편")
 
 
+def require_registered_number(out):
+    number=str(out.get('number','')).strip();document=str(out.get('document_number','')).strip()
+    match=re.search(r'(\d+)$',document)
+    if not out.get('complete') or not re.fullmatch(r'\d{1,6}',number) or int(number)<1 or not match or int(match[1])!=int(number):
+        raise ValueError('구글시트 발신대장에 먼저 등록하고 실제 발신번호를 확인한 뒤 HWP를 저장하세요.')
+    return number
+
+
 def defaults(job,config):
     out={"enabled":False,"id":uuid.uuid4().hex,"title":job.get("title",""),"title_same":True,"ledger_type":"공문",
             "date":date.today().isoformat(),"receiver":"","sender":config.get("recipient",job.get("recipient","")),
             "kind":"발송문서","method":"Email","body":"","attachments":"","reference":"","summary":"",
             "purpose":"전달·안내","template_path":config.get("document_template",""),**job.get("outgoing",{})}
     out["stamp"]={"department":"편의증진부","applicant":out["sender"],"person":"","date":out["date"],**out.get("stamp",{})}
+    out['file_number']=str(out.get('number','')) if out.get('complete') else ''
     if job.get('standalone_outgoing'):out['title_same']=False
     if out.get("title_same",True) and not out.get("sheet_attempted"):out["title"]=job.get("title",out["title"])
     return out
@@ -59,6 +69,7 @@ def merge_edit(job,edited):
     edited={**edited}
     for key in ("id","row","number","document_number","tab","sheet_attempted","complete"):
         if key in old:edited[key]=old[key]
+    edited['file_number']=str(edited.get('number','')) if edited.get('complete') else ''
     if old.get("complete"):
         for key in ("hwp_path","hwp_saved_number","hwp_created_sha256"):
             if key in old:edited[key]=old[key]
@@ -117,6 +128,27 @@ class OutgoingSheets(Sheets):
     header_word="분"
     marker_prefix="SDO:"
 
+    def validate_header(self,rows):
+        compact=lambda value:re.sub(r'[\s\u200b-\u200d\ufeff]+','',str(value or ''))
+        matches=[];width=8 if self.compact else 11
+        for index,row in enumerate(rows[:50]):
+            cells=[compact(v) for v in row]+['']*width
+            if not re.fullmatch(r'(?:문서|발신|공문)?제목|건명|문서명',cells[self.title_column]):continue
+            columns=[''.join(compact(r[c]) if len(r)>c else '' for r in rows[max(0,index-2):index+2]) for c in range(width)]
+            if '연번' not in columns[0] or not any(w in columns[1] for w in ('일자','날짜','발신일','발송일')):continue
+            if '번호' not in columns[self.prefix_col]+columns[self.number_col]:continue
+            receiver,sender,method=(5,6,7) if self.compact else (8,9,10)
+            if not any(w in columns[receiver] for w in ('수신처','수신기관','받는곳')):continue
+            if not any(w in columns[sender] for w in ('발송자','발신자','작성자','담당자')):continue
+            if '방법' not in columns[method]:continue
+            if not self.compact:
+                if not any(w in columns[2] for w in ('발송문서','공문')) or not any(w in columns[3] for w in ('내부결재','결재')) or '처리지침' not in columns[4]:continue
+            matches.append(index)
+        if len(matches)!=1:
+            letter='E' if self.compact else 'H'
+            raise ValueError(f'{self.tab}의 발신대장 머리글을 확인하지 못했습니다. 연번·일자·분류번호·{letter}열 제목·수신처·발송자·방법 열을 확인하세요. 등록하지 않았습니다.')
+        self.header_row=matches[0];self.notes_start=self.header_row+2
+
     def __init__(self,config):
         family=config.get("_outgoing_family","공문")
         self.compact=family!="공문"
@@ -130,14 +162,16 @@ class OutgoingSheets(Sheets):
 
     def register(self,job,store):
         out=validate(job)
-        if getattr(self,"browser",None):self.browser.recover(["SDO:"+out["id"]])
+        if getattr(self,"browser",None):
+            self.browser.snapshot()
+            self.browser.recover(["SDO:"+out["id"]])
         prop,rows,found=self.snapshot()
         marker="SDO:"+out["id"]
         if marker in found:
             row=found[marker]
         else:
             if out.get("sheet_attempted"): raise ValueError("발신 등록 결과가 불확실합니다. 발신대장에서 등록 여부를 먼저 확인해 주세요.")
-            populated=[i+1 for i,r in enumerate(rows) if i>=4 and len(r)>self.title_column and str(r[self.title_column]).strip()]
+            populated=[i+1 for i,r in enumerate(rows) if i>self.header_row and len(r)>self.title_column and str(r[self.title_column]).strip()]
             if not populated: raise ValueError("발신대장의 기존 번호 기준 행을 찾지 못했습니다.")
             row=max(populated)+1
             if row>prop["gridProperties"]["rowCount"]: raise ValueError("발신대장에 빈 행을 추가해 주세요.")
@@ -169,7 +203,7 @@ class OutgoingSheets(Sheets):
         values=self.request("GET","/values/"+quote(f"{tab}!{start}{row}:{end}{row}",safe=""),params={"valueRenderOption":"FORMATTED_VALUE"}).get("values",[])
         if not values or len(values[0])<2 or not str(values[0][0]).isdigit() or values[0][1]!=out["title"]: raise ValueError("발신대장 G열 번호와 제목을 확인하지 못했습니다. 재시도 시 기존 등록부터 확인합니다.")
         prefix=rows[row-1][self.prefix_col] if row<=len(rows) and len(rows[row-1])>self.prefix_col and rows[row-1][self.prefix_col] else rows[row-2][self.prefix_col]
-        out.update(row=row,number=str(values[0][0]),document_number=prefix+str(values[0][0]),tab=self.tab,complete=True)
+        out.update(row=row,number=str(values[0][0]),file_number=str(values[0][0]),document_number=prefix+str(values[0][0]),tab=self.tab,complete=True)
         store.put(job)
         return row,out["number"]
 

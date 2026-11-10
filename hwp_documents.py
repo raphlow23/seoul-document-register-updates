@@ -87,7 +87,7 @@ def filename(item, out, today=None):
     suffix = out.get("filename_suffix", item["suffix"]).strip()
     if re.search(r'[<>:"/\\|?*\x00-\x1f]', suffix):
         raise ValueError("파일명 뒤 표시에 사용할 수 없는 문자가 있습니다.")
-    return f"{item['prefix']}{sequence(out):03d}.{item['spacing']}{today:%y.%m.%d}. {title}{suffix}.hwp"
+    return f"{item['prefix']}{sequence(out):03d}.{today:%y.%m.%d}. {title}{suffix}.hwp"
 
 
 def template_preview(style_id):

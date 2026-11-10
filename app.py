@@ -214,6 +214,9 @@ class Worker(threading.Thread):
                         from document_draft import fill_hwpx,field_values,template_copy
                         job=self.store.get(data["hash"])
                         if not job:raise ValueError("문서 이력을 찾지 못했습니다.")
+                        if data.get('native_hwp'):
+                            from outgoing import require_registered_number
+                            require_registered_number(job.get('outgoing',{}))
                         merge_edit(job,data["outgoing"])
                         out=job["outgoing"]
                         if data.get("native_hwp"):
@@ -223,6 +226,10 @@ class Worker(threading.Thread):
                                 from outgoing_folders import prepare
                                 data["path"]=str(prepare(job,self.config,self.store)/name)
                                 self.emit("job",job)
+                            else:
+                                folder=Path(out.get('save_folder',''))
+                                if not folder.is_absolute() or not folder.is_dir():raise ValueError('HWP를 저장할 폴더를 확인하세요.')
+                                data['path']=str(folder/name)
                             export_hwp(style(out["template_id"]),out,data["path"])
                             out["hwp_path"]=data["path"]
                             out["hwp_saved_number"]=str(out.get("number") or out.get("file_number",""))

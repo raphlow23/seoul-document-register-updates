@@ -561,6 +561,9 @@ class WorkflowShell:
     def export_registered(self,job):
         # Use the ledger-authoritative saved metadata, never a suggested or sample number.
         out=job["outgoing"]
+        from outgoing import require_registered_number
+        try:require_registered_number(out)
+        except ValueError as error:return messagebox.showerror('발신번호 확인',str(error))
         existing=out.get("hwp_path","")
         if existing and str(out.get("hwp_saved_number",""))==str(out.get("number","")) and Path(existing).suffix.lower()==".hwp" and Path(existing).is_file():
             import os
@@ -682,12 +685,12 @@ class SimpleOutgoing(OutgoingEditor):
             self.file_box.current(next((i for i,file in enumerate(job['files']) if file['hash']==job.get('text_file_hash',job['hash'])),0))
             ttk.Button(source,text="정리된 본문 확인 · 복사",command=self.prepare_excerpt).pack(side="right",padx=6)
         else:source.pack_forget()
-        self.status=tk.StringVar(value="대장에서 실제 발신번호를 받은 뒤 원본 양식의 HWP를 저장하고 한글에서 편집합니다.")
+        self.status=tk.StringVar(value="처리 순서: 구글시트 발신대장 등록 → 발신번호 확인 → 직인대장 등록 → 번호가 붙은 HWP 저장·열기")
         ttk.Label(panel,textvariable=self.status,wraplength=900).pack(anchor="w",pady=8)
         ttk.Button(actions,text="이전: 양식 선택",command=app.workflow.back).pack(side="left")
         ttk.Button(actions,text="작성 정보 저장",command=self.save).pack(side="left",padx=8)
         done=self.out.get("complete") and self.out.get("stamp",{}).get("complete")
-        ttk.Button(actions,text="작성한 HWP 열기" if done else "발신번호 받고 한글로 열기",command=(lambda:app.workflow.export_registered(app.jobs[job["hash"]])) if done else self.register).pack(side="right")
+        ttk.Button(actions,text="작성한 HWP 열기" if done else "대장 등록 → 번호로 HWP 저장",command=(lambda:app.workflow.export_registered(app.jobs[job["hash"]])) if done else self.register).pack(side="right")
         self.vars["title"].trace_add("write",self.title_changed)
         old_sender=[self.vars["sender"].get()]
         def sender_changed(*_):

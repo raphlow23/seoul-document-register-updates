@@ -1,5 +1,5 @@
-VERSION = "2.8.6"
-# Compact title controls, readable OCR body and an expanded selectable text viewer.
+VERSION = "2.8.7"
+# Resolve merged outgoing headers and save HWP only with a verified ledger number.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
 UPDATE_REPOSITORY = "raphlow23/seoul-document-register-updates"

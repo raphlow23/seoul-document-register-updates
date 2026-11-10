@@ -170,7 +170,7 @@ class FolderWorkflowTests(unittest.TestCase):
     def test_worker_exports_hwp_into_prepared_internal_folder(self):
         from app import Worker
         job=self.job();out=job["outgoing"]
-        out.update(template_id="2",ledger_type="공문",receiver="기관",sender="담당자",body="",stamp={})
+        out.update(template_id="2",ledger_type="공문",receiver="기관",sender="담당자",body="",stamp={},complete=True,document_number='서울센터2026-438')
         self.store.put(job);commands,events=queue.Queue(),queue.Queue()
         worker=Worker(commands,events,{"root":str(self.root)},self.root/"history.sqlite")
         exported=[]

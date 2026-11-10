@@ -97,7 +97,7 @@ class HwpTests(unittest.TestCase):
     def test_filenames_current_date_prefix_spacing_and_actual_document_title(self):
         for item in docs.catalog():
             name=docs.filename(item,{"title":"실제 HWP 제목","number":"9"},date(2026,11,2))
-            self.assertEqual(name,f"{item['prefix']}009.{item['spacing']}26.11.02. 실제 HWP 제목{item['suffix']}.hwp")
+            self.assertEqual(name,f"{item['prefix']}009.26.11.02. 실제 HWP 제목{item['suffix']}.hwp")
         # Template 3's sample filename differs from the internal title: use edited HWP title.
         self.assertIn("보수·전문교육",docs.style("3")["title_fragments"][0])
 

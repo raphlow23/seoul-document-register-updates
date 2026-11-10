@@ -184,8 +184,8 @@ class OutgoingEditor:
         choice=ttk.Combobox(templatebar,textvariable=self.style_label,values=[x["label"] for x in self.styles],state="readonly",width=39)
         choice.grid(row=0,column=0,sticky="ew",padx=4)
         choice.bind("<<ComboboxSelected>>",self.choose_style)
-        ttk.Label(templatebar,text="발신번호 숫자").grid(row=0,column=1)
-        ttk.Entry(templatebar,textvariable=self.vars["file_number"],width=8).grid(row=0,column=2,padx=4)
+        ttk.Label(templatebar,text="발신번호 (자동)").grid(row=0,column=1)
+        ttk.Entry(templatebar,textvariable=self.vars["file_number"],width=8,state='readonly').grid(row=0,column=2,padx=4)
         ttk.Label(templatebar,text="파일명 뒤 표시").grid(row=0,column=3)
         ttk.Entry(templatebar,textvariable=self.vars["filename_suffix"],width=24).grid(row=0,column=4,padx=4)
         ttk.Entry(templatebar,textvariable=self.vars["save_folder"]).grid(row=1,column=0,columnspan=4,sticky="ew",padx=4,pady=4)
@@ -324,6 +324,8 @@ class OutgoingEditor:
     def export(self,copy_only):
         out=self.current()
         try:
+            from outgoing import require_registered_number
+            require_registered_number(out)
             item=hwp_docs.style(out["template_id"])
             name=hwp_docs.filename(item,out)
             if not out["save_folder"]:raise ValueError("저장 폴더를 선택해 주세요.")
