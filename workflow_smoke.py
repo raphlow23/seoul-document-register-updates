@@ -93,6 +93,11 @@ def run():
                 # Deliver a synthetic preview before the OCR timer. Never open a business document.
                 title.deliver({"owner":title.owner,"request":title.request,"kind":"prepare","text":"제목 확정 제목", "image":Image.new("RGB",(500,700),"white"),"options":[{"mode":"header","label":"제목란","title":"확정 제목"}]})
                 check_actions()
+                assert title.body.winfo_height()>=80, f'OCR body collapsed: body={title.body.winfo_height()}, right={title.body.master.master.winfo_height()}, title={title.title.winfo_height()}, root={root.winfo_height()}'
+                root.deiconify();enlarged=title.expand_body();root.update()
+                assert title.expanded_body.winfo_height()>300
+                enlarged.destroy()
+                title.set_title('확정 제목')
                 title.apply()
                 wait(lambda:getattr(app,"route_dialog",None) is not None and bool(app.route_dialog.records));idle()
                 route=app.route_dialog
@@ -105,7 +110,7 @@ def run():
                 assert "005. 확정 제목" in preview and "2.중앙회신" in preview
                 flow.back();assert flow.step==2
                 title=app.title_dialog
-                wait(lambda:app.busy);idle()
+                wait(lambda:title.loaded);idle()
                 assert title.title.get("1.0","end").strip()=="확정 제목"
                 title.apply();wait(lambda:getattr(app,"route_dialog",None) is not None and bool(app.route_dialog.records));idle()
                 route=app.route_dialog
