@@ -68,7 +68,8 @@ def extract(path, with_meta=False, progress=None):
     metadata = {}
     if path.stat().st_size > 100 * 1024 * 1024:
         raise ValueError("100MB를 넘는 파일은 직접 확인해 주세요.")
-    ext = path.suffix.lower()
+    from attachment_files import document_kind
+    ext = document_kind(path)
     if ext == ".pdf":
         from pypdf import PdfReader
         reader = PdfReader(path)
@@ -77,6 +78,7 @@ def extract(path, with_meta=False, progress=None):
         from ocr import read_pdf
         text, metadata = read_pdf(path, progress=progress)
     elif ext == ".hwpx":
+        if not zipfile.is_zipfile(path):raise ValueError('한글 HWPX 형식이 아니거나 다운로드가 완료되지 않은 파일입니다. 다른 첨부파일을 선택하거나 원본을 확인하세요.')
         with zipfile.ZipFile(path) as z:
             names = sorted(n for n in z.namelist() if re.fullmatch(r"Contents/section\d+\.xml", n))
             if not names:
@@ -201,6 +203,9 @@ def ingest(path, store, progress=None):
     old = store.get(hash_)
     if old:
         if old.get("archive_alias"):old=store.get(old["parent"]) or old
+        from reimport_document import removed,create
+        owner=store.get(old['parent']) if old.get('parent') else None
+        if removed(old) or (owner and removed(owner)):return create(path,store,hash_,progress)
         changed=False
         for file in old.get("files",[]):
             if file.get("hash")==hash_ and not Path(file["path"]).is_file():
@@ -258,6 +263,7 @@ def receipt_markers(job):
     if job.get("sheet_attempted") or job.get("receipt_done"):
         return ["SDR:"+file["hash"] for file in files]
     identity={"files":sorted({file["hash"] for file in files}),"archives":sorted({file["hash"] for file in job.get("archive_files",[])})}
+    if job.get('reimport_id'):identity['reimport_id']=job['reimport_id']
     marker="SDR:group:"+hashlib.sha256(json.dumps(identity,sort_keys=True).encode()).hexdigest()
     job["receipt_registration_markers"]=[marker]
     return [marker]
@@ -545,6 +551,7 @@ def apply_title_choice(data, store):
     primary.update({k:v for k,v in data.get("fields", {}).items() if k in ("category", "date", "recipient", "issuer", "receipt_type")})
     primary.update(title=data["title"].strip(), title_source=data["source"], files=files, ready=False,
                    state="확인 필요", reason=f"제목 선택 완료 · 첨부 {len(files)}개를 한 공문으로 등록")
+    if any(job.get('reimport_id') for job in jobs):primary.setdefault('reimport_id',uuid.uuid4().hex)
     archives={file['hash']:file for job in jobs for file in job.get('archive_files',[])}
     if archives:primary['archive_files']=list(archives.values())
     grouped = []

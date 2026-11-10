@@ -35,6 +35,7 @@ def run():
         from file_drop import create_root
         root=create_root();root.withdraw();errors=[];writes=[];fail_receipt=[True]
         app=App(root,base,smoke=True);flow=app.workflow
+        assert app.watching.get(), 'Download auto-check must be checked initially'
         assert app.tree.get_children('')[0]==h0, 'Newest modification must be first'
         assert app.file_drop is not None
         app.config.update(root=str(shared),downloads=str(downloads),recipient="담당자")
@@ -105,7 +106,6 @@ def run():
                 flow.back();assert flow.step==2
                 title=app.title_dialog
                 wait(lambda:app.busy);idle()
-                title.deliver({"request":title.request,"owner":title.owner,"kind":"prepare","agency":"central","text":"시험 제목","image":None,"options":[{"mode":"header","label":"제목란","title":"다른 추천"}]})
                 assert title.title.get("1.0","end").strip()=="확정 제목"
                 title.apply();wait(lambda:getattr(app,"route_dialog",None) is not None and bool(app.route_dialog.records));idle()
                 route=app.route_dialog
@@ -286,6 +286,27 @@ def run():
                 with patch('workflow_ui.messagebox.askyesno',return_value=True):flow.restart_outgoing(hide=True)
                 wait(lambda:not flow.outgoing_list_tree.exists(new_key));idle()
                 assert not app.jobs[new_key].get('receipt_done')
+                # Mail's combined ZIP chooses an inner scanned PDF, not the container.
+                flow.receipt_home();writer=PdfWriter();writer.add_blank_page(width=300,height=400)
+                import io
+                scanned=io.BytesIO();writer.write(scanned)
+                mail_zip=downloads/'mail-three-attachments.zip'
+                with zipfile.ZipFile(mail_zip,'w') as z:
+                    z.writestr('1.bad-form.hwpx',b'not a zip');z.writestr('2.main.pdf',scanned.getvalue());z.writestr('3.table.xlsx',b'table')
+                with patch('ocr.read_pdf',return_value=('제목 함께다운로드 시험\n2. OCR 본문',{'ocr_pages':1,'confidence':99,'needs_review':False})):
+                    app.send('add',[str(mail_zip)]);idle();mail_key=digest(mail_zip)
+                    settled=[False];root.after(200,lambda:settled.__setitem__(0,True));wait(lambda:settled[0]);flow.receipt_home()
+                    app.tree.selection_set(mail_key);flow.start_receipt()
+                    wait(lambda:app.title_dialog is not None and app.title_dialog.loaded);idle()
+                    title=app.title_dialog;assert Path(title.selected_file()['path']).suffix=='.pdf' and 'OCR 본문' in title.body.get('1.0','end')
+                    title.file_box.current(next(i for i,f in enumerate(title.files) if Path(f['path']).suffix=='.hwpx'));title.change_file();idle()
+                    assert title.apply_button.instate(['!disabled']) and '다른 첨부파일' in title.status.get()
+                    check_actions()
+                    flow.receipt_home();old_id=app.jobs[mail_key]['id'];app.tree.selection_set(mail_key);app.ignore();idle()
+                    assert app.jobs[mail_key]['list_hidden'] and mail_zip.is_file()
+                    app.send('add',[str(mail_zip)]);idle()
+                    assert app.jobs[mail_key]['id']!=old_id and app.jobs[mail_key]['number']=='' and app.tree.exists(mail_key)
+                assert not errors,errors
         finally:
             app.commands.put(("quit",None));app.worker.join(timeout=5)
             for token in root.tk.call('after','info'):root.after_cancel(token)

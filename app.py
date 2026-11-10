@@ -238,22 +238,9 @@ class Worker(threading.Thread):
                         self.emit("job",job)
                         self.emit("draft_exported",{"path":data["path"],"copy_only":data["copy_only"],"open_after":data.get("native_hwp",False),"body_paste_needed":out.get("hwp_body_paste_needed",False) if data.get("native_hwp") else False})
                     elif cmd == "title_prepare":
-                        from title_tools import suggestions, agency_key, pdf_preview
-                        from core import extract
-                        file = data["file"]
-                        saved = self.store.get(file["hash"])
-                        text = saved.get("text", "") if saved and saved.get("text_file_hash",saved["hash"])==file["hash"] else ""
-                        if not text and can_extract(file['path']):
-                            try:
-                                text = extract(file["path"], progress=lambda t: self.emit("status", t))
-                            except ValueError:
-                                text = ""
-                        agency = agency_key(text)
-                        preferred = self.config.get("title_preferences", {}).get(agency, "header")
-                        image, count = pdf_preview(file["path"], data["page"]) if Path(file["path"]).suffix.lower() == ".pdf" else (None, 1)
-                        self.emit("title_result", {"kind": "prepare", "owner": data["owner"], "request": data["request"],
-                                                   "text": text, "image": image, "page_count": count, "agency": agency,
-                                                   "options": suggestions(text, file["path"], preferred)})
+                        from title_document import prepare
+                        result=prepare(data['file'],self.store,self.config,data['page'],progress=lambda t:self.emit('status',t))
+                        self.emit('title_result',{'kind':'prepare','owner':data['owner'],'request':data['request'],**result})
                     elif cmd == "title_crop":
                         from ocr import recognize_image
                         try:
@@ -372,7 +359,7 @@ class Worker(threading.Thread):
             if job:
                 job['history_hidden' if history else 'list_hidden']=True
                 self.store.put(job);self.emit("job",job)
-        self.emit("status",f"{len(keys)}개 항목을 {'처리 이력 목록' if history else '첨부 목록'}에서 삭제했습니다. 파일·구글시트 등록·중복 접수 방지 기록은 유지합니다.")
+        self.emit("status",f"{len(keys)}개 항목을 {'처리 이력 목록' if history else '첨부 목록'}에서 삭제했습니다. 파일·기존 시트 기록은 유지하며 다시 다운로드하면 새 공문으로 시작합니다.")
 
     def sync_sources(self):
         for job in self.store.all():
@@ -397,6 +384,8 @@ class Worker(threading.Thread):
 
     def scan(self):
         now = self.files()
+        for path in list(self.seen):
+            if path not in now:self.seen.pop(path,None)
         for path, sig in now.items():
             if self.seen.get(path) == sig:
                 self.pending.pop(path, None)
@@ -436,6 +425,9 @@ class Worker(threading.Thread):
         if new:
             job["recipient"] = self.config.get("recipient", "")
             self.store.put(job)
+            if job.get('reimported_from'):
+                archived=self.store.get(job['reimported_from'])
+                if archived:self.emit('job',archived)
         self.emit("job", job)
         self.emit("status", "확인 목록에 추가했습니다. 첨부에서 제목을 골라 주세요." if new else "이미 확인한 파일입니다. 기존 처리 이력을 표시합니다.")
 
@@ -879,17 +871,10 @@ class App:
         webbrowser.open("https://docs.google.com/spreadsheets/d/" + self.config["spreadsheet_id"] + "/edit")
 
     def start_watch(self):
+        self.watching.set(True)
+        self.commands.put(('watch',True))
         if not getattr(self,'maintenance_queued',False):
             self.maintenance_queued=True;self.commands.put(('maintenance',None))
-        watch = True
-        resume = self.data / "watch-resume.json"
-        if resume.exists():
-            try:
-                watch = bool(json.loads(resume.read_text(encoding="utf-8")).get("watch", True))
-            except (OSError, ValueError):
-                pass
-        self.watching.set(watch)
-        self.toggle_watch()
 
     def startup(self):
         if self.config.get("auto_update", True):

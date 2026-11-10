@@ -21,6 +21,22 @@ def can_extract(path):
     return Path(path).suffix.lower() in TEXT_DOCUMENTS
 
 
+def document_kind(path):
+    path=Path(path);suffix=path.suffix.lower()
+    if suffix not in TEXT_DOCUMENTS:return suffix
+    from fs_paths import io_path
+    with io_path(path).open('rb') as stream:header=stream.read(1024)
+    if b'%PDF-' in header:return '.pdf'
+    if header.startswith(bytes.fromhex('d0cf11e0a1b11ae1')):return '.hwp'
+    return suffix
+
+
+def title_priority(file):
+    try:kind=document_kind(file['path'])
+    except OSError:kind=Path(file['path']).suffix.lower()
+    return {'.pdf':0,'.hwp':1,'.hwpx':1}.get(kind,2)
+
+
 def storage_files(job):
     result=[];seen=set()
     for file in [*job.get('files',[]),*job.get('archive_files',[])]:

@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='수신 없이 새 발신 작성'
-RELEASE_BODY='발신 작성 화면에 새 발신 작성 버튼을 추가합니다. 수신 문서나 첨부파일 없이 양식을 선택하고 제목·수신 기관을 입력해 발신·직인날인대장만 등록한 뒤 한글을 열 수 있습니다. 수신대장은 등록하지 않고 수신번호도 만들지 않습니다. 새 발신 초안의 저장·목록 표시·재개·초기화·목록 삭제를 지원하며 발신번호는 실제 대장에서 받습니다. 242개 검사와 실제 Windows EXE의 신규 발신 화면·등록 흐름, 자동 업데이트·재실행과 설정 보존을 검증합니다. GitHub 다운로드 오류 우회와 긴 한글 경로 수정도 유지합니다.'
+RELEASE_TITLE='다운로드 자동 확인 기본 켜기·삭제 후 새 접수·메일 ZIP 제목 확인'
+RELEASE_BODY='다운로드 자동 확인을 기본으로 켜며 시작 작업과의 충돌로 체크가 꺼지는 문제를 수정합니다. 목록에서 삭제한 파일을 다시 다운로드하거나 추가하면 새 처리 식별자로 처음부터 검토하며 이전 파일·구글시트 행·처리 기록은 보존합니다. 새 접수는 이전 번호와 발신 진행을 이어받지 않습니다. 메일 첨부를 함께 받은 ZIP은 내부 PDF를 우선 선택해 OCR·미리보기를 표시하고, 읽기 실패한 첨부가 있어도 다른 파일 선택이나 제목 입력을 계속할 수 있습니다. 251개 검사와 실제 Windows EXE의 메일 ZIP·재다운로드·신규 발신·업데이트·재실행을 검증합니다.'
 _release_id = None
 
 
@@ -85,7 +85,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage"],check=True,timeout=90)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_browser_tabs","test_template_library","test_outgoing_folders","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage"],check=True,timeout=90)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:

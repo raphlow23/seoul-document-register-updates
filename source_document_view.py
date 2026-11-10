@@ -7,16 +7,19 @@ from tkinter import ttk
 
 def load(path,page=0):
     path=Path(path)
-    if path.suffix.lower()=='.pdf':
+    from attachment_files import document_kind
+    kind=document_kind(path)
+    if kind=='.pdf':
         from title_tools import pdf_preview
         return pdf_preview(path,page)
     raw=None
-    if path.suffix.lower()=='.hwp':
+    if kind=='.hwp':
         import olefile
         with olefile.OleFileIO(path) as ole:
             if ole.exists('PrvImage'):raw=ole.openstream('PrvImage').read(8*1024*1024+1)
-    elif path.suffix.lower()=='.hwpx':
+    elif kind=='.hwpx':
         import zipfile
+        if not zipfile.is_zipfile(path):return None,1
         with zipfile.ZipFile(path) as archive:
             name=next((n for n in archive.namelist() if n.lower() in ('preview/prvimage.png','preview/prvimage.jpg','preview/prvimage.jpeg')),None)
             if name and archive.getinfo(name).file_size<=8*1024*1024:

@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 def resume_downloads(saved,inventory):
+    if saved.get('watch') is False:return inventory.copy()
     seen={p:tuple(v) for p,v in saved.get('seen',{}).items()}
     # v2.7.0 removed old ZIPs from the resume baseline. Do not replay that backlog
     # when upgrading to the new-files-only policy.

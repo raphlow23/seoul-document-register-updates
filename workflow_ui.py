@@ -42,7 +42,7 @@ class WorkflowShell:
             button=ttk.Button(nav,text=label,command=fn);button.pack(side="left",padx=(0,8));self.nav[key]=button
         self.back_button=ttk.Button(nav,text="← 이전 단계 (파일 취소)",command=self.back);self.back_button.pack(side="left",padx=4)
         ttk.Button(nav,text="선택 내용 다시 확인",command=self.reconfigure).pack(side="left",padx=4)
-        app.watching=tk.BooleanVar(value=False)
+        app.watching=tk.BooleanVar(value=True)
         ttk.Checkbutton(nav,text="다운로드 자동 확인",variable=app.watching,command=app.toggle_watch).pack(side="right")
         self.steps=tk.StringVar();ttk.Label(outer,textvariable=self.steps,foreground="#1c5295",font=("맑은 고딕",11,"bold"),style='App.TLabel').pack(anchor="w",pady=(0,8))
         self.content=ttk.Frame(outer,style='Card.TFrame',padding=16)

@@ -100,17 +100,17 @@ def unpack(path,cache,progress=None):
             except OSError:pass  # Preserve the original extraction error if a scanner holds a file.
 
 
-def ingest_zip(path,store,hash_,progress=None):
+def ingest_zip(path,store,hash_,progress=None,persist=True):
     from core import digest,inspect_document,attachment_aliases
     cache=Path(store.db.execute("PRAGMA database_list").fetchone()[2]).parent/"archive-cache"
     paths=unpack(path,cache,progress)
-    from attachment_files import ZIP_DOCUMENTS
+    from attachment_files import ZIP_DOCUMENTS,title_priority
     documents=[p for p in paths if p.suffix.lower() in ZIP_DOCUMENTS]
     if not documents:
         discard_extraction(paths,cache)
         raise NoDocuments('ZIP 안에 문서·도면·오피스 첨부파일이 없어 목록에서 제외합니다.')
     files=[]
-    for p in sorted(documents,key=lambda p:(p.suffix.lower() not in DOCUMENTS,str(p))):
+    for p in sorted(documents,key=lambda p:(title_priority({'path':str(p)}),str(p))):
         value={"path":str(p),"hash":digest(p)}
         if value["hash"] not in {f["hash"] for f in files}:files.append(value)
     primary=next((f for f in files if Path(f["path"]).suffix.lower() in DOCUMENTS),files[0])
@@ -121,6 +121,7 @@ def ingest_zip(path,store,hash_,progress=None):
                text_file_hash=primary["hash"],state="확인 필요",ready=False,
                reason=f"ZIP 첨부 {len(files)}개 · 제목 출처 파일과 저장 위치를 선택해 주세요.")
     job.pop("parent",None)
-    store.put(job)
-    store.put_many(attachment_aliases(job,store,'묶음에 포함'))
+    if persist:
+        store.put(job)
+        store.put_many(attachment_aliases(job,store,'묶음에 포함'))
     return job,True

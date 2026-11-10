@@ -24,8 +24,9 @@ class QueueVisibilityTests(unittest.TestCase):
         try:saved=reopened.get(job['hash'])
         finally:reopened.db.close()
         self.assertTrue(saved.pop('history_hidden'));self.assertEqual(saved,before)
-        found,new=ingest(self.path,store);self.assertFalse(new);self.assertEqual(found['number'],'581');self.assertTrue(found['history_hidden'])
-        self.assertEqual(self.path.read_bytes(),b'original file');self.assertEqual(len(store.all()),1)
+        found,new=ingest(self.path,store);self.assertTrue(new);self.assertEqual(found['number'],'');self.assertNotIn('history_hidden',found)
+        archived=store.get(found['reimported_from']);self.assertEqual(archived['number'],'581');self.assertTrue(archived['history_hidden'])
+        self.assertEqual(archived['outgoing'],before['outgoing']);self.assertEqual(self.path.read_bytes(),b'original file');self.assertEqual(len(store.all()),2)
 
     def test_history_removal_does_not_remove_the_outgoing_source_list(self):
         from workflow_ui import WorkflowShell
@@ -107,7 +108,7 @@ class QueueVisibilityTests(unittest.TestCase):
         self.assertEqual(events.get_nowait()[0],"job")
         self.assertEqual(store.get(self.job["hash"]),self.job)
 
-    def test_file_add_restores_hidden_moved_item_without_new_registration(self):
+    def test_file_add_starts_hidden_moved_item_from_first_step(self):
         store=Store(self.root/"history.sqlite");self.addCleanup(store.db.close)
         with patch("core.extract",return_value=("제목 시험 공문",{})):
             job,_=ingest(self.path,store)
@@ -118,6 +119,8 @@ class QueueVisibilityTests(unittest.TestCase):
         worker.add(str(moved))
         restored=store.get(job["hash"])
         self.assertFalse(restored.get("list_hidden"))
-        self.assertEqual(restored["state"],"완료");self.assertEqual(restored["number"],"123")
+        self.assertEqual(restored["state"],"확인 필요");self.assertEqual(restored["number"],"")
+        self.assertNotIn('receipt_done',restored);self.assertNotEqual(restored['id'],job['id'])
+        self.assertEqual(store.get(restored['reimported_from'])['number'],'123')
         self.assertEqual(restored["files"][0]["path"],str(moved))
-        self.assertEqual(len(store.all()),1);self.assertTrue(moved.exists())
+        self.assertEqual(len(store.all()),2);self.assertTrue(moved.exists())
