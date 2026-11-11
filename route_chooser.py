@@ -53,6 +53,32 @@ class RouteChooser:
         self.receipt_box=receipt
         receipt.pack(side="left",padx=8)
         if job.get("sheet_attempted") or job.get("receipt_done"):receipt.configure(state="disabled")
+        from ledger_layout import default_values
+        previous=[default_values(app.config,'receipt',self.receipt_type.get())]
+        def family_defaults(_=None):
+            if job.get('sheet_attempted') or job.get('receipt_done'):return
+            values=default_values(app.config,'receipt',self.receipt_type.get())
+            for key,value in values.items():
+                if job.get(key,'Email' if key=='method' else '')==previous[0].get(key):job[key]=value
+            previous[0]=values
+        receipt.bind('<<ComboboxSelected>>',family_defaults)
+        def receipt_info():
+            win=tk.Toplevel(app.root);win.title('이 공문의 수신 등록 정보');win.transient(app.root);win.grab_set()
+            body=ttk.Frame(win,padding=18);body.pack(fill='both',expand=True)
+            fields={key:tk.StringVar(value=job.get(key,'Email' if key=='method' else '')) for key in ('issuer','recipient','method')}
+            fixed=job.get('sheet_attempted') or job.get('receipt_done')
+            for row,(key,label) in enumerate((('issuer','발신처'),('recipient','담당자 · 수신자'),('method','수신 방법'))):
+                ttk.Label(body,text=label).grid(row=row,column=0,sticky='w',pady=8)
+                ttk.Entry(body,textvariable=fields[key],width=32,state='readonly' if fixed else 'normal').grid(row=row,column=1,padx=12,pady=8)
+            def load():
+                for key,value in default_values(app.config,'receipt',self.receipt_type.get()).items():fields[key].set(value)
+            def save():
+                if not fixed:job.update({k:v.get().strip() for k,v in fields.items()})
+                win.destroy()
+                if not self.embedded:self.win.grab_set()
+            ttk.Button(body,text='이 대장 기본값 불러오기',command=load,state='disabled' if fixed else 'normal').grid(row=3,column=0,pady=12)
+            ttk.Button(body,text='닫기' if fixed else '적용',command=save).grid(row=3,column=1,sticky='e',pady=12)
+        info_button=ttk.Button(registration,text='수신 정보 수정',command=receipt_info);info_button.pack(side='left',padx=4)
         from outgoing import defaults
         self.outgoing=defaults(job,app.config)
         self.outgoing_enabled=tk.BooleanVar(value=self.outgoing["enabled"])
@@ -62,6 +88,7 @@ class RouteChooser:
         ttk.Button(registration,text="발신 정보·공문 작성",command=lambda:self.edit_outgoing(True)).pack(side="left")
         if self.embedded:
             for widget in registration.winfo_children()[2:]:widget.pack_forget()
+            info_button.pack(side='left',padx=4)
             # Guided receipts commit only the receipt. Outgoing is reviewed in its own step.
             if not self.outgoing.get("sheet_attempted"):
                 self.outgoing["enabled"]=False
@@ -410,7 +437,7 @@ class RouteChooser:
             return messagebox.showerror("폴더 이름 확인",str(error),parent=self.win)
         self.app.busy = True
         self.app.commands.put(("route_apply",{"hash":self.job["hash"],"routing":{"agency":self.agency.get(),"targets":targets,"folder_title":"","children":[],"relief":self.relief_values(),'relief_category':self.agency.get()=='완화공문'},
-                                             "fields":{**{k:self.job.get(k,"") for k in ("date","recipient","issuer")},"title":self.registration_title(),"receipt_type":self.receipt_type.get()},
+                                             "fields":{**{k:self.job.get(k,"Email" if k=='method' else "") for k in ("date","recipient","issuer","method")},"title":self.registration_title(),"receipt_type":self.receipt_type.get()},
                                              "outgoing":self.outgoing,"execute":execute}))
         self.close()
 

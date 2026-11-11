@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='대장별 연결 설정에 현재 적용값 표시'
-RELEASE_BODY='수신·발신·직인대장별 연결 설정을 열면 공문·업무연락·처리지침 각 대장에 현재 적용 중인 스프레드시트 주소와 하단 탭 이름을 채워 보여줍니다. 주소는 전체 Google Sheets URL로 표시해 보고 바로 수정할 수 있습니다. 값을 바꾸지 않고 저장하면 기존 기본값 상속 관계를 유지하며, 수정한 항목만 개별 연결로 저장합니다. 개별 주소를 비우고 읽기 확인할 때도 실제 기본 연결로 검사합니다. 기존 등록 문서는 당시 연결을 유지합니다. v2.10.5의 HWP 문서 제목과 저장 파일명 분리 기능을 포함합니다. 322개 검사와 Windows 화면 흐름·업데이트·재실행을 검증합니다. 업무 시트의 값이나 서식은 테스트에서 변경하지 않습니다.'
+RELEASE_TITLE='대장별 열 연결과 기본 입력값 설정'
+RELEASE_BODY='설정의 수발신·직인대장별 연결에서 각 대장의 열 위치(A~AZ), 머리글 범위, 첫 데이터 행, 날짜 표시 형식을 지정할 수 있습니다. 공문·업무연락·처리지침의 수신·발신·직인대장을 각각 설정하고 문서별로 열 연결을 바꿀 수 있습니다. 수신 발신처·담당자·방법, 발신 수신처·담당자·방법, 직인 신청부서·신청자·날인자를 기본값으로 저장합니다. 새 공문에 먼저 채운 뒤 직접 수정할 수 있으며 기존 작성 내용과 등록을 시작한 문서는 유지합니다. 취소와 재시도는 등록 당시 열 연결을 사용하며 연결하지 않은 열에는 입력하거나 서식을 복사하지 않습니다. 332개 검사 및 Windows 화면 흐름·전용 시험 브라우저의 열 재배치 등록·업데이트 재실행을 검증합니다. 업무용 시트와 공유폴더에는 테스트 데이터를 쓰지 않습니다.'
 _release_id = None
 
 
@@ -85,7 +85,7 @@ def build():
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_outgoing_options","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage","test_sheet_connections","test_hwp_requests","test_registration_cancel","test_hwp_export_check"],check=True,timeout=180)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_outgoing_options","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage","test_sheet_connections","test_ledger_layout","test_hwp_requests","test_registration_cancel","test_hwp_export_check"],check=True,timeout=180)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:

@@ -47,6 +47,36 @@ class SettingsLayoutTests(unittest.TestCase):
         self.assertEqual(self.app.send.call_args.args[1]['target'],{'spreadsheet_id':'fixture-main','tab':'별도 수신탭'})
         self.assertEqual(self.app.config,original)
 
+    def test_input_editor_saves_visible_defaults_and_layout_for_one_role(self):
+        from sheet_connection_ui import open_defaults
+        self.app.config={'spreadsheet_id':'fixture-main','recipient':'기본 담당자'}
+        win=open_defaults(self.app)
+        next(b for b in self.controls(win) if b.cget('text')=='열 · 기본 입력값').invoke()
+        editor=next(w for w in win.winfo_children() if isinstance(w,tk.Toplevel))
+        self.assertEqual(editor.default_fields['recipient'].get(),'기본 담당자')
+        self.assertEqual(editor.layout_fields['title'].get(),'F')
+        editor.layout_fields['recipient'].set('J');editor.default_fields['recipient'].set('수신 담당자')
+        editor.header_range.set('A3:J4');editor.data_start.set('5')
+        next(b for b in self.controls(editor) if b.cget('text')=='이 설정 적용').invoke()
+        self.assertNotIn('ledger_connections',self.app.config)
+        next(b for b in self.controls(win) if b.cget('text')=='기본 연결 저장').invoke()
+        entries=self.app.config['ledger_connections'];self.assertEqual(set(entries),{'receipt:공문'})
+        self.assertEqual(entries['receipt:공문']['defaults'],{'recipient':'수신 담당자'})
+        self.assertEqual(entries['receipt:공문']['layout']['columns']['recipient'],'J')
+        self.assertEqual(entries['receipt:공문']['layout']['data_start'],5)
+
+    def test_input_editor_footer_stays_visible_and_values_not_frozen(self):
+        from ledger_layout_ui import open_editor
+        self.app.config={'recipient':'기본 담당자'};saved=[]
+        win=open_editor(self.app,self.root,'stamp','공문',None,{},lambda *args:saved.append(args))
+        win.geometry('740x460');self.root.update()
+        self.assertEqual(win.default_fields['department'].get(),'편의증진부')
+        self.assertEqual(win.default_fields['person'].get(),'')
+        for button in win.winfo_children()[0].winfo_children():
+            self.assertLessEqual(button.winfo_rooty()+button.winfo_height(),win.winfo_rooty()+win.winfo_height())
+        next(b for b in self.controls(win) if b.cget('text')=='이 설정 적용').invoke()
+        self.assertEqual(saved[0][1],{})
+
     def setUp(self):
         self.root=tk.Tk();apply_theme(self.root);self.root.geometry('1000x700');self.addCleanup(self.close)
         self.app=SimpleNamespace(root=self.root,config={},update_status=tk.StringVar(),status=tk.StringVar(),commands=queue.Queue(),workflow=SimpleNamespace(available=lambda:True),persist_config=lambda:None)

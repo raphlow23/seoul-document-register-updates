@@ -417,6 +417,32 @@ class WorkflowShell:
             if not var.get():var.set("공문" if key=="receipt_type" else self.app.config.get("recipient","") if key=="recipient" else date.today().isoformat() if key=="date" else "")
             widget=ttk.Combobox(meta,textvariable=var,values=options,state="readonly",width=16) if options else ttk.Entry(meta,textvariable=var,width=12)
             widget.pack(side="left",fill="x",expand=key=="category")
+        from ledger_layout import default_values
+        for field in ('issuer','method'):
+            if field not in self.app.fields:self.app.fields[field]=tk.StringVar()
+            if not self.app.fields[field].get():self.app.fields[field].set(jobs[0].get(field,'Email' if field=='method' else ''))
+        family_var=self.app.fields['receipt_type'];previous=[default_values(self.app.config,'receipt',jobs[0].get('receipt_type','공문'))]
+        def fill_defaults(force=False):
+            values=default_values(self.app.config,'receipt',family_var.get() or '공문')
+            for key,value in values.items():
+                var=self.app.fields[key]
+                if force or var.get()==previous[0].get(key):var.set(value)
+            previous[0]=values
+        def edit_receipt():
+            win=tk.Toplevel(self.app.root);win.title('수신 등록 정보');win.transient(self.app.root);win.grab_set()
+            body=ttk.Frame(win,padding=18);body.pack(fill='both',expand=True)
+            for row,(key,label) in enumerate((('issuer','발신처'),('recipient','담당자 · 수신자'),('method','수신 방법'))):
+                ttk.Label(body,text=label).grid(row=row,column=0,sticky='w',pady=8)
+                ttk.Entry(body,textvariable=self.app.fields[key],width=32).grid(row=row,column=1,padx=12,pady=8)
+            ttk.Button(body,text='이 대장 기본값 불러오기',command=lambda:fill_defaults(True)).grid(row=3,column=0,pady=12)
+            ttk.Button(body,text='적용',command=win.destroy).grid(row=3,column=1,sticky='e',pady=12)
+        ttk.Button(meta,text='수신 정보 수정',command=edit_receipt).pack(side='left',padx=8)
+        # Keep only this page's family trace; returning to the page must not accumulate callbacks.
+        trace=getattr(self,'receipt_defaults_trace',None)
+        if trace:
+            try:family_var.trace_remove('write',trace)
+            except tk.TclError:pass
+        self.receipt_defaults_trace=family_var.trace_add('write',lambda *_:fill_defaults())
         from title_chooser import TitleChooser
         self.app.title_dialog=TitleChooser(self.app,jobs,parent=page)
         draft=self.receipt_drafts.get(self.current)
@@ -720,6 +746,7 @@ class SimpleOutgoing(OutgoingEditor):
         from sheet_connection_ui import open_document
         for scope,label in (('outgoing','이 문서의 발신대장 연결'),('stamp','이 문서의 직인대장 연결')):
             ttk.Button(links,text=label,command=lambda s=scope:open_document(self.app,self.job['hash'],s,FAMILY_LABELS[self.family.get()])).pack(side='left',padx=(0,8))
+        ttk.Button(links,text='기본 수신처 · 담당자 불러오기',command=lambda:self.ledger_defaults(True),state='disabled' if self.out.get('sheet_attempted') else 'normal').pack(side='left',padx=(0,8))
         title_actions=ttk.Frame(panel);title_actions.pack(fill='x',pady=4)
         ttk.Button(title_actions,text='현재 제목을 이 양식 기본 제목으로 저장',command=self.save_default_title).pack(side='left')
         load_title=ttk.Button(title_actions,text='기본 제목 불러오기',command=self.load_default_title);load_title.pack(side='left',padx=8);self.controls.append(load_title)

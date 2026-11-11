@@ -137,11 +137,13 @@ class OutgoingEditor:
         method.grid(row=5,column=1,sticky="ew",padx=10)
         self.controls.append(method)
         def family_changed(_=None):
+            self.ledger_defaults()
             values=METHODS if FAMILY_LABELS[self.family.get()]=="공문" else tuple(x for x in METHODS if x!="문서24")
             method.configure(values=values)
             if self.vars["method"].get() not in values:self.vars["method"].set("Email")
         family.bind("<<ComboboxSelected>>",family_changed)
-        family_changed()
+        # Initial values already include the selected family defaults.
+
         ttk.Label(info,text="발신번호: "+self.out.get("document_number","등록 후 자동 결정")).grid(row=6,column=0,columnspan=4,sticky="w",pady=8)
         stamp_box=ttk.LabelFrame(info,text="직인날인대장에 함께 적을 내용",padding=12)
         stamp_box.grid(row=7,column=0,columnspan=4,sticky="ew",pady=12)
@@ -276,6 +278,16 @@ class OutgoingEditor:
         path=filedialog.askopenfilename(parent=self.win,filetypes=[("한글 양식","*.hwpx *.hwp"),("모든 파일","*.*")])
         if path:self.vars["template_path"].set(path)
 
+    def ledger_defaults(self,force=False):
+        if self.out.get('sheet_attempted'):return
+        from ledger_layout import apply_outgoing
+        draft={**self.out,**{k:v.get() for k,v in self.vars.items()},'ledger_type':FAMILY_LABELS[self.family.get()],
+               'stamp':{**self.out.get('stamp',{}),**{k:v.get() for k,v in self.stamp.items()}}}
+        apply_outgoing(draft,self.app.config,force=force)
+        for key in ('receiver','sender','method'):self.vars[key].set(draft[key])
+        for key in ('department','applicant','person'):self.stamp[key].set(draft['stamp'][key])
+        for key in ('defaults_family','defaults_snapshot'):self.out[key]=draft[key]
+
     def choose_style(self,_=None):
         item=next(x for x in self.styles if x["label"]==self.style_label.get())
         if self.out.get("sheet_attempted") and item["family"]!=self.out["ledger_type"]:
@@ -289,7 +301,10 @@ class OutgoingEditor:
         self.vars["filename_suffix"].set(item["suffix"])
         if not self.out.get("sheet_attempted"):
             self.family.set(next(k for k,v in FAMILY_LABELS.items() if v==item["family"]))
-        if not self.vars["receiver"].get() or (_ is not None and self.vars["receiver"].get() in [x.get("default_receiver",x["receiver"]) for x in self.styles]):
+            self.ledger_defaults()
+        from ledger_layout import default_values
+        configured_receiver=default_values(self.app.config,"outgoing",item["family"])["receiver"]
+        if not self.vars["receiver"].get() or (not configured_receiver and _ is not None and self.vars["receiver"].get() in [x.get("default_receiver",x["receiver"]) for x in self.styles]):
             self.vars["receiver"].set(item.get("default_receiver",item["receiver"]))
         if item["family"]!="공문" and self.vars["method"].get()=="문서24":self.vars["method"].set("Email")
         cached=self.bodies_by_style.get(item["id"])

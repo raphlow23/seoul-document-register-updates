@@ -27,7 +27,7 @@ class Journal:
     def archive(self,path,entry):
         if not self.valid(entry) or not entry['complete']:raise ValueError('완료된 등록 확인 기록이 아닙니다.')
         compact={k:entry[k] for k in ('sid','tab','row','after','markers','complete')}
-        for field in ('before','cancelled'):
+        for field in ('before','cancelled','layout'):
             if field in entry:compact[field]=entry[field]
         key=hashlib.sha256((str(entry['sid'])+str(entry['tab'])+str(entry['markers'][0])).encode()).hexdigest()
         with self._db() as db:

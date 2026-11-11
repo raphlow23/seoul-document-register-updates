@@ -471,7 +471,9 @@ class Worker(threading.Thread):
             job.pop("list_hidden",None)
             self.store.put(job)
         if new:
-            job["recipient"] = self.config.get("recipient", "")
+            from ledger_layout import default_values
+            values=default_values(self.config,"receipt",job.get("receipt_type","공문"))
+            job.update({k:v for k,v in values.items() if v or k!="issuer"})
             self.store.put(job)
             if job.get('reimported_from'):
                 archived=self.store.get(job['reimported_from'])

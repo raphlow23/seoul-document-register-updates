@@ -11,7 +11,7 @@ def open_defaults(app,parent=None):
     ttk.Label(win,text='각 대장에 현재 적용 중인 스프레드시트 주소와 하단 탭 이름을 표시합니다. 표시된 값을 바로 수정해 저장하세요.\n주소나 탭을 비우면 해당 대장의 기본 설정을 사용합니다. 기존 등록 건은 당시 연결을 유지하며 새로 등록할 문서부터 변경한 기본 연결을 사용합니다.',wraplength=880,padding=14).pack(fill='x')
     from modern_ui import ScrollablePanel
     panel=ScrollablePanel(win);panel.pack(fill='both',expand=True);body=panel.body;body.columnconfigure(1,weight=1)
-    fields={};original={};initial={};win.connection_fields=fields
+    fields={};original={};initial={};extras={};win.connection_fields=fields;win.input_settings=extras
     def draft_entries():
         result={}
         for key,values in fields.items():
@@ -20,11 +20,12 @@ def open_defaults(app,parent=None):
                 text=var.get().strip()
                 if text==initial[key][name]:text=str(original[key].get(name,'')).strip()
                 if text:item[name]=text
+            item.update(extras[key])
             if item:result[key]=item
         return result
     for index,(scope,family) in enumerate((s,f) for f in FAMILIES for s in SCOPES):
         key=scope+':'+family;old=app.config.get('ledger_connections',{}).get(key,{})
-        original[key]=old.copy();target=default_connection(app.config,scope,family)
+        original[key]=old.copy();extras[key]={k:old[k] for k in ('layout','defaults') if k in old};target=default_connection(app.config,scope,family)
         address=target['spreadsheet_id']
         if address:
             try:address='https://docs.google.com/spreadsheets/d/'+spreadsheet_id(address)+'/edit'
@@ -41,6 +42,13 @@ def open_defaults(app,parent=None):
             except ValueError as error:return messagebox.showerror('연결 확인',str(error),parent=win)
             if app.send('test_sheet_target',{'scope':scope,'family':family,'target':target}):close()
         ttk.Button(body,text='읽기 확인',command=test).grid(row=index*2,column=2,padx=8)
+        def edit(scope=scope,family=family,key=key):
+            from ledger_layout_ui import open_editor
+            def apply(layout,defaults):
+                extras[key]={'layout':layout,**({'defaults':defaults} if defaults else {})}
+            open_editor(app,win,scope,family,extras[key].get('layout'),extras[key].get('defaults'),apply)
+        ttk.Button(body,text='열 · 기본 입력값',command=edit).grid(row=index*2+1,column=2,padx=8)
+
     def close():
         win.destroy()
         if isinstance(parent,tk.Toplevel) and parent.winfo_exists():parent.grab_set()
@@ -63,9 +71,9 @@ def open_defaults(app,parent=None):
 def open_document(app,key,scope,family,parent=None):
     parent=parent or app.root;job=app.jobs[key];target=chosen(app.config,job,scope,family)
     win=tk.Toplevel(parent);win.title('이 문서의 '+SCOPES[scope]+' 연결');win.transient(parent);win.grab_set()
-    win.geometry('820x300');box=ttk.Frame(win,padding=18);box.pack(fill='both',expand=True);box.columnconfigure(1,weight=1)
+    win.geometry('820x370');box=ttk.Frame(win,padding=18);box.pack(fill='both',expand=True);box.columnconfigure(1,weight=1)
     values={k:tk.StringVar(value=target.get(k,'')) for k in ('spreadsheet_id','tab')};win.connection_fields=values
-    fixed=locked(job,scope)
+    layout=target.get('layout');fixed=locked(job,scope)
     for row,(field,label) in enumerate((('spreadsheet_id','스프레드시트 주소 또는 ID'),('tab','하단 탭 이름'))):
         ttk.Label(box,text=label).grid(row=row,column=0,sticky='w',pady=10)
         ttk.Entry(box,textvariable=values[field],state='readonly' if fixed else 'normal').grid(row=row,column=1,sticky='ew',padx=12)
@@ -73,13 +81,20 @@ def open_document(app,key,scope,family,parent=None):
     actions=ttk.Frame(box);actions.grid(row=3,column=0,columnspan=2,sticky='ew',pady=12)
     def close():win.destroy()
     def save(reset=False):
-        try:target=None if reset else normalized({k:v.get() for k,v in values.items()})
+        try:target=None if reset else normalized({**{k:v.get() for k,v in values.items()},**({'layout':layout} if layout else {})})
         except ValueError as error:return messagebox.showerror('연결 설정',str(error),parent=win)
         if app.send('sheet_override',{'hash':key,'scope':scope,'target':target}):close()
     def test():
-        try:target=normalized({k:v.get() for k,v in values.items()})
+        try:target=normalized({**{k:v.get() for k,v in values.items()},**({'layout':layout} if layout else {})})
         except ValueError as error:return messagebox.showerror('연결 확인',str(error),parent=win)
         if app.send('test_sheet_target',{'scope':scope,'family':family,'target':target}):close()
+    def edit():
+        from ledger_layout_ui import open_editor
+        def apply(result,_):
+            nonlocal layout
+            layout=result
+        open_editor(app,win,scope,family,layout,{},apply,readonly=fixed,show_defaults=False)
+    ttk.Button(box,text='이 문서의 열 설정 확인 · 변경',command=edit).grid(row=4,column=0,columnspan=2,sticky='w',pady=6)
     ttk.Button(actions,text='닫기',command=close).pack(side='left')
     ttk.Button(actions,text='읽기 확인',command=test).pack(side='left',padx=8)
     ttk.Button(actions,text='기본 연결 사용',command=lambda:save(True),state='disabled' if fixed else 'normal').pack(side='right')

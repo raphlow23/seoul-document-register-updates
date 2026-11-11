@@ -20,11 +20,17 @@ def require_registered_number(out):
 
 
 def defaults(job,config):
+    from ledger_layout import default_values
+    family=job.get("outgoing",{}).get("ledger_type","공문")
+    initial=default_values(config,"outgoing",family);seal=default_values(config,"stamp",family)
+    if not initial["sender"] and "sender" not in config.get("ledger_connections",{}).get("outgoing:"+family,{}).get("defaults",{}):initial["sender"]=config.get("recipient",job.get("recipient",""))
     out={"enabled":False,"id":uuid.uuid4().hex,"title":job.get("title",""),"title_same":True,"ledger_type":"공문",
             "date":date.today().isoformat(),"receiver":"","sender":config.get("recipient",job.get("recipient","")),
             "kind":"발송문서","method":"Email","body":"","attachments":"","reference":"","summary":"",
-            "purpose":"전달·안내","template_path":config.get("document_template",""),**job.get("outgoing",{})}
-    out["stamp"]={"department":"편의증진부","applicant":out["sender"],"person":"","date":out["date"],**out.get("stamp",{})}
+            "purpose":"전달·안내","template_path":config.get("document_template",""),**initial,**job.get("outgoing",{})}
+    out["stamp"]={**seal,"applicant":seal["applicant"] or out["sender"],"date":out["date"],**out.get("stamp",{})}
+    out.setdefault("defaults_family",family)
+    out.setdefault("defaults_snapshot",{**initial,"stamp":{**seal,"applicant":seal["applicant"] or initial["sender"]}})
     out['file_number']=str(out.get('number','')) if out.get('complete') else ''
     if job.get('standalone_outgoing'):out['title_same']=False
     if out.get("title_same",True) and not out.get("sheet_attempted"):out["title"]=job.get("title",out["title"])

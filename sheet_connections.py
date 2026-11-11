@@ -35,12 +35,18 @@ def legacy_tab(config,scope,family):
 def normalized(target):
     tab=str(target.get('tab','')).strip()
     if not tab or any(c in tab for c in '\t\r\n'):raise ValueError('연결할 하단 시트 탭 이름을 입력하세요.')
-    return {'spreadsheet_id':spreadsheet_id(target.get('spreadsheet_id','')),'tab':tab}
+    result={'spreadsheet_id':spreadsheet_id(target.get('spreadsheet_id','')),'tab':tab}
+    if target.get('layout'):result['layout']=target['layout'].copy()
+    return result
 
 
 def default_connection(config,scope,family):
     entry=config.get('ledger_connections',{}).get(scope+':'+family,{})
-    return {'spreadsheet_id':entry.get('spreadsheet_id') or config.get('spreadsheet_id',''),'tab':entry.get('tab') or legacy_tab(config,scope,family)}
+    result={'spreadsheet_id':entry.get('spreadsheet_id') or config.get('spreadsheet_id',''),'tab':entry.get('tab') or legacy_tab(config,scope,family)}
+    if entry.get('layout'):
+        from ledger_layout import normalize
+        result['layout']=normalize(entry['layout'],scope,family)
+    return result
 
 
 def browser_config(config):

@@ -363,7 +363,7 @@ def registration_requests(sheet_id, row, job, previous, marker, candidate=None):
         {"userEnteredValue": {"numberValue": serial}},
         value(previous[2] if len(previous) > 2 else "서울센터2026-"),
         {"userEnteredValue": {"formulaValue": f"=D{row-1}+1"}},
-        value(job["issuer"]), value(job["title"]), value(job["recipient"]), value("Email"),
+        value(job["issuer"]), value(job["title"]), value(job["recipient"]), value(job.get("method","Email")),
     ]
     cells[5]["note"] = marker
     src = {"sheetId": sheet_id, "startRowIndex": row-2, "endRowIndex": row-1, "startColumnIndex": 0, "endColumnIndex": 8}
@@ -413,6 +413,8 @@ class Sheets:
         if len(matches)!=1:raise ValueError(f'{self.tab}의 수신대장 머리글을 확인하지 못했습니다. A열 연번·B열 일자·C:D열 문서/업무연락/처리지침 번호·E열 발신처·F열 제목을 확인하세요. 등록하지 않았습니다.')
         self.header_row=matches[0];self.notes_start=self.header_row+2
     def __init__(self, config):
+        from ledger_layout import install,APIMapper
+        layout=install(self,config)
         self.browser=None
         if config.get("auth_mode")=="browser":
             self.tab=config.get("tab",TAB)
@@ -439,6 +441,7 @@ class Sheets:
             raise ValueError("구글 시트 ID가 올바르지 않습니다.")
         self.base = f"https://sheets.googleapis.com/v4/spreadsheets/{sid}"
         self.tab = config.get("tab", TAB)
+        if layout:self.request=APIMapper(self,config,self.request)
 
     def request(self, method, suffix="", **kwargs):
         if getattr(self,"browser",None):return self.browser.request(method,suffix,**kwargs)
@@ -563,7 +566,7 @@ def apply_title_choice(data, store):
             if file["hash"] not in [f["hash"] for f in files]: files.append(file)
     if data["source"]["file_hash"] not in [f["hash"] for f in files]:
         raise ValueError("제목 출처가 선택한 첨부파일에 포함되지 않습니다.")
-    primary.update({k:v for k,v in data.get("fields", {}).items() if k in ("category", "date", "recipient", "issuer", "receipt_type")})
+    primary.update({k:v for k,v in data.get("fields", {}).items() if k in ("category", "date", "recipient", "issuer", "receipt_type", "method")})
     primary.update(title=data["title"].strip(), title_source=data["source"], files=files, ready=False,
                    state="확인 필요", reason=f"제목 선택 완료 · 첨부 {len(files)}개를 한 공문으로 등록")
     if any(job.get('reimport_id') for job in jobs):primary.setdefault('reimport_id',uuid.uuid4().hex)

@@ -242,6 +242,10 @@ class BrowserSession:
     def __init__(self,config,owner,ui=None):
         self.config,self.owner=config,owner
         self.ui=ui or BrowserUI(config).connect()
+        if config.get("layout"):
+            from ledger_layout import install,MappedUI,context
+            if not getattr(owner,"layout",None):install(owner,config)
+            self.ui=MappedUI(self.ui,owner.layout,*context(owner,config))
         from browser_journal import Journal
         self.records=Journal(config);self.journal=self.records.folder
         self.sid=config["spreadsheet_id"]
@@ -303,11 +307,12 @@ class BrowserSession:
             entry=json.loads(path.read_text(encoding="utf-8"))
             if entry["sid"]!=self.sid or entry["tab"]!=self.owner.tab or entry.get("complete"):continue
             if not set(markers).intersection(entry["markers"]):continue
+            if entry.get("layout")!=getattr(self.owner,"layout",None):raise ValueError("등록 당시 열 설정과 다릅니다. 당시 대장 연결을 유지해 다시 시도하세요.")
             self._check_entry(entry);entry["complete"]=True;self.save(path,entry);self.records.archive(path,entry)
 
     def snapshot(self):
         self.ui.tab(self.owner.tab)
-        found={};entries=[entry for entry in self.records.entries() if entry['sid']==self.sid and entry['tab']==self.owner.tab]
+        found={};entries=[entry for entry in self.records.entries() if entry['sid']==self.sid and entry['tab']==self.owner.tab and entry.get('layout')==getattr(self.owner,'layout',None)]
         rows=self.getrows(f"A:{self.owner.last_column}")
         if hasattr(self.owner,'validate_header'):
             try:self.owner.validate_header(rows)
@@ -315,16 +320,18 @@ class BrowserSession:
                 error=first_error
                 for _ in range(2):
                     self.ui.tab(self.owner.tab);time.sleep(.3)
-                    limit=min(50,max(5,getattr(self.ui,'_grid_row_count',len(rows))))
+                    limit=min(500 if getattr(self.owner,"layout",{}).get("header_range") else 50,max(5,getattr(self.ui,'_grid_row_count',len(rows))))
                     heads=self.getrows(f'A1:{self.owner.last_column}{limit}')
                     try:self.owner.validate_header(heads)
                     except ValueError as issue:error=issue;continue
                     from sheet_connections import header_text
-                    expected=(self.owner.header_row,tuple(map(header_text,heads[self.owner.header_row])))
+                    anchor=getattr(self.owner,'layout_header_row',self.owner.header_row)
+                    expected=(anchor,tuple(map(header_text,heads[anchor])))
                     rows=self.getrows(f'A:{self.owner.last_column}')
                     try:self.owner.validate_header(rows)
                     except ValueError as issue:error=issue;continue
-                    actual=(self.owner.header_row,tuple(map(header_text,rows[self.owner.header_row])))
+                    anchor=getattr(self.owner,'layout_header_row',self.owner.header_row)
+                    actual=(anchor,tuple(map(header_text,rows[anchor])))
                     if actual==expected:break
                     error=ValueError('작은 범위와 전체 범위에서 읽은 시트 머리글이 다릅니다. 등록하지 않았습니다.')
                 else:
@@ -383,6 +390,7 @@ class BrowserSession:
             if any(c in value for c in "\t\r\n"):raise ValueError("대장 입력 항목의 탭·줄바꿈을 공백으로 바꿔 주세요.")
             after[col]=value;writes[str(col)]=write
         entry={"sid":self.sid,"tab":self.owner.tab,"row":row,"before":before,"after":after,"writes":writes,"markers":markers,"complete":False}
+        if getattr(self.owner,"layout",None):entry["layout"]=self.owner.layout
         path=self.journal/(hashlib.sha256((self.sid+self.owner.tab+markers[0]).encode()).hexdigest()+".json")
         path.parent.mkdir(parents=True,exist_ok=True)
         self.save(path,entry)  # Durable intent BEFORE any sheet edit; partial writes recover conditionally.

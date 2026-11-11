@@ -21,7 +21,7 @@ def markers(job,scope):
 
 
 def owner(config,target):
-    config={**config,'spreadsheet_id':target['sid'],'tab':target['tab'],'_target_tab':target['tab'],'_outgoing_family':target['family']}
+    config={**config,'spreadsheet_id':target['sid'],'tab':target['tab'],'_target_tab':target['tab'],'_outgoing_family':target['family'],'layout':target.get('layout')}
     if config.get('auth_mode','browser')!='browser':raise ValueError('등록 취소는 브라우저 연결 방식에서 실행하세요.')
     if target['scope']=='receipt':
         from core import Sheets
