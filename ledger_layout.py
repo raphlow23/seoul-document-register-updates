@@ -169,6 +169,7 @@ class MappedUI:
         elif col==1 and re.fullmatch(r'\d{4}-\d{2}-\d{2}',value):
             dt=date.fromisoformat(value);fmt=self.layout['date_format']
             value=dt.strftime({'YYYY-MM-DD':'%Y-%m-%d','YYYY.MM.DD':'%Y.%m.%d','YYYY. MM. DD.':'%Y. %m. %d.'}[fmt])
+            if fmt!='YYYY-MM-DD':value="'"+value  # Keep the chosen separators despite the sheet's inherited date format.
         return self.raw.write(f'{column(self.cols[col])}{r}',value)
 
     def copy_format(self,source,target):

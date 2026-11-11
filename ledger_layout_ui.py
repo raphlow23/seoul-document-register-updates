@@ -20,7 +20,7 @@ def open_editor(app,parent,scope,family,layout,defaults,on_apply,readonly=False,
         ttk.Label(meta,text=label).grid(row=i,column=0,sticky='w',pady=6)
         ttk.Entry(meta,textvariable=var,width=width,state='readonly' if readonly else 'normal').grid(row=i,column=1,sticky='w',padx=12)
     ttk.Label(meta,text='둘 다 비우면 현재처럼 머리글을 자동으로 찾습니다.',wraplength=420).grid(row=2,column=0,columnspan=2,sticky='w',pady=6)
-    ttk.Label(meta,text='날짜 표시 형식').grid(row=3,column=0,sticky='w',pady=6)
+    ttk.Label(meta,text='날짜 입력 형식').grid(row=3,column=0,sticky='w',pady=6)
     ttk.Combobox(meta,textvariable=fmt,values=DATE_FORMATS,state='disabled' if readonly else 'readonly',width=22).grid(row=3,column=1,sticky='w',padx=12)
     fields={};values={};effective=default_values(app.config,scope,family);effective.update(defaults or {})
     original=deepcopy(defaults or {});initial={k:str(v) for k,v in effective.items()}
@@ -37,7 +37,7 @@ def open_editor(app,parent,scope,family,layout,defaults,on_apply,readonly=False,
             text={'date':'문서에서 선택한 날짜 (기본 오늘)','title':'문서에서 수정한 최종 제목','number':'시트에서 확인한 실제 번호','serial':'이전 연번 + 1','prefix':'이전 행의 번호 앞 문구 유지','document_number':'확정된 발신 문서번호','receiver':'발신 정보에서 입력한 수신처'}.get(key,'문서 작성 화면에서 수정' if key in effective else '선택한 공문 분류에만 ○ 표시')
             ttk.Label(body,text=text,wraplength=380).grid(row=row,column=2,sticky='w',padx=14,pady=6)
     row=3+len(fields)
-    ttk.Label(body,text='신청자 기본값을 비우면 해당 공문의 발송자를 사용합니다. 날인자는 공란으로 둘 수 있습니다.\n열 순서가 바뀐 뒤에는 설정을 저장하고 「읽기 확인」으로 머리글을 먼저 검사하세요.\n첫 데이터 행은 표의 시작 위치이며 새 등록은 마지막 사용 행 다음에 입력합니다.\n자동 등록을 시작한 문서는 당시 열 설정을 유지합니다.',wraplength=800).grid(row=row,column=0,columnspan=3,sticky='ew',padx=14,pady=14)
+    ttk.Label(body,text='신청자 기본값을 비우면 해당 공문의 발송자를 사용합니다. 날인자는 공란으로 둘 수 있습니다.\n열 순서가 바뀐 뒤에는 설정을 저장하고 「읽기 확인」으로 머리글을 먼저 검사하세요.\n기본 형식 외 날짜는 표시 형태를 유지하도록 브라우저에서 텍스트로 입력합니다.\n첫 데이터 행은 표의 시작 위치이며 새 등록은 마지막 사용 행 다음에 입력합니다.\n자동 등록을 시작한 문서는 당시 열 설정을 유지합니다.',wraplength=800).grid(row=row,column=0,columnspan=3,sticky='ew',padx=14,pady=14)
     win.layout_fields=fields;win.default_fields=values;win.header_range=header;win.data_start=start;win.date_format=fmt
     def close():
         win.destroy()

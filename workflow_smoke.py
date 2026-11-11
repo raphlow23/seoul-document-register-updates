@@ -323,6 +323,17 @@ def run():
                     app.send('add',[str(mail_zip)]);idle()
                     fresh=next(j for j in app.jobs.values() if j.get('reimported_from')==mail_key)
                     assert fresh['id']!=old_id and fresh['number']=='' and app.tree.exists(fresh['hash']) and not app.tree.exists(mail_key)
+                # The frozen binary must contain the new input editor and preserve staged settings.
+                from ledger_layout_ui import open_editor
+                staged=[]
+                input_win=open_editor(app,root,'receipt','공문',None,{},lambda *args:staged.append(args))
+                root.update()
+                input_win.layout_fields['recipient'].set('J')
+                input_win.default_fields['recipient'].set('시험 기본 담당')
+                input_win.header_range.set('A3:J4');input_win.data_start.set('5')
+                footer=input_win.winfo_children()[0]
+                next(b for b in footer.winfo_children() if b.cget('text')=='이 설정 적용').invoke()
+                assert staged[0][0]['columns']['recipient']=='J' and staged[0][1]['recipient']=='시험 기본 담당'
                 assert not errors,errors
         finally:
             app.commands.put(("quit",None));app.worker.join(timeout=5)

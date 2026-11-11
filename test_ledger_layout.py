@@ -80,6 +80,7 @@ class LayoutTests(unittest.TestCase):
                 before=deepcopy(grid.rows);row,number=owner.register(job,self.store)
                 self.assertEqual((row,number),(6+shift,'2' if scope=='stamp' else '21'))
                 self.assertEqual(grid.rows[row-1][physical[1]],'2026. 11. 11.')
+                self.assertIn((f'{column(physical[1])}{row}',"'2026. 11. 11."),grid.writes)
                 self.assertEqual(grid.rows[row-1][physical[owner.title_column]],'새 제목')
                 self.assertEqual(grid.rows[:row-1],before[:row-1])
                 for r in grid.rows:self.assertEqual(r[0],'연결하지 않은 열 유지')
