@@ -124,6 +124,7 @@ def cleanup_rollbacks(job,config,store):
     references=[Path(f['path']).resolve() for current in jobs for f in [*current.get('files',[]),*current.get('archive_files',[])] if f.get('path')]
     changed=False
     for tx in job.get('rollback_history',[]):
+        if tx.get('edited_files'):continue  # Saved user edits remain available after re-registration.
         waiting=job.get('files_rolled_back') if tx['scope']=='receipt' else job.get('outgoing',{}).get('files_rolled_back')
         if waiting:continue
         for move in tx['moves']:

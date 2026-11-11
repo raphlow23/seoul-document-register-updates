@@ -98,7 +98,15 @@ def inventory(path):
     return {'files':files,'dirs':sorted(dirs)}
 
 
-def plan(job,config,scope):
+def hwp_available(path):
+    from hwp_documents import _probe_native_file
+    try:_probe_native_file(io_path(path))
+    except OSError as error:
+        if getattr(error,'winerror',None) in (32,33):raise ValueError('HWP가 한글에서 열려 있습니다. Ctrl+S로 저장하고 한글 창을 닫은 뒤 이전 단계를 다시 눌러 주세요.') from error
+        raise
+
+
+def plan(job,config,scope,allow_edited_hwp=False):
     if scope not in ('receipt','outgoing'):raise ValueError('되돌릴 업무 종류가 올바르지 않습니다.')
     roots,dirs,markers=_roots(job,config,scope)
     scopes={'receipt','outgoing'} if scope=='receipt' else {'outgoing'}
@@ -120,12 +128,21 @@ def plan(job,config,scope):
                 file=checked(Path(base)/name)
                 if scope=='receipt' and name in sources and file not in markers:allowed.setdefault(file,sources[name])
     for marker in markers:allowed[marker]=digest(marker)
-    out=job.get('outgoing',{})
+    out=job.get('outgoing',{});edited_files=[]
     if out.get('hwp_path'):
         hwp=checked(out['hwp_path'])
         if hwp.exists():
             if not out.get('hwp_created_sha256'):raise ValueError('이전 버전에서 만든 HWP는 변경 여부를 확인할 수 없어 보호합니다: '+str(hwp))
-            allowed[hwp]=out['hwp_created_sha256']
+            created=out['hwp_created_sha256']
+            if not re.fullmatch('[0-9a-f]{64}',created) or (hwp in allowed and allowed[hwp]!=created):raise ValueError('HWP 생성 기록을 확인하지 못해 보호합니다: '+str(hwp))
+            hwp_available(hwp)
+            current=digest(hwp)
+            allowed[hwp]=created
+            if allow_edited_hwp and current!=created and hwp.suffix.lower()=='.hwp':
+                # This exact path is the current generated output, not a received
+                # attachment or an untracked file. Preserve its latest saved bytes.
+                allowed[hwp]=current
+                edited_files.append({'path':str(hwp),'created_sha256':created,'sha256':current})
     protected={checked(f['path']) for f in storage_files(job)}
     if any(p==root or p.is_relative_to(root) for p in protected for root in roots):raise ValueError('원본 첨부파일이 들어 있는 폴더는 되돌릴 수 없습니다.')
     targets=list(roots)
@@ -151,10 +168,14 @@ def plan(job,config,scope):
         slot=str(len(moves));backup=local_base/str(job['id'])/token/slot/path.name
         if not backup.resolve().is_relative_to(local_base):raise ValueError('복구 보관 경로가 올바르지 않습니다.')
         moves.append({'source':str(path),'backup':str(backup),'backup_root':str(anchor),'slot':slot,'inventory':before,'done':False,'local':True,'local_base':str(local_base)})
-    return {'scope':scope,'id':token,'moves':moves,'started':datetime.now().isoformat(timespec='seconds')}
+        for edited in edited_files:
+            original=Path(edited['path'])
+            if original==path:edited['backup']=str(backup)
+            elif original.is_relative_to(path):edited['backup']=str(backup/original.relative_to(path))
+    return {'scope':scope,'id':token,'moves':moves,'edited_files':edited_files,'started':datetime.now().isoformat(timespec='seconds')}
 
 
-def execute(job,config,store,scope):
+def execute(job,config,store,scope,allow_edited_hwp=False):
     from core import registration_lock
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}',str(job.get('id',''))):raise ValueError('공문 파일 이력 ID가 올바르지 않습니다.')
     locks={checked(config['root'])}
@@ -176,8 +197,11 @@ def execute(job,config,store,scope):
                     move.update(backup=str(local_base/str(job['id'])/transaction['id']/move['slot']/Path(move['source']).name),local=True,local_base=str(local_base))
             store.put(job)
         if not transaction:
-            transaction=plan(job,config,scope);job['rollback_pending']=transaction;store.put(job)
+            transaction=plan(job,config,scope,allow_edited_hwp=allow_edited_hwp);job['rollback_pending']=transaction;store.put(job)
         if not re.fullmatch(r'[0-9a-f]{32}',transaction['id']):raise ValueError('되돌리기 작업 ID가 올바르지 않습니다.')
+        for edited in transaction.get('edited_files',[]):
+            path=checked(edited['path'])
+            if io_path(path).exists():hwp_available(path)
         # Preflight every remaining move before changing any source path.
         for index,move in enumerate(transaction['moves']):
             source,backup=checked(move['source']),checked(move['backup'])
@@ -220,6 +244,7 @@ def execute(job,config,store,scope):
             if folder.get('base'):out['save_folder']=folder['base']
             for key in ('folder_number','folder_name','created','path','save_path'):folder.pop(key,None)
         transaction['finished']=datetime.now().isoformat(timespec='seconds')
+        job['last_rollback_edited_files']=deepcopy(transaction.get('edited_files',[]))
         job.setdefault('rollback_history',[]).append(deepcopy(transaction));job['rollback_history']=job['rollback_history'][-20:]
         job.pop('rollback_pending',None)
         job['reason']='파일·폴더 저장 취소 · 구글시트 등록과 번호 유지'

@@ -85,6 +85,10 @@ def reset(job,scope):
         job['state']='확인 필요'
     else:job['state']='발신 작성 중' if job.get('standalone_outgoing') else '완료'
     job['reason']='등록 내용과 생성 파일·폴더를 취소했습니다. 다음 등록은 시트의 최신 번호를 확인합니다.'
+    edits=job.get('last_rollback_edited_files',[])
+    if edits:
+        job.setdefault('edited_hwp_backups',[]).extend(deepcopy(edits))
+        job['reason']+=' 수정한 HWP 보관 위치: '+', '.join(e['backup'] for e in edits)
     job.pop('registration_cancel_pending',None)
 
 
@@ -94,8 +98,9 @@ def execute(job,config,store,scope,factory=None):
     pending=job.get('registration_cancel_pending')
     if pending and pending['scope']!=scope:raise ValueError('이미 시작한 등록 취소를 먼저 완료하세요.')
     if not pending:
+        job.pop('last_rollback_edited_files',None)
         from file_rollback import has_files,plan
-        if has_files(job,scope):plan(job,config,scope)  # Protect edited/foreign files before changing any ledger.
+        if has_files(job,scope):plan(job,config,scope,allow_edited_hwp=True)  # Preserve owned edited HWP; protect unrelated files before touching ledgers.
         targets=[]
         scopes=['stamp','outgoing']+(['receipt'] if scope=='receipt' and not job.get('standalone_outgoing') else [])
         for kind in scopes:
@@ -109,7 +114,7 @@ def execute(job,config,store,scope,factory=None):
         pending={'scope':scope,'targets':targets,'files_done':False};job['registration_cancel_pending']=pending;store.put(job)
     if not pending['files_done']:
         from file_rollback import execute as rollback,has_files
-        if has_files(job,scope):rollback(job,config,store,scope)
+        if has_files(job,scope):rollback(job,config,store,scope,allow_edited_hwp=True)
         pending=job['registration_cancel_pending'];pending['files_done']=True;store.put(job)
     from core import registration_lock
     with registration_lock(config['root']):

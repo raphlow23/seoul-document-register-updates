@@ -91,14 +91,39 @@ class CancelTests(unittest.TestCase):
         self.assertFalse(saved.exists());self.assertEqual(source.read_bytes(),b'original')
         self.assertEqual(self.job['number'],'350')
 
-    def test_changed_hwp_blocks_sheet_cancellation(self):
+    def test_changed_hwp_is_backed_up_and_sheet_cancellation_completes(self):
         from core import digest
         from file_rollback import track_file
         saved=Path(self.config['root'])/'452.hwp';saved.write_bytes(b'generated')
         self.job['outgoing'].update(hwp_path=str(saved),hwp_created_sha256=digest(saved),save_folder=self.config['root'])
         track_file(self.job,str(saved),digest(saved),'outgoing');saved.write_bytes(b'user edits')
-        with self.assertRaises(ValueError):cancel.execute(self.job,self.config,self.store,'outgoing',self.factory)
-        self.assertEqual(self.writes,[]);self.assertEqual(saved.read_bytes(),b'user edits')
+        cancel.execute(self.job,self.config,self.store,'outgoing',self.factory)
+        self.assertFalse(saved.exists());self.assertTrue(self.writes)
+        edited=self.job['edited_hwp_backups'][-1];backup=Path(edited['backup'])
+        self.assertEqual(backup.read_bytes(),b'user edits');self.assertTrue(backup.is_relative_to(Path(self.config['_program_dir'])))
+        self.assertIn(str(backup),self.job['reason']);self.assertNotIn('number',self.job['outgoing'])
+        from program_storage import cleanup_rollbacks
+        self.job['outgoing']['files_rolled_back']=False;self.store.put(self.job)
+        cleanup_rollbacks(self.job,self.config,self.store);self.assertEqual(backup.read_bytes(),b'user edits')
+
+    def test_backup_failure_or_more_edits_keep_sheet_rows_and_latest_file(self):
+        from core import digest
+        from file_rollback import track_file
+        from program_storage import copy_verified
+        saved=Path(self.config['root'])/'452.hwp';saved.write_bytes(b'generated')
+        self.job['outgoing'].update(hwp_path=str(saved),hwp_created_sha256=digest(saved),save_folder=self.config['root'])
+        track_file(self.job,str(saved),digest(saved),'outgoing');saved.write_bytes(b'user edits')
+        def changed_after_backup(*args):copy_verified(*args);saved.write_bytes(b'more user edits')
+        with patch('program_storage.copy_verified',side_effect=changed_after_backup),self.assertRaises(ValueError):
+            cancel.execute(self.job,self.config,self.store,'outgoing',self.factory)
+        self.assertEqual(self.writes,[]);self.assertEqual(saved.read_bytes(),b'more user edits')
+        backup=Path(self.job['rollback_pending']['edited_files'][0]['backup']);self.assertEqual(backup.read_bytes(),b'user edits')
+
+    def test_untracked_changed_file_still_blocks_sheet_cancellation(self):
+        self.job['outgoing']['hwp_path']=str(Path(self.config['root'])/'old.hwp')
+        Path(self.job['outgoing']['hwp_path']).write_bytes(b'unproven old file')
+        with self.assertRaisesRegex(ValueError,'이전 버전'):cancel.execute(self.job,self.config,self.store,'outgoing',self.factory)
+        self.assertEqual(self.writes,[]);self.assertEqual(Path(self.job['outgoing']['hwp_path']).read_bytes(),b'unproven old file')
 
 
 if __name__=='__main__':unittest.main()

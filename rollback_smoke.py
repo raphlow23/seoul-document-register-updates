@@ -92,6 +92,7 @@ def run():
                 db=core.Store(base/'history.sqlite');output=prepare(saved,app.config,db)/'012. fixture.hwp';output.write_bytes(b'generated output fixture')
                 out.update(hwp_path=str(output),hwp_saved_number='12',hwp_created_sha256=core.digest(output))
                 track_file(saved,output,core.digest(output),'outgoing');db.put(saved);db.db.close()
+                output.write_bytes(b'user saved HWP edits after export')
                 # Back cancels owned outgoing/stamp cells as well as generated output.
                 # All spreadsheet operations below use private in-memory fixture rows.
                 from browser_journal import Journal
@@ -117,6 +118,8 @@ def run():
                 assert all(Path(p).is_file() for p in app.jobs[key]['destinations'])
                 assert 'number' not in app.jobs[key]['outgoing'] and not app.jobs[key]['outgoing']['stamp'].get('complete')
                 assert app.jobs[key]['number']=='581' and rows['outgoing'][5][7]=='' and rows['stamp'][5][6]==''
+                edited=app.jobs[key]['edited_hwp_backups'][-1]
+                assert Path(edited['backup']).read_bytes()==b'user saved HWP edits after export'
                 assert not errors
         finally:
             flow.clear_editor();app.commands.put(('quit',None));app.worker.join(timeout=5)

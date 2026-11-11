@@ -680,7 +680,7 @@ class App:
                 elif kind == 'hwp_export_finished':
                     getattr(self,'hwp_pending',set()).discard(data['hash'])
                 elif kind == 'registration_cancelled':
-                    self.status.set('해당 공문의 시트 등록 내용과 생성 파일·폴더를 취소했습니다. 다시 등록하면 최신 번호를 확인합니다.')
+                    self.status.set(self.jobs.get(data['hash'],{}).get('reason') or '해당 공문의 시트 등록 내용과 생성 파일·폴더를 취소했습니다. 다시 등록하면 최신 번호를 확인합니다.')
                     self.workflow.cancel_finished(data)
                 elif kind == "google_login_success":
                     self.config.update(data["config"])

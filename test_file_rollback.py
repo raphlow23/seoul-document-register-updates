@@ -162,6 +162,32 @@ class FileRollbackTests(unittest.TestCase):
         self.assertTrue(file.exists());self.job['outgoing'].pop('hwp_created_sha256')
         with self.assertRaisesRegex(ValueError,'이전 버전'):rollback.execute(self.job,self.config,self.store,'outgoing')
 
+    def test_explicit_back_keeps_edited_hwp_backup_and_receipt_files(self):
+        self.save();file=self.outgoing();file.write_bytes(b'saved user changes')
+        receipt=list(self.job['destinations'])
+        rollback.execute(self.job,self.config,self.store,'outgoing',allow_edited_hwp=True)
+        self.assertFalse(file.exists());self.assertTrue(all(Path(p).is_file() for p in receipt))
+        record=self.job['last_rollback_edited_files'][0]
+        self.assertEqual(Path(record['backup']).read_bytes(),b'saved user changes')
+        self.assertEqual(record['sha256'],core.digest(record['backup']))
+
+    def test_locked_hwp_explains_close_and_leaves_all_files_unchanged(self):
+        import ctypes,os
+        if os.name!='nt':self.skipTest('Windows sharing locks')
+        from ctypes import wintypes as w
+        self.save();file=self.outgoing();file.write_bytes(b'saved user changes')
+        kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+        kernel.CreateFileW.argtypes=[w.LPCWSTR,w.DWORD,w.DWORD,w.LPVOID,w.DWORD,w.DWORD,w.HANDLE];kernel.CreateFileW.restype=w.HANDLE
+        kernel.CloseHandle.argtypes=[w.HANDLE]
+        handle=kernel.CreateFileW(str(file),0x80000000,1,None,3,128,None)
+        self.assertNotEqual(handle,ctypes.c_void_p(-1).value)
+        try:
+            with self.assertRaisesRegex(ValueError,'한글 창을 닫은 뒤'):rollback.execute(self.job,self.config,self.store,'outgoing',allow_edited_hwp=True)
+            self.assertTrue(file.is_file());self.assertNotIn('rollback_pending',self.job)
+        finally:kernel.CloseHandle(handle)
+        rollback.execute(self.job,self.config,self.store,'outgoing',allow_edited_hwp=True)
+        self.assertFalse(file.exists());self.assertEqual(Path(self.job['last_rollback_edited_files'][0]['backup']).read_bytes(),b'saved user changes')
+
     def test_nested_outgoing_backup_does_not_block_later_receipt_rollback(self):
         folder=self.save();self.outgoing(folder/'2.센터발송')
         rollback.execute(self.job,self.config,self.store,'outgoing')

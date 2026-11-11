@@ -1,4 +1,4 @@
-VERSION = "2.10.2"
+VERSION = "2.10.3"
 # Same-version HWP baseline checks and isolated text-only replacement settings.
 # Build downloads authenticate to GitHub to avoid shared-runner API rate limits.
 PRODUCT = "SeoulDocumentRegister"
