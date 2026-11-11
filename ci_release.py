@@ -182,7 +182,6 @@ def finalize():
     response=requests.patch(f"{API}/releases/{release['id']}",headers=headers(),json={"draft":False,"make_latest":"true"},timeout=30)
     response.raise_for_status();assert not response.json()["draft"]
     print("Published verified installer and signed online update.")
-    if os.environ.get('RELEASE_RETENTION_DISABLED')=='1':return
     from release_retention import prune
     published=requests.get(f"{API}/releases/{release['id']}",headers=headers(),timeout=30)
     published.raise_for_status()
