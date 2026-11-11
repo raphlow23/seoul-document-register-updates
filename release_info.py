@@ -1,4 +1,4 @@
-VERSION = "2.10.5"
+VERSION = "2.10.6"
 # Back cancellation archives the latest saved current HWP before removing generated files.
 # Build downloads authenticate to GitHub to avoid shared-runner API rate limits.
 PRODUCT = "SeoulDocumentRegister"
