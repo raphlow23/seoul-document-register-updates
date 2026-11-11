@@ -10,6 +10,40 @@ from test_browser_sheets import UI
 
 
 class OutgoingLayoutTests(unittest.TestCase):
+    def test_adjacent_merged_title_labels_keep_physical_header_and_data_rows(self):
+        for family in ('업무연락','처리지침'):
+            owner,ui,job=self.fixture(family);ui.rows[3][4]='제 목'
+            self.assertEqual(owner.register(job,self.store),(6,'438'))
+            self.assertEqual(owner.header_row,2);self.assertEqual(ui.rows[3][4],'제 목')
+            self.assertEqual(ui.rows[5][4],job['title'])
+
+    def test_delayed_tab_content_is_rechecked_before_any_outgoing_write(self):
+        owner,ui,job=self.fixture('업무연락');stale=[['']*8 for _ in ui.rows]
+        stale[2]=['연번','일자','분류','공문','처리지침','분류번호','','제목']
+        original=ui.read;reads=[]
+        def delayed(range_):
+            reads.append(range_)
+            if len(reads)==1:return stale
+            return original(range_)
+        ui.read=delayed
+        with patch('browser_sheets.time.sleep'):self.assertEqual(owner.register(job,self.store),(6,'438'))
+        self.assertTrue(any(r.startswith('A1:H') for r in reads));self.assertEqual(ui.rows[5][4],job['title'])
+
+    def test_wrong_header_records_labels_but_never_business_rows_or_writes(self):
+        import json
+        owner,ui,job=self.fixture('업무연락');ui.rows[2][4],ui.rows[2][5]=ui.rows[2][5],ui.rows[2][4]
+        ui.rows[4][4]='민감한 실제 공문 제목'
+        with patch('browser_sheets.time.sleep'),self.assertRaisesRegex(ValueError,'읽어 온 머리글'):owner.register(job,self.store)
+        self.assertFalse(ui.writes)
+        reports=list((self.base/'Program'/'임시보관'/'시트머리글').glob('*.json'));self.assertTrue(reports)
+        report=reports[0].read_text(encoding='utf-8');self.assertNotIn('민감한 실제 공문 제목',report)
+        self.assertEqual(json.loads(report)['tab'],owner.tab)
+
+    def test_nonadjacent_header_blocks_are_still_rejected_without_writing(self):
+        owner,ui,job=self.fixture('업무연락');ui.rows[6]=ui.rows[2].copy()
+        with patch('browser_sheets.time.sleep'),self.assertRaisesRegex(ValueError,'머리글'):owner.register(job,self.store)
+        self.assertFalse(ui.writes)
+
     def test_decomposed_korean_and_invisible_header_spacing_preserve_columns(self):
         import unicodedata
         for family in ('공문','업무연락','처리지침'):

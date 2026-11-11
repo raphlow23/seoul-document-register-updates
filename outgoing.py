@@ -135,6 +135,7 @@ class OutgoingSheets(Sheets):
         matches=[];width=8 if self.compact else 11
         for index,row in enumerate(rows[:50]):
             cells=[compact(v) for v in row]+['']*width
+            if cells[0].isdigit():continue
             if not re.fullmatch(r'(?:문서|발신|공문)?제목|건명|문서명',cells[self.title_column]):continue
             columns=[''.join(compact(r[c]) if len(r)>c else '' for r in rows[max(0,index-2):index+2]) for c in range(width)]
             if '연번' not in columns[0] or not any(w in columns[1] for w in ('일자','날짜','발신일','발송일')):continue
@@ -146,6 +147,10 @@ class OutgoingSheets(Sheets):
             if not self.compact:
                 if not any(w in columns[2] for w in ('발송문서','공문')) or not any(w in columns[3] for w in ('내부결재','결재')) or '처리지침' not in columns[4]:continue
             matches.append(index)
+        if len(matches)==2 and matches[1]==matches[0]+1:
+            # Some clipboard representations repeat a vertically merged heading
+            # on both physical rows. Keep the rows and the first header index.
+            if compact(rows[matches[0]][self.title_column])==compact(rows[matches[1]][self.title_column]):matches=matches[:1]
         if len(matches)!=1:
             letter='E' if self.compact else 'H'
             raise ValueError(f'{self.tab}의 발신대장 머리글을 확인하지 못했습니다. 연번·일자·분류번호·{letter}열 제목·수신처·발송자·방법 열을 확인하세요. 등록하지 않았습니다.')

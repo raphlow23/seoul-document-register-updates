@@ -1,10 +1,20 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 from browser_ranges import align
 from browser_sheets import BrowserUI
 
 
 class BrowserRangeTests(unittest.TestCase):
+    def test_grid_end_retries_when_shortcut_stays_in_header(self):
+        ui=BrowserUI.__new__(BrowserUI);ui.select=Mock();ui.key=Mock()
+        ui.selection=Mock(side_effect=[{'range':'A1'},{'range':'V1002'}])
+        with patch('browser_sheets.time.sleep'):self.assertEqual(ui.grid_rows(),1002)
+        self.assertEqual(ui.select.call_count,2);self.assertEqual(ui._grid_row_count,1002)
+
+    def test_grid_end_never_guesses_row_count_when_focus_is_not_in_grid(self):
+        ui=BrowserUI.__new__(BrowserUI);ui.select=Mock();ui.key=Mock();ui.selection=Mock(return_value={'range':'A2:H2'})
+        with patch('browser_sheets.time.sleep'),self.assertRaisesRegex(ValueError,'마지막 행'):ui.grid_rows()
+        self.assertFalse(hasattr(ui,'_grid_row_count'))
     def test_hidden_leading_row_is_padded_without_shifting_data(self):
         text="\t\t\n연번\t일자\t제목\n1\t2026-11-03\t기존 공문"
         rows=align(text,"A1:C4","A2:C4")

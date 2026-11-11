@@ -159,11 +159,17 @@ class BrowserUI:
 
     def grid_rows(self):
         from browser_ranges import bounds
-        self.select("A1");self.key("End",ctrl=True);time.sleep(.25)
-        selected=self.selection().get("range","")
-        row,_,last,_=bounds(selected)
-        self._grid_row_count=max(row,last)
-        return self._grid_row_count
+        for _ in range(3):
+            self.select('A1');self.key('Escape');self.key('ArrowDown')
+            self.key('End',ctrl=True);time.sleep(.3)
+            selected=self.selection().get('range','')
+            try:row,_,last,_=bounds(selected)
+            except ValueError:continue
+            # A ledger has headings plus an existing number row. Staying at A1
+            # means Ctrl+End did not reach the grid; never truncate the ledger.
+            if max(row,last)>=5:
+                self._grid_row_count=max(row,last);return self._grid_row_count
+        raise ValueError('대장의 마지막 행 위치를 확인하지 못했습니다. 시트 로딩이 끝난 뒤 셀을 한 번 클릭하고 다시 시도해 주세요. 등록하지 않았습니다.')
 
     @staticmethod
     def clipboard(value=None):
@@ -303,7 +309,28 @@ class BrowserSession:
         self.ui.tab(self.owner.tab)
         found={};entries=[entry for entry in self.records.entries() if entry['sid']==self.sid and entry['tab']==self.owner.tab]
         rows=self.getrows(f"A:{self.owner.last_column}")
-        if hasattr(self.owner,'validate_header'):self.owner.validate_header(rows)
+        if hasattr(self.owner,'validate_header'):
+            try:self.owner.validate_header(rows)
+            except ValueError as first_error:
+                error=first_error
+                for _ in range(2):
+                    self.ui.tab(self.owner.tab);time.sleep(.3)
+                    limit=min(50,max(5,getattr(self.ui,'_grid_row_count',len(rows))))
+                    heads=self.getrows(f'A1:{self.owner.last_column}{limit}')
+                    try:self.owner.validate_header(heads)
+                    except ValueError as issue:error=issue;continue
+                    from sheet_connections import header_text
+                    expected=(self.owner.header_row,tuple(map(header_text,heads[self.owner.header_row])))
+                    rows=self.getrows(f'A:{self.owner.last_column}')
+                    try:self.owner.validate_header(rows)
+                    except ValueError as issue:error=issue;continue
+                    actual=(self.owner.header_row,tuple(map(header_text,rows[self.owner.header_row])))
+                    if actual==expected:break
+                    error=ValueError('작은 범위와 전체 범위에서 읽은 시트 머리글이 다릅니다. 등록하지 않았습니다.')
+                else:
+                    from sheet_header_diagnostics import record
+                    detail=record(self.config,self.owner,rows)
+                    raise ValueError(str(error)+detail) from error
         header=rows[self.owner.header_row] if len(rows)>self.owner.header_row else []
         if not hasattr(self.owner,'validate_header') and (len(header)<=self.owner.title_column or "제" not in header[self.owner.title_column] or self.owner.header_word not in header[2]):
             raise ValueError(f"{self.owner.tab}의 {self.owner.header_row+1}행에서 제목·문서분류 열을 확인하지 못했습니다. 선택 범위와 숨김·필터 상태를 확인해 주세요. 등록하지 않았습니다.")
