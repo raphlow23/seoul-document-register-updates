@@ -15,9 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='HWP 문서 제목과 저장 파일명 분리'
-RELEASE_BODY='발신 정보에서 저장 파일명을 문서 제목과 별도로 지정할 수 있습니다. 비워 두면 기존 발신번호·날짜 형식을 사용하고 파일명 금지 문자만 정리합니다. HWP 내부 제목과 대장 제목은 원문 그대로 유지합니다. 별도 파일명은 경로·금지 문자·예약된 장치 이름을 검사하며 .hwp 확장자를 자동으로 붙입니다. 기존 파일을 덮어쓰지 않습니다.'
-
+RELEASE_TITLE='대장별 연결 설정에 현재 적용값 표시'
+RELEASE_BODY='수신·발신·직인대장별 연결 설정을 열면 공문·업무연락·처리지침 각 대장에 현재 적용 중인 스프레드시트 주소와 하단 탭 이름을 채워 보여줍니다. 주소는 전체 Google Sheets URL로 표시해 보고 바로 수정할 수 있습니다. 값을 바꾸지 않고 저장하면 기존 기본값 상속 관계를 유지하며, 수정한 항목만 개별 연결로 저장합니다. 개별 주소를 비우고 읽기 확인할 때도 실제 기본 연결로 검사합니다. 기존 등록 문서는 당시 연결을 유지합니다. v2.10.5의 HWP 문서 제목과 저장 파일명 분리 기능을 포함합니다. 322개 검사와 Windows 화면 흐름·업데이트·재실행을 검증합니다. 업무 시트의 값이나 서식은 테스트에서 변경하지 않습니다.'
 _release_id = None
 
 

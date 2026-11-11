@@ -8,20 +8,35 @@ def open_defaults(app,parent=None):
     parent=parent or app.root;win=tk.Toplevel(parent);win.title('대장별 구글 시트 연결')
     win.geometry(f"960x{min(760,win.winfo_screenheight()-100)}");win.minsize(760,480);win.transient(parent);win.grab_set()
     footer=ttk.Frame(win,padding=12);footer.pack(side='bottom',fill='x')
-    ttk.Label(win,text='공문·업무연락·처리지침의 수신·발신·직인대장을 따로 연결합니다. 주소나 탭을 비우면 기존 기본 설정을 사용합니다.\n현재와 같은 대장 열 구성이어야 합니다. 기존 등록 건은 당시 연결을 유지하며 새로 등록할 문서부터 변경한 기본 연결을 사용합니다.',wraplength=880,padding=14).pack(fill='x')
+    ttk.Label(win,text='각 대장에 현재 적용 중인 스프레드시트 주소와 하단 탭 이름을 표시합니다. 표시된 값을 바로 수정해 저장하세요.\n주소나 탭을 비우면 해당 대장의 기본 설정을 사용합니다. 기존 등록 건은 당시 연결을 유지하며 새로 등록할 문서부터 변경한 기본 연결을 사용합니다.',wraplength=880,padding=14).pack(fill='x')
     from modern_ui import ScrollablePanel
     panel=ScrollablePanel(win);panel.pack(fill='both',expand=True);body=panel.body;body.columnconfigure(1,weight=1)
-    fields={};win.connection_fields=fields
+    fields={};original={};initial={};win.connection_fields=fields
+    def draft_entries():
+        result={}
+        for key,values in fields.items():
+            item={}
+            for name,var in values.items():
+                text=var.get().strip()
+                if text==initial[key][name]:text=str(original[key].get(name,'')).strip()
+                if text:item[name]=text
+            if item:result[key]=item
+        return result
     for index,(scope,family) in enumerate((s,f) for f in FAMILIES for s in SCOPES):
         key=scope+':'+family;old=app.config.get('ledger_connections',{}).get(key,{})
-        fields[key]={name:tk.StringVar(value=old.get(name,'')) for name in ('spreadsheet_id','tab')}
+        original[key]=old.copy();target=default_connection(app.config,scope,family)
+        address=target['spreadsheet_id']
+        if address:
+            try:address='https://docs.google.com/spreadsheets/d/'+spreadsheet_id(address)+'/edit'
+            except ValueError:pass  # Let the user correct an invalid saved value.
+        initial[key]={'spreadsheet_id':address,'tab':target['tab']}
+        fields[key]={name:tk.StringVar(value=value) for name,value in initial[key].items()}
         ttk.Label(body,text=family+' · '+SCOPES[scope]).grid(row=index*2,column=0,sticky='w',padx=10,pady=(12,4))
         ttk.Entry(body,textvariable=fields[key]['spreadsheet_id']).grid(row=index*2,column=1,sticky='ew',padx=10,pady=(12,4))
         ttk.Label(body,text='하단 탭 이름').grid(row=index*2+1,column=0,sticky='w',padx=10,pady=(0,10))
         ttk.Entry(body,textvariable=fields[key]['tab']).grid(row=index*2+1,column=1,sticky='ew',padx=10,pady=(0,10))
         def test(scope=scope,family=family,key=key):
-            target=default_connection(app.config,scope,family)
-            target.update({k:v.get().strip() for k,v in fields[key].items() if v.get().strip()})
+            target=default_connection({**app.config,'ledger_connections':draft_entries()},scope,family)
             try:target=normalized(target)
             except ValueError as error:return messagebox.showerror('연결 확인',str(error),parent=win)
             if app.send('test_sheet_target',{'scope':scope,'family':family,'target':target}):close()
@@ -32,8 +47,7 @@ def open_defaults(app,parent=None):
     def save():
         result={}
         try:
-            for key,values in fields.items():
-                item={k:v.get().strip() for k,v in values.items() if v.get().strip()}
+            for key,item in draft_entries().items():
                 if item.get('spreadsheet_id'):item['spreadsheet_id']=spreadsheet_id(item['spreadsheet_id'])
                 if item.get('tab') and any(c in item['tab'] for c in '\r\n\t'):raise ValueError('탭 이름은 한 줄로 입력하세요.')
                 if item:result[key]=item
