@@ -108,11 +108,27 @@ class HwpTests(unittest.TestCase):
         self.assertTrue(docs.destination(config,docs.style("4")).endswith("0.시행문(업무연락)"))
         self.assertTrue(docs.destination(config,docs.style("5")).endswith("0.시행문(처리지침)"))
 
-    def test_reject_unassigned_sample_numbers_conflicts_and_invalid_titles(self):
+    def test_reject_unassigned_sample_numbers_and_conflicts(self):
         for out in ({},{"number":"0"},{"number":"438","file_number":"437"},{"file_number":"abc"}):
             with self.assertRaises(ValueError):docs.sequence(out)
-        with self.assertRaises(ValueError):docs.filename(docs.style("1"),{"title":"제목/오류","number":"438"})
+        with self.assertRaises(ValueError):docs.filename(docs.style("1"),{"title":"","number":"438"})
         self.assertEqual(docs.sequence({"file_number":"001"}),1)
+
+    def test_native_title_is_independent_of_default_or_custom_filename(self):
+        item=docs.style('1');out={"title":'협의/회신: 건축허가?',"number":"438"}
+        name=docs.filename(item,out,date(2026,11,11))
+        self.assertIn('협의_회신_ 건축허가_',name)
+        self.assertEqual(out['title'],'협의/회신: 건축허가?')
+        out['filename_override']='별도로 정한 파일 이름'
+        self.assertEqual(docs.filename(item,out),'별도로 정한 파일 이름.hwp')
+        out['filename_override']='다른 파일.HWP'
+        self.assertEqual(docs.filename(item,out),'다른 파일.HWP')
+        self.assertEqual(docs.native_values(item,out)['title'],'협의/회신: 건축허가?')
+
+    def test_custom_filename_rejects_paths_reserved_names_and_invalid_characters(self):
+        for name in ('../외부.hwp','C:\\외부.hwp','이름/잘못','이름:잘못','CON','nul.hwp','LPT1.hwp','.hwp','이름.','긴'*241):
+            with self.subTest(name=name):
+                with self.assertRaises(ValueError):docs.filename(docs.style('1'),{'title':'정상 제목','number':'438','filename_override':name})
 
     def test_reject_changed_template_before_output(self):
         item={**docs.style("1"),"body_start":"NONEXISTENT"}

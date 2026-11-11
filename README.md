@@ -1,3 +1,7 @@
+## v2.10.5
+
+HWP 문서 제목과 저장 파일명을 별도로 정합니다. 발신 정보의 `저장 파일명 (선택)`에 원하는 이름을 입력하세요. 비워 두면 발신번호·현재 날짜·제목으로 자동 생성하며 제목의 파일명 금지 문자만 `_`로 바꿉니다. 문서 안의 제목과 대장에 등록된 제목은 바꾸지 않습니다. `.hwp`는 자동으로 붙고 같은 이름의 기존 파일은 덮어쓰지 않습니다.
+
 [사용설명서 PDF 다운로드 · v2.7.9 · 16쪽](https://github.com/raphlow23/seoul-document-register-updates/raw/refs/heads/main/docs/SeoulDocumentRegister-UserGuide-v2.7.9.pdf?download=1)
 
 ## v2.9.0

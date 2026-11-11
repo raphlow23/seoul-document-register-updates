@@ -105,7 +105,7 @@ class OutgoingEditor:
         content=ttk.Frame(notebook,padding=12)
         notebook.add(info,text="발신·직인 등록 정보")
         notebook.add(content,text="OCR 원문 · 공문 내용 작성")
-        self.vars={key:tk.StringVar(value=str(self.out.get(key,""))) for key in ("title","date","receiver","sender","method","reference","template_path","purpose","template_id","save_folder","file_number","filename_suffix")}
+        self.vars={key:tk.StringVar(value=str(self.out.get(key,""))) for key in ("title","date","receiver","sender","method","reference","template_path","purpose","template_id","save_folder","file_number","filename_suffix","filename_override")}
         self.keep_body=tk.BooleanVar(value=self.out.get("keep_template_body",False))
         self.bodies_by_style=dict(self.out.get("template_bodies",{}))
         self.body_backups=dict(self.out.get("body_backups",{}))
@@ -201,6 +201,9 @@ class OutgoingEditor:
         ttk.Button(templatebar,text="별도 HWPX 양식 선택",command=self.choose_template).grid(row=2,column=4)
         ttk.Label(templatebar,text="HWP는 원본 폼·Ctrl 스타일·문단 서식 유지 · 본문 수정은 한글의 기존 문단에서").grid(row=3,column=0,columnspan=4,sticky="w")
         ttk.Button(templatebar,text="기본 본문 불러오기",command=lambda:self.use_template_body(True)).grid(row=3,column=4)
+        ttk.Label(templatebar,text="저장 파일명 (선택)").grid(row=4,column=0,sticky="w",padx=4,pady=4)
+        ttk.Entry(templatebar,textvariable=self.vars["filename_override"]).grid(row=4,column=1,columnspan=4,sticky="ew",padx=4,pady=4)
+        ttk.Label(templatebar,text="비워 두면 자동 생성합니다. 따로 입력해도 문서 제목은 바뀌지 않습니다. .hwp는 자동으로 붙습니다.").grid(row=5,column=0,columnspan=5,sticky="w",padx=4)
         templatebar.columnconfigure(0,weight=1)
         if self.out.get("number"):self.vars["file_number"].set(str(self.out["number"]))
         if not self.vars["template_id"].get():
@@ -211,7 +214,7 @@ class OutgoingEditor:
         ttk.Button(actions,text="원본 폼 HWP 저장·열기",command=lambda:self.export(False)).pack(side="left")
         ttk.Button(actions,text="별도 HWPX 저장",command=self.export_hwpx).pack(side="left",padx=6)
         ttk.Button(actions,text="발신 설정·초안 저장",command=self.save).pack(side="right")
-        self.status=tk.StringVar(value="6종 기본 양식 · 파일명은 발신번호/오늘 날짜/HWP 제목으로 생성합니다. HWP 저장에는 이 PC의 한컴 한글이 필요합니다.")
+        self.status=tk.StringVar(value="기본 파일명은 발신번호/오늘 날짜/문서 제목으로 만들며 별도 파일명을 지정할 수 있습니다. HWP 저장에는 이 PC의 한컴 한글이 필요합니다.")
         ttk.Label(outer,textvariable=self.status,wraplength=1180).pack(fill="x",pady=(8,0))
         self.vars["title"].trace_add("write",self.title_changed)
         self.body.edit_modified(False)
@@ -338,7 +341,7 @@ class OutgoingEditor:
             if not out["save_folder"]:raise ValueError("저장 폴더를 선택해 주세요.")
             if not Path(out["save_folder"]).is_absolute():raise ValueError("저장 폴더는 절대 경로를 입력해 주세요.")
         except (ValueError,StopIteration) as error:return messagebox.showerror("HWP 저장 확인",str(error),parent=self.win)
-        # Choosing the folder is separate from the derived filename, so filename and HWP title stay equal.
+        # File naming is independent of the native document title.
         self.app.busy=True
         self.app.commands.put(("draft_export",{"hash":self.job["hash"],"outgoing":out,"path":str(Path(out["save_folder"])/name),"copy_only":False,"native_hwp":True}))
         self.status.set("한글에서 선택한 양식으로 HWP를 저장하는 중… 최초 파일 접근 안내가 나오면 허용해 주세요.")

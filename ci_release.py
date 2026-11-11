@@ -15,8 +15,9 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='업무연락 발신 머리글 읽기 재확인'
-RELEASE_BODY='업무연락·처리지침 발신대장의 표준 A:H 열 구성을 유지하면서 브라우저 읽기를 보완합니다. 마지막 행 이동이 머리글에 머물면 범위를 임의로 줄이지 않고 다시 확인합니다. 머리글 인식에 실패하면 작은 범위를 다시 읽고 전체 범위와 일치하는지 검증한 뒤 진행합니다. 세로 병합 머리글이 붙여넣기 결과에서 두 행에 반복되어도 실제 행 번호를 유지합니다. 열 구성이 잘못됐거나 서로 떨어진 머리글이 여러 개면 등록하지 않습니다. 실패 시 읽은 머리글과 확인 기록 위치를 안내하며 실제 문서 데이터 행은 진단 기록에서 제외합니다. 317개 검사와 Windows 화면 흐름·업데이트·재실행을 검증합니다. 실제 업무 시트의 값·서식·시트 순서는 변경하지 않았습니다.'
+RELEASE_TITLE='HWP 문서 제목과 저장 파일명 분리'
+RELEASE_BODY='발신 정보에서 저장 파일명을 문서 제목과 별도로 지정할 수 있습니다. 비워 두면 기존 발신번호·날짜 형식을 사용하고 파일명 금지 문자만 정리합니다. HWP 내부 제목과 대장 제목은 원문 그대로 유지합니다. 별도 파일명은 경로·금지 문자·예약된 장치 이름을 검사하며 .hwp 확장자를 자동으로 붙입니다. 기존 파일을 덮어쓰지 않습니다.'
+
 _release_id = None
 
 
@@ -181,6 +182,7 @@ def finalize():
     response=requests.patch(f"{API}/releases/{release['id']}",headers=headers(),json={"draft":False,"make_latest":"true"},timeout=30)
     response.raise_for_status();assert not response.json()["draft"]
     print("Published verified installer and signed online update.")
+    if os.environ.get('RELEASE_RETENTION_DISABLED')=='1':return
     from release_retention import prune
     published=requests.get(f"{API}/releases/{release['id']}",headers=headers(),timeout=30)
     published.raise_for_status()

@@ -6,6 +6,27 @@ from app import App
 
 
 class HwpRequestTests(unittest.TestCase):
+    def test_custom_file_name_keeps_native_title_and_number_independent(self):
+        import hwp_documents as docs
+        item={'prefix':'','suffix':'','family':'공문','blank_body':True}
+        out={'title':'협의/회신: 건축허가?','number':'438'}
+        self.assertIn('협의_회신_ 건축허가_',docs.filename(item,out))
+        out['filename_override']='파일용 이름'
+        self.assertEqual(docs.filename(item,out),'파일용 이름.hwp')
+        self.assertEqual(out['title'],'협의/회신: 건축허가?')
+        self.assertEqual(docs.sequence(out),438)
+        for bad in ('../다른위치.hwp','이름:오류','CON.hwp','.hwp'):
+            out['filename_override']=bad
+            with self.assertRaises(ValueError):docs.filename(item,out)
+
+    def test_filename_override_is_retained_without_changing_registered_title(self):
+        from outgoing import merge_edit
+        old={'enabled':True,'ledger_type':'공문','title':'등록 제목/원문','title_same':False,'date':'2026-11-11','receiver':'기관','sender':'담당','kind':'발송문서','method':'Email','sheet_attempted':True,'complete':True,'number':'438','document_number':'서울센터2026-438','stamp':{}}
+        job={'state':'완료','outgoing':old}
+        merge_edit(job,{**old,'filename_override':'파일만 별도'})
+        self.assertEqual(job['outgoing']['title'],'등록 제목/원문')
+        self.assertEqual(job['outgoing']['filename_override'],'파일만 별도')
+
     def app(self):
         event=threading.Event();event.set()
         return SimpleNamespace(worker=SimpleNamespace(working=event,active_command='watch',active_document=None),commands=queue.Queue(),status=Mock(),busy=True,updating=False,startup_gate=False)

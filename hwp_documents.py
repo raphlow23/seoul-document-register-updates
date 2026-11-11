@@ -88,8 +88,19 @@ def sequence(out):
 def filename(item, out, today=None):
     today = today or date.today()
     title = out["title"].strip()
-    if not title or re.search(r'[<>:"/\\|?*\x00-\x1f]', title) or title.endswith((".", " ")):
-        raise ValueError("HWP 제목과 파일명을 같게 저장하려면 제목에 파일명 금지 문자(\\ / : * ? 등)를 사용하지 마세요.")
+    if not title:
+        raise ValueError("HWP 문서 제목을 입력해 주세요.")
+    sequence(out)  # A separate filename never replaces the registered document number.
+    override = str(out.get("filename_override", "")).strip()
+    if override:
+        if re.search(r'[<>:"/\\|?*\x00-\x1f]', override) or override.endswith((".", " ")):
+            raise ValueError("저장 파일명에 사용할 수 없는 문자가 있습니다. 문서 제목은 그대로 두고 파일명만 수정해 주세요.")
+        name = override if override.lower().endswith('.hwp') else override + '.hwp'
+        if not name[:-4].strip(' .') or re.fullmatch(r'(?i:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])', name.split('.')[0]) or len(name) > 240:
+            raise ValueError("사용할 수 없는 저장 파일명입니다. 다른 이름 또는 더 짧은 이름을 입력해 주세요.")
+        return name
+    # Only the filesystem name is normalized; the native title and ledger stay intact.
+    title = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', title).rstrip(' .')
     suffix = out.get("filename_suffix", item["suffix"]).strip()
     if re.search(r'[<>:"/\\|?*\x00-\x1f]', suffix):
         raise ValueError("파일명 뒤 표시에 사용할 수 없는 문자가 있습니다.")
@@ -351,7 +362,7 @@ def export_hwp(item, out, output, factory=None):
         raise ValueError("선택한 HWP 양식과 발신대장 유형이 다릅니다.")
     output = Path(output)
     if output.name != filename(item, out, today):
-        raise ValueError("파일명은 발신번호·현재 날짜·HWP 제목에 따라 자동 생성됩니다. 제목 또는 번호를 수정해 주세요.")
+        raise ValueError("선택한 저장 파일명이 현재 설정과 다릅니다. 발신 정보에서 저장 파일명을 확인해 주세요.")
     if output.exists(): raise FileExistsError("같은 이름의 공문이 이미 있습니다. 덮어쓰지 않았습니다.")
     values = native_values(item,out,today)
     # Native HWP always keeps the source body, including its paragraph-level formatting.

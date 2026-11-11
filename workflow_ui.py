@@ -634,8 +634,12 @@ class WorkflowShell:
         from outgoing import require_registered_number
         try:require_registered_number(out)
         except ValueError as error:return messagebox.showerror('발신번호 확인',str(error))
+        requested_name=None
+        if str(out.get('filename_override','')).strip():
+            try:requested_name=hwp_docs.filename(hwp_docs.style(out['template_id']),out)
+            except (ValueError,KeyError,StopIteration) as error:return messagebox.showerror('HWP 저장 확인',str(error))
         existing=out.get("hwp_path","")
-        if existing and str(out.get("hwp_saved_number",""))==str(out.get("number","")) and Path(existing).suffix.lower()==".hwp" and Path(existing).is_file():
+        if existing and str(out.get("hwp_saved_number",""))==str(out.get("number","")) and Path(existing).suffix.lower()==".hwp" and Path(existing).is_file() and (requested_name is None or Path(existing).name==requested_name):
             import os
             try:os.startfile(existing)
             except OSError as error:messagebox.showerror("한글 열기",str(error))
@@ -685,7 +689,7 @@ class SimpleOutgoing(OutgoingEditor):
         canvas.bind("<Configure>",lambda e:canvas.itemconfigure(window,width=e.width))
         canvas.bind("<MouseWheel>",lambda e:canvas.yview_scroll(-int(e.delta/120)*3,"units"))
         self.enabled=tk.BooleanVar(value=True);self.same=tk.BooleanVar(value=self.out["title_same"])
-        self.vars={key:tk.StringVar(value=str(self.out.get(key,""))) for key in ("title","date","receiver","sender","method","reference","template_path","purpose","template_id","save_folder","file_number","filename_suffix")}
+        self.vars={key:tk.StringVar(value=str(self.out.get(key,""))) for key in ("title","date","receiver","sender","method","reference","template_path","purpose","template_id","save_folder","file_number","filename_suffix","filename_override")}
         self.keep_body=tk.BooleanVar(value=self.out.get("keep_template_body",False))
         self.bodies_by_style=dict(self.out.get("template_bodies",{}));self.body_backups=dict(self.out.get("body_backups",{}))
         self.family=tk.StringVar(value=next(k for k,v in FAMILY_LABELS.items() if v==self.out["ledger_type"]))
@@ -708,6 +712,9 @@ class SimpleOutgoing(OutgoingEditor):
             ttk.Label(fields,text=label).grid(row=row,column=0,sticky="w",pady=8)
             widget=ttk.Entry(fields,textvariable=self.vars[key]);widget.grid(row=row,column=1,sticky="ew",padx=12)
             self.controls.append(widget)
+        ttk.Label(fields,text="저장 파일명 (선택)").grid(row=4,column=0,sticky="w",pady=8)
+        ttk.Entry(fields,textvariable=self.vars["filename_override"]).grid(row=4,column=1,sticky="ew",padx=12)
+        ttk.Label(fields,text="비워 두면 자동 생성 · 직접 입력해도 문서 제목은 유지 · .hwp 자동 추가",wraplength=650).grid(row=5,column=1,sticky="w",padx=12)
         fields.columnconfigure(1,weight=1)
         links=ttk.Frame(panel);links.pack(fill='x',pady=6)
         from sheet_connection_ui import open_document
