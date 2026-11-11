@@ -100,7 +100,7 @@ class CancelTests(unittest.TestCase):
         cancel.execute(self.job,self.config,self.store,'outgoing',self.factory)
         self.assertFalse(saved.exists());self.assertTrue(self.writes)
         edited=self.job['edited_hwp_backups'][-1];backup=Path(edited['backup'])
-        self.assertEqual(backup.read_bytes(),b'user edits');self.assertTrue(backup.is_relative_to(Path(self.config['_program_dir'])))
+        self.assertEqual(backup.read_bytes(),b'user edits');self.assertTrue(backup.resolve().is_relative_to(Path(self.config['_program_dir']).resolve()))
         self.assertIn(str(backup),self.job['reason']);self.assertNotIn('number',self.job['outgoing'])
         from program_storage import cleanup_rollbacks
         self.job['outgoing']['files_rolled_back']=False;self.store.put(self.job)
