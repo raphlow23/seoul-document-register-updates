@@ -1,5 +1,5 @@
 VERSION = "2.10.3"
-# Same-version HWP baseline checks and isolated text-only replacement settings.
+# Back cancellation archives the latest saved current HWP before removing generated files.
 # Build downloads authenticate to GitHub to avoid shared-runner API rate limits.
 PRODUCT = "SeoulDocumentRegister"
 UPDATE_PUBLIC_KEY = "gIEpH05mbJv9Nl17HFGmFhLLBdxlmnVKruJhaRoiexw="
