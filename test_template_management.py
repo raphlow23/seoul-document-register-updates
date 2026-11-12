@@ -81,7 +81,7 @@ class TemplateManagementTests(unittest.TestCase):
     def test_existing_private_library_gets_relief_without_replacing_its_forms(self):
         items=docs.catalog();self.assertEqual([x['id'] for x in items],['1','8'])
         self.assertEqual(items[0],self.item);self.assertEqual(docs.suggested_style({'category':'완화공문'})['id'],'8')
-        self.assertEqual(items[1]['family'],'공문');self.assertEqual(items[1]['folder'],'3.완화신청')
+        self.assertEqual(items[1]['family'],'공문');self.assertEqual(items[1]['folder'],'0.시행문(센터)')
 
     def test_rename_keeps_id_file_and_folder_and_rejects_duplicate_names(self):
         library.rename('1','수정한 양식 이름',self.root)

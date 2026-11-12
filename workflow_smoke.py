@@ -323,6 +323,19 @@ def run():
                     app.send('add',[str(mail_zip)]);idle()
                     fresh=next(j for j in app.jobs.values() if j.get('reimported_from')==mail_key)
                     assert fresh['id']!=old_id and fresh['number']=='' and app.tree.exists(fresh['hash']) and not app.tree.exists(mail_key)
+                # Relief receipts contain application material only; outgoing goes to the issued folder.
+                import json
+                from workflow_ui import SimpleOutgoing
+                relief_case=shared/'3.완화신청'/'001. 시험 완화공문';relief_case.mkdir(parents=True)
+                (relief_case/'1.완화신청자료').mkdir()
+                (relief_case/'.수신등록.json').write_text(json.dumps({'id':'owned-relief'}),encoding='utf-8')
+                relief_job={'hash':'owned-relief','id':'owned-relief','title':'완화 회신 시험','date':'2026-11-12','category':'완화공문','files':[],'state':'완료','receipt_done':True,'recipient':'시험 담당','storage_roots':[{'scope':'receipt','path':str(relief_case)}], 'outgoing':{'template_id':'8','save_folder':''}}
+                app.config.setdefault('outgoing_folders',{}).pop('8',None)
+                relief_editor=SimpleOutgoing(app,relief_job,root)
+                assert relief_editor.vars['save_folder'].get()==str(shared/'0.시행문(센터)')
+                assert not relief_editor.reuse_receipt_case and relief_editor.folder_mode=='direct'
+                assert not (relief_case/'2.센터발송').exists()
+                relief_editor.win.destroy()
                 # The frozen binary must contain the new input editor and preserve staged settings.
                 from ledger_layout_ui import open_editor
                 staged=[]

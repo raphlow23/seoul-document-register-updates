@@ -16,4 +16,15 @@ class DefaultTemplateTests(unittest.TestCase):
             self.assertEqual(docs.suggested_style({'category':'중앙센터 공문'})['id'],'2')
             self.assertEqual(docs.suggested_style({'category':'시청공문','title':'건축허가 협의'})['id'],'6')
             self.assertEqual(docs.suggested_style({'category':'완화공문'})['id'],'8')
-            self.assertEqual(items[-1]['family'],'공문');self.assertEqual(items[-1]['folder'],'3.완화신청')
+            self.assertEqual(items[-1]['family'],'공문');self.assertEqual(items[-1]['folder'],'0.시행문(센터)')
+
+    def test_old_relief_catalog_default_moves_to_issued_folder_but_custom_override_stays(self):
+        import json
+        with tempfile.TemporaryDirectory() as base:
+            root=Path(base);item={**docs.relief_template(),'folder':'3.완화신청'}
+            (root/'catalog.json').write_text(json.dumps([item]),encoding='utf-8')
+            found=docs.catalog(root)[0]
+            self.assertEqual(found['folder'],'0.시행문(센터)')
+            self.assertEqual(docs.destination({'root':str(root)},item),str(root/'0.시행문(센터)'))
+            manual=root/'직접 선택'
+            self.assertEqual(docs.destination({'root':str(root),'outgoing_folders':{'8':str(manual)}},found),str(manual))

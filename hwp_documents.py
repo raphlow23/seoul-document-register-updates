@@ -24,7 +24,11 @@ def template_root():
 
 
 def relief_template():
-    return {'id':'8','label':'완화공문','role':'relief_reply','file':'approved-relief-reply.hwp','family':'공문','folder':'3.완화신청','prefix':'','spacing':' ','suffix':'','receiver':'','blank_body':True,'metadata_only':True}
+    return {'id':'8','label':'완화공문','role':'relief_reply','file':'approved-relief-reply.hwp','family':'공문','folder':'0.시행문(센터)','prefix':'','spacing':' ','suffix':'','receiver':'','blank_body':True,'metadata_only':True}
+
+
+def is_relief(item,job=None):
+    return str(item.get('id',''))=='8' or item.get('role')=='relief_reply' or (job or {}).get('category')=='완화공문'
 
 
 def catalog(root=None):
@@ -34,6 +38,7 @@ def catalog(root=None):
     retired=root/'catalog-retired.json';removed=json.loads(retired.read_text(encoding='utf-8')) if retired.is_file() else []
     if not any(x['id']=='8' or x.get('role')=='relief_reply' for x in items+removed):items.append(relief_template())
     for item in items:
+        if is_relief(item) and item.get('folder')=='3.완화신청':item['folder']='0.시행문(센터)'
         if item.get('role') in ('city_reply','building_reply') or str(item.get('id')) in ('3','6'):
             if item.get('default_receiver','') in ('','서울특별시장(장애인자립지원과장)','서울특별시장'):
                 item['default_receiver']='서울시청'
@@ -72,7 +77,8 @@ def suggested_style(job,family="공문"):
 
 def destination(config, item):
     from core import ROOT
-    return config.get("outgoing_folders", {}).get(item["id"]) or str(Path(config.get("root",ROOT)) / item["folder"])
+    folder='0.시행문(센터)' if is_relief(item) and item.get('folder')=='3.완화신청' else item['folder']
+    return config.get("outgoing_folders", {}).get(item["id"]) or str(Path(config.get("root",ROOT)) / folder)
 
 
 def sequence(out):

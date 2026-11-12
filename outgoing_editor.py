@@ -297,7 +297,8 @@ class OutgoingEditor:
         current=self.body.get("1.0","end").strip()
         if previous:self.bodies_by_style[previous]={"body":current,"keep":self.keep_body.get() and current==hwp_docs.template_body(previous)}
         self.vars["template_id"].set(item["id"])
-        self.vars["save_folder"].set(hwp_docs.destination(self.app.config,item))
+        if previous!=item['id'] or not Path(self.vars['save_folder'].get()).is_absolute():
+            self.vars["save_folder"].set(hwp_docs.destination(self.app.config,item))
         self.vars["filename_suffix"].set(item["suffix"])
         if not self.out.get("sheet_attempted"):
             self.family.set(next(k for k,v in FAMILY_LABELS.items() if v==item["family"]))

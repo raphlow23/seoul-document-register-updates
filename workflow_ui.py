@@ -692,6 +692,7 @@ class SimpleOutgoing(OutgoingEditor):
         self.embedded=True;self.on_save=self.on_close=None
         self.owner,self.request=uuid.uuid4().hex,"";self.loading=False
         self.out=defaults(job,app.config);self.out["enabled"]=True
+        item=hwp_docs.style(style_id or self.out.get('template_id') or hwp_docs.suggested_style(job)['id'])
         from copy import deepcopy
         self.folder_plan=deepcopy(self.out.get("folder_plan"))
         self.folder_mode=self.out.get('folder_mode') or ('case' if self.folder_plan else 'direct')
@@ -699,7 +700,7 @@ class SimpleOutgoing(OutgoingEditor):
         from outgoing_folders import receipt_case_folders,receipt_send_folders
         self.receipt_roots=receipt_case_folders(job,app.config)
         self.receipt_locations=receipt_send_folders(job,app.config)
-        self.reuse_receipt_case=bool(self.receipt_roots) and self.folder_mode!='case' and not (self.out.get('hwp_path') or (self.folder_plan and (self.folder_plan.get('created') or self.folder_plan.get('folder_name'))))
+        self.reuse_receipt_case=self.can_reuse_receipt(item)
         self.receipt_location=self.out.get('save_folder') if self.out.get('save_folder') in self.receipt_locations else next(iter(self.receipt_locations),'')
         if self.reuse_receipt_case:self.folder_plan=None;self.folder_mode='direct'
         self.changing_folder=False
@@ -725,10 +726,12 @@ class SimpleOutgoing(OutgoingEditor):
         self.body=tk.Text(self.win);self.body.insert("1.0",self.out.get("body",""))
         self.summary=tk.Text(self.win);self.summary.insert("1.0",self.out.get("summary",""))
         self.source=tk.Text(self.win);self.source.insert("1.0",job.get("text",""))
-        item=hwp_docs.style(style_id or self.vars["template_id"].get() or hwp_docs.suggested_style(job)["id"])
         self.style_label.set(item["label"])
         if style_id or not self.vars["template_id"].get():self.choose_style(True)
         elif not self.body.get("1.0","end").strip():self.use_template_body(True)
+        if not Path(self.vars['save_folder'].get()).is_absolute():
+            planned=self.folder_plan or {}
+            self.vars['save_folder'].set((planned.get('save_path') or planned.get('base')) if self.folder_mode=='case' and planned.get('base') else hwp_docs.destination(app.config,item))
         if self.reuse_receipt_case:self.use_receipt_location()
         heading(panel,item["label"],"양식별 기본 제목 또는 수신 제목에서 시작합니다. 발신 제목과 필요한 항목을 수정하세요.")
         ttk.Label(panel,text="발신대장: "+self.family.get()+"  ·  직인 분류: "+item["family"]+" ○",foreground="#1c5295").pack(anchor="w",pady=(0,12))
@@ -763,7 +766,7 @@ class SimpleOutgoing(OutgoingEditor):
         ttk.Button(route,text="변경",command=self.choose_destination).pack(side="right",padx=6)
         folderbar=ttk.Frame(panel);folderbar.pack(fill="x",pady=6)
         self.folder_button=ttk.Button(folderbar,command=self.configure_folders);self.folder_button.pack(side='left')
-        self.folder_summary=tk.StringVar(value=("수신 때 만든 센터발송 폴더에 HWP만 저장합니다." if self.receipt_locations else "수신 공문폴더 안에서 기존 발신 저장 폴더를 선택하세요.") if self.reuse_receipt_case else "기존 폴더 형식을 읽어 새 공문폴더와 내부폴더를 만들 수 있습니다.")
+        self.folder_summary=tk.StringVar(value="수신 때 만든 센터발송 폴더에 HWP만 저장합니다." if self.reuse_receipt_case else "양식의 기본 저장 위치를 사용합니다. 필요하면 변경하세요.")
         ttk.Label(folderbar,textvariable=self.folder_summary,wraplength=650).pack(side="left",padx=10)
         self.refresh_storage_summary()
         def changed_folder(*_):
@@ -822,16 +825,22 @@ class SimpleOutgoing(OutgoingEditor):
         if self.out.get("stamp",{}).get("sheet_attempted"):
             for widget in self.stamp_controls:widget.configure(state="disabled")
 
+    def can_reuse_receipt(self,item):
+        return bool(self.receipt_locations) and not hwp_docs.is_relief(item,self.job) and self.folder_mode!='case' and not (self.out.get('hwp_path') or (self.folder_plan and (self.folder_plan.get('created') or self.folder_plan.get('folder_name'))))
+
     def use_receipt_location(self):
         if not self.reuse_receipt_case:return
         path=self.out.get('save_folder','') if self.out.get('receipt_folder_override') else self.receipt_location
+        if not path:return
         self.changing_folder=True;self.vars['save_folder'].set(path);self.changing_folder=False
         self.out['save_folder']=path
         self.folder_plan=None;self.folder_mode='direct'
 
     def choose_style(self,event=None):
         previous=self.vars['template_id'].get()
-        reuse=getattr(self,'reuse_receipt_case',False) and self.folder_mode!='case'
+        item=next(x for x in self.styles if x['label']==self.style_label.get())
+        self.reuse_receipt_case=self.can_reuse_receipt(item)
+        reuse=self.reuse_receipt_case
         if reuse:self.changing_folder=True
         try:super().choose_style(event)
         finally:

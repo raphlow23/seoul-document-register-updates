@@ -10,6 +10,32 @@ from workflow_ui import SimpleOutgoing
 
 
 class OutgoingOptionTests(unittest.TestCase):
+    def test_relief_receipt_without_center_send_uses_template_default_and_resumes_blank_path(self):
+        import json
+        self.items.append({**self.items[0],'id':'8','label':'완화공문','role':'relief_reply'})
+        job=create(self.config,self.store);job.pop('standalone_outgoing');job.update(receipt_done=True,category='완화공문')
+        case=self.base/'완화신청'/'접수 공문';case.mkdir(parents=True);(case/'1.완화신청자료').mkdir()
+        (case/'.수신등록.json').write_text(json.dumps({'id':job['id']}),encoding='utf-8')
+        job['storage_roots']=[{'scope':'receipt','path':str(case)}]
+        job['outgoing'].update(template_id='8',save_folder='',title='완화 회신',receiver='구청')
+        editor=SimpleOutgoing(self.app,job,self.root)
+        self.assertEqual(editor.vars['save_folder'].get(),str(self.base))
+        self.assertFalse(editor.reuse_receipt_case)
+        with patch.object(editor,'save') as save,patch('workflow_ui.messagebox.showerror') as error:
+            editor.register();save.assert_called_once();error.assert_not_called()
+
+    def test_relief_default_ignores_receipt_center_send_and_preserves_manual_destination(self):
+        import json
+        self.items.append({**self.items[0],'id':'8','label':'완화공문','role':'relief_reply'})
+        job=create(self.config,self.store);job.pop('standalone_outgoing');job.update(receipt_done=True,category='완화공문')
+        case=self.base/'접수 공문';case.mkdir();(case/'2.센터발송').mkdir()
+        (case/'.수신등록.json').write_text(json.dumps({'id':job['id']}),encoding='utf-8')
+        job['storage_roots']=[{'scope':'receipt','path':str(case)}]
+        editor=self.editor(job,'8');self.assertEqual(editor.vars['save_folder'].get(),str(self.base));editor.win.destroy()
+        manual=self.base/'직접 선택';manual.mkdir()
+        job['outgoing'].update(template_id='8',save_folder=str(manual))
+        editor=self.editor(job,'8');self.assertEqual(editor.vars['save_folder'].get(),str(manual))
+
     def setUp(self):
         tmp=tempfile.TemporaryDirectory();self.addCleanup(tmp.cleanup);self.base=Path(tmp.name)
         self.store=core.Store(self.base/'history.sqlite');self.addCleanup(self.store.db.close)
