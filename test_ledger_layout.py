@@ -67,7 +67,8 @@ class LayoutTests(unittest.TestCase):
         cfg={**self.config,'layout':layout,'_outgoing_family':family}
         owner.browser=BrowserSession(cfg,owner,ui=grid)
         job={'hash':scope+family+str(shift),'files':[{'hash':'body','path':'unused.pdf'}], 'date':'2026-11-11','title':'새 제목','issuer':'발신 기관','recipient':'새 담당자','method':'FAX','state':'확인 필요','receipt_type':family}
-        job['outgoing']=outgoing.defaults(job,{'recipient':'새 담당자'});job['outgoing'].update(enabled=True,receiver='새 수신처',ledger_type=family)
+        job['outgoing']=outgoing.defaults(job,{'recipient':'새 담당자'});job['outgoing'].update(enabled=True,receiver='새 수신처',ledger_type=family,date=job['date'])
+        job['outgoing']['stamp']['date']=job['date']
         if scope=='stamp':job['outgoing'].update(complete=True,document_number='서울센터2026-21')
         record=job if scope=='receipt' else job['outgoing'] if scope=='outgoing' else job['outgoing']['stamp']
         record['sheet_connection']={'spreadsheet_id':'owned-fixture','tab':owner.tab,'layout':layout}

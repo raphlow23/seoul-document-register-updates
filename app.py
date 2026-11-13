@@ -566,7 +566,6 @@ class App:
         root.after(200, self.poll)
         if not smoke:
             root.after(100, self.startup)
-            root.after(1000,self.prepare_ocr_background)
 
     def prepare_ocr_background(self):
         if getattr(self,'closing',False) or self.updating:return
@@ -1159,13 +1158,8 @@ def main():
             ctypes.windll.user32.MessageBoxW(None, "프로그램이 이미 실행 중입니다.", "서울센터 공문 수신등록", 0)
             return
     try:
-        from app_icon import prepare_process_identity,prepare_desktop_identity
+        from app_icon import prepare_process_identity,schedule_desktop_identity
         prepare_process_identity()
-        if getattr(sys,'frozen',False) and '--self-test' not in sys.argv and '--test-restart' not in sys.argv:
-            try:prepare_desktop_identity(DATA,sys.executable)
-            except Exception as error:
-                DATA.mkdir(parents=True,exist_ok=True)
-                (DATA/'taskbar-setup-error.txt').write_text(str(error),encoding='utf-8')
         from file_drop import create_root
         root = create_root()
         if "--self-test" in sys.argv:
@@ -1216,6 +1210,7 @@ def main():
             test_restart=receipt is not None and '--test-restart' in sys.argv
             try:
                 app=App(root,receipt.parent/'restart-test-data' if test_restart else DATA,smoke=test_restart)
+                if getattr(sys,'frozen',False) and not test_restart:schedule_desktop_identity(root,DATA,sys.executable)
             except Exception as error:
                 if receipt:receipt.write_text(json.dumps({'status':'error','message':str(error)},ensure_ascii=False),encoding='utf-8')
                 raise

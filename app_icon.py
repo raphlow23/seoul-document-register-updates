@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tkinter as tk
 import uuid
+import threading
 
 APP_ID='SeoulDocumentRegister.DocumentRegistry'
 DISPLAY_NAME='서울센터 공문 업무'
@@ -46,7 +47,11 @@ def repair_shortcuts(exe,ico,paths=None):
         try:
             link=pythoncom.CoCreateInstance(shell.CLSID_ShellLink,None,pythoncom.CLSCTX_INPROC_SERVER,shell.IID_IShellLink)
             persist=link.QueryInterface(pythoncom.IID_IPersistFile);persist.Load(str(path),66)
-            target=Path(os.path.expandvars(link.GetPath(shell.SLGP_RAWPATH)[0])).resolve()
+            raw=Path(os.path.expandvars(link.GetPath(shell.SLGP_RAWPATH)[0]))
+            # Do not resolve unrelated desktop links: a disconnected NAS link can
+            # otherwise block application startup until Windows' network timeout.
+            if raw.name.casefold()!=exe.name.casefold() or raw.anchor.casefold()!=exe.anchor.casefold():continue
+            target=raw.resolve()
             if os.path.normcase(str(target))!=os.path.normcase(str(exe)):continue
             link.SetIconLocation(str(ico),0)
             store=link.QueryInterface(propsys.IID_IPropertyStore)
@@ -59,9 +64,33 @@ def repair_shortcuts(exe,ico,paths=None):
 
 
 def prepare_desktop_identity(data,exe):
-    ico=persistent_icon(data);result=repair_shortcuts(exe,ico)
-    (Path(data)/'taskbar-shortcut-status.json').write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
+    ico=persistent_icon(data);exe=Path(exe).resolve();stat=exe.stat()
+    key={'exe':str(exe),'size':stat.st_size,'modified_ns':stat.st_mtime_ns,'icon':str(ico),'app_id':APP_ID}
+    path=Path(data)/'taskbar-shortcut-status.json'
+    try:
+        saved=json.loads(path.read_text(encoding='utf-8'))
+        if isinstance(saved,dict) and saved.get('identity')==key and not saved.get('errors'):return {**saved,'cached':True}
+    except (OSError,ValueError,TypeError):pass
+    result={**repair_shortcuts(exe,ico),'identity':key}
+    temporary=path.with_suffix('.'+uuid.uuid4().hex+'.tmp')
+    temporary.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8');os.replace(temporary,path)
     return result
+
+
+def schedule_desktop_identity(root,data,exe):
+    """Keep COM/link maintenance outside the first-paint path and GUI event thread."""
+    def work():
+        import pythoncom
+        pythoncom.CoInitialize()
+        try:prepare_desktop_identity(data,exe)
+        except Exception as error:
+            try:
+                Path(data).mkdir(parents=True,exist_ok=True)
+                (Path(data)/'taskbar-setup-error.txt').write_text(str(error),encoding='utf-8')
+            except OSError:pass
+        finally:pythoncom.CoUninitialize()
+    def start():threading.Thread(target=work,daemon=True,name='shortcut-maintenance').start()
+    return root.after(1500,start)
 
 
 def apply_window_icon(root,data=None,exe=None):
