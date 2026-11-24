@@ -8,4 +8,4 @@ UPDATE_BASE_URL = "https://github.com/" + UPDATE_REPOSITORY + "/releases/latest/
 # Backup path checks normalize Windows long and short directory names.
 # Preserve custom browser date separators and verify the frozen layout editor.
 # Defer shortcut maintenance and OCR setup; use deterministic ledger date fixtures.
-# Verify folder examples are visible on entry at the minimum window size.
+# Verify visible folder examples and the save action at minimum window size.
