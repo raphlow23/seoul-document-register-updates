@@ -36,7 +36,7 @@ class WorkflowShell:
         header=ttk.Frame(outer,style='App.TFrame');header.pack(fill="x")
         ttk.Label(header,text="서울센터 공문 업무",font=("맑은 고딕",22,"bold"),style='App.TLabel').pack(side="left")
         ttk.Button(header,text="설정 · 연결",command=app.settings).pack(side="right")
-        nav=ttk.Frame(outer,style='Card.TFrame',padding=10);nav.pack(fill="x",pady=14)
+        nav=ttk.Frame(outer,style='Card.TFrame',padding=(6,2));nav.pack(fill="x",pady=(3,5))
         self.nav={}
         for key,label,fn in (("receipt","수신 접수",self.receipt_home),("outgoing","발신 작성",self.outgoing_home),("history","처리 이력",self.history_home)):
             button=ttk.Button(nav,text=label,command=fn);button.pack(side="left",padx=(0,8));self.nav[key]=button
@@ -44,8 +44,9 @@ class WorkflowShell:
         ttk.Button(nav,text="선택 내용 다시 확인",command=self.reconfigure).pack(side="left",padx=4)
         app.watching=tk.BooleanVar(value=True)
         ttk.Checkbutton(nav,text="다운로드 자동 확인",variable=app.watching,command=app.toggle_watch).pack(side="right")
-        self.steps=tk.StringVar();ttk.Label(outer,textvariable=self.steps,foreground="#1c5295",font=("맑은 고딕",11,"bold"),style='App.TLabel').pack(anchor="w",pady=(0,8))
-        self.content=ttk.Frame(outer,style='Card.TFrame',padding=16)
+        self.steps=tk.StringVar()
+        ttk.Label(header,textvariable=self.steps,foreground="#1c5295",font=("맑은 고딕",10,"bold"),style='App.TLabel').pack(side="left",padx=12)
+        self.content=ttk.Frame(outer,style='Card.TFrame',padding=(12,8))
         self.pages={key:ttk.Frame(self.content) for key in ("queue","title","route","receipt_result","outgoing_list","outgoing_types","outgoing_form","outgoing_result","history")}
         app.fields={k:tk.StringVar() for k in ("title","category","recipient","date","issuer","receipt_type")}
         app.outgoing_enabled=tk.BooleanVar(value=False);app.detail=tk.StringVar()

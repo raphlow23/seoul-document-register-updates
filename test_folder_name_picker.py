@@ -11,6 +11,57 @@ from route_chooser import RouteChooser
 
 
 class FolderNamePickerTests(unittest.TestCase):
+    def test_receipt_layout_keeps_multiple_rows_and_save_action_visible(self):
+        from tkinter import ttk, font
+        from modern_ui import apply_theme
+        from workflow_ui import WorkflowShell
+        from unittest.mock import Mock
+
+        root=self.root
+        apply_theme(root)
+        app=Mock(root=root,config={},commands=queue.Queue(),busy=False)
+        outer=ttk.Frame(root,padding=20)
+        outer.pack(fill='both',expand=True)
+        flow=WorkflowShell(app,outer)
+        app.workflow=flow
+        flow.show('route','receipt',3)
+        job={'hash':'fixture','title':'중앙센터 수신 공문 시험','date':'2026-11-24','category':'중앙센터 공문','files':[]}
+        dialog=RouteChooser(app,job,parent=flow.pages['route'])
+        dialog.win.after_cancel(dialog.initial_after)
+        location=self.folder.name
+        dialog.deliver({'owner':dialog.owner,'request':dialog.request,'records':[
+            {**describe_directory(self.folder),'relative':location}]})
+        dialog.selected.add(location)
+        dialog.redraw_preview()
+        canvas=dialog.settings_scroll.canvas
+        line=font.Font(root=root,font=dialog.preview['font']).metrics('linespace')
+        def buttons(widget):
+            for child in widget.winfo_children():
+                if isinstance(child,ttk.Button):yield child
+                yield from buttons(child)
+        save=next(button for button in buttons(dialog.win) if button['text']=='저장하고 수신 접수')
+        root.deiconify()
+        for size in ('1000x660','1180x900'):
+            with self.subTest(size=size):
+                root.geometry(size)
+                root.update()
+                self.assertGreaterEqual(canvas.winfo_height(),9*line,[
+                    (str(w),w.winfo_geometry(),w.winfo_ismapped()) for w in
+                    (root,outer,flow.content,dialog.win,canvas.master.master.master,canvas.master.master,canvas)])
+                self.assertGreaterEqual(dialog.tree.winfo_height(),3*38)
+                self.assertGreaterEqual(dialog.preview.winfo_height(),3*line+8)
+                self.assertGreaterEqual(dialog.examples.winfo_height(),5*line)
+                canvas.yview_moveto(1)
+                root.update_idletasks()
+                picker=dialog.name_picker
+                self.assertGreaterEqual(picker.winfo_rooty(),canvas.winfo_rooty())
+                self.assertLessEqual(picker.winfo_rooty()+picker.winfo_height(),canvas.winfo_rooty()+canvas.winfo_height())
+                self.assertTrue(save.winfo_ismapped())
+                self.assertEqual(save.winfo_height(),save.winfo_reqheight())
+                self.assertLessEqual(save.winfo_rooty()+save.winfo_height(),root.winfo_rooty()+root.winfo_height())
+                canvas.yview_moveto(0)
+        dialog.close()
+
     def test_each_location_retains_its_title_children_and_year_only_choice(self):
         app=SimpleNamespace(root=self.root,config={'root':str(self.base)},commands=queue.Queue(),busy=False)
         job={'hash':'fixture','title':'대장 제목','date':'2026-11-05','category':'중앙센터 공문','files':[]}
