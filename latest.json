@@ -1,10 +1,10 @@
 {
   "product": "SeoulDocumentRegister",
-  "version": "2.11.1",
-  "filename": "SeoulDocumentRegister-2.11.1.exe",
-  "size": 55542523,
-  "sha256": "dc712445811eb69f0015a2968563a10d9fe47c9995ccc7dc5e915cd33d2e26ba",
-  "download_base": "https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.11.1",
+  "version": "2.11.2",
+  "filename": "SeoulDocumentRegister-2.11.2.exe",
+  "size": 55550434,
+  "sha256": "7a1aed604d3eb1fe2bb6aed85187d735dba5f4b3436a493693b267855d7858b2",
+  "download_base": "https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.11.2",
   "components": {
     "spacing_model": {
       "filename": "SpacingModel-0.20.0.zip",
@@ -12,12 +12,11 @@
       "sha256": "f1cc042d0ea315d34170049ee770eacaf13c0f3e7c1b6117a38c9fbc51bfb4ce"
     },
     "ocr_runtime": {
-      "filename": "OCRRuntime-a1f205af29dd5e7e.zip",
-      "size": 51667024,
-      "sha256": "ce9e45e9eb708eca74b703ac7560271cdcb7f49f57a30e96086f5f6f4172d7a8",
-      "runtime_id": "a1f205af29dd5e7ef4159067feef0ac11e1ade77d5a1f15fce7ebda001b9b37c"
+      "filename": "OCRRuntime-35bee3de3857000a.zip",
+      "size": 51667357,
+      "sha256": "81b77a780a2a7779c1b83438cd417ae34d41ec15ada492279aabe236f6ab8c50",
+      "runtime_id": "35bee3de3857000a5d89d06f5d703919876d196829385d8479cd0acf0c47e126"
     }
   },
-  "signature": "zHj22D8eKla/hAqPlqfpQwBefA9Iq3BBEqV9yDgk+itcz3uUooKksvriQH5LW+lQnvvsNCZGzbNEAtv4mDAfAw=="
+  "signature": "4BO1WzmBBPTGFPo4KeEFMVPu5Dnm/EgMGVb4p+6JRP8vGnDpqkZlYFBVgf6y3lNaX0sqCrad5ERklAF8T2u7Ag=="
 }
-
