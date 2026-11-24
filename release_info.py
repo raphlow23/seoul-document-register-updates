@@ -1,4 +1,4 @@
-VERSION = "2.11.1"
+VERSION = "2.11.2"
 # Back cancellation archives the latest saved current HWP before removing generated files.
 # Build downloads authenticate to GitHub to avoid shared-runner API rate limits.
 PRODUCT = "SeoulDocumentRegister"
@@ -8,4 +8,3 @@ UPDATE_BASE_URL = "https://github.com/" + UPDATE_REPOSITORY + "/releases/latest/
 # Backup path checks normalize Windows long and short directory names.
 # Preserve custom browser date separators and verify the frozen layout editor.
 # Defer shortcut maintenance and OCR setup; use deterministic ledger date fixtures.
-
