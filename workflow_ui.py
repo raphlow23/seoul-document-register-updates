@@ -170,7 +170,11 @@ class WorkflowShell:
         vals=(job.get("date",""),job["title"] or ('새 발신 공문 (작성 중)' if standalone else ''),numbers,job["state"])
         listed=received or standalone
         self.row(self.history_tree,key,listed and not alias and not job.get('history_hidden'),vals)
-        self.row(self.outgoing_list_tree,key,listed and not alias and not job.get('outgoing_list_hidden'),vals)
+        outgoing_finished=out.get('complete') and out.get('stamp',{}).get('complete')
+        outgoing_status=job["state"]
+        if received and not standalone and outgoing_status=="완료" and not out.get('enabled'):
+            outgoing_status="수신 접수 · 발신 가능"
+        self.row(self.outgoing_list_tree,key,listed and not alias and not outgoing_finished and not job.get('outgoing_list_hidden'),(*vals[:3],outgoing_status))
 
     def restart_outgoing(self,hide=False):
         if not self.available():return

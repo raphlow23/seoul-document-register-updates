@@ -193,32 +193,35 @@ def run():
                 # Deleting/moving downloads removes pending items, while registered history survives.
                 for f in files:Path(f["path"]).unlink()
                 app.render(app.jobs[h0]);assert flow.history_tree.exists(h0)
-                # Removing history rows is a persisted display preference only.
-                extra_history={**deepcopy(app.jobs[h0]),'hash':'history-fixture-2'}
+                assert not flow.outgoing_list_tree.exists(h0)
+                # Keep a partially registered outgoing alongside the completed one.
+                pending_key='history-fixture-2'
+                extra_history={**deepcopy(app.jobs[h0]),'hash':pending_key,'state':'발신 완료·직인 등록 대기'}
+                extra_history['outgoing']['stamp'].pop('complete')
                 app.commands.put(('save',extra_history));app.render(extra_history);idle()
                 flow.history_home();flow.history_tree.selection_set([h0,'history-fixture-2'])
                 app.hide_history()
                 wait(lambda:not flow.history_tree.exists(h0) and not flow.history_tree.exists('history-fixture-2'));idle()
-                assert flow.outgoing_list_tree.exists(h0) and flow.outgoing_list_tree.exists('history-fixture-2')
+                assert not flow.outgoing_list_tree.exists(h0) and flow.outgoing_list_tree.exists(pending_key)
                 with __import__('contextlib').closing(Store(base/'history.sqlite').db) as db:
                     import json
                     rows=[json.loads(row[0]) for row in db.execute('SELECT payload FROM jobs')]
                     assert all(next(row for row in rows if row['hash']==key)['history_hidden'] for key in (h0,'history-fixture-2'))
                 assert writes==['receipt','outgoing'] and app.jobs[h0]['number']=='581' and app.jobs[h0]['outgoing']['number']=='12'
                 # Cancelled outgoing progress must not survive either list action.
-                flow.outgoing_home();flow.outgoing_list_tree.selection_set(h0)
-                previous_id=app.jobs[h0]['outgoing']['id'];flow.drafts[h0]={'number':'12'}
+                flow.outgoing_home();flow.outgoing_list_tree.selection_set(pending_key)
+                previous_id=app.jobs[pending_key]['outgoing']['id'];flow.drafts[pending_key]={'number':'12'}
                 with patch('workflow_ui.messagebox.askyesno',return_value=False):flow.restart_outgoing()
-                assert app.jobs[h0]['outgoing']['id']==previous_id
+                assert app.jobs[pending_key]['outgoing']['id']==previous_id
                 with patch('workflow_ui.messagebox.askyesno',return_value=True):flow.restart_outgoing()
                 wait(lambda:flow.section=='outgoing' and flow.step==2);idle()
-                assert app.jobs[h0]['outgoing']['id']!=previous_id and 'number' not in app.jobs[h0]['outgoing']
-                assert h0 not in flow.drafts and app.jobs[h0]['number']=='581' and writes==['receipt','outgoing']
-                check_actions();flow.outgoing_home();flow.outgoing_list_tree.selection_set(h0)
+                assert app.jobs[pending_key]['outgoing']['id']!=previous_id and 'number' not in app.jobs[pending_key]['outgoing']
+                assert pending_key not in flow.drafts and app.jobs[pending_key]['number']=='581' and writes==['receipt','outgoing']
+                check_actions();flow.outgoing_home();flow.outgoing_list_tree.selection_set(pending_key)
                 with patch('workflow_ui.messagebox.askyesno',return_value=True):flow.restart_outgoing(hide=True)
-                wait(lambda:not flow.outgoing_list_tree.exists(h0));idle()
-                assert app.jobs[h0]['receipt_done'] and app.jobs[h0]['outgoing_list_hidden'] and app.jobs[h0]['number']=='581'
-                flow.start_outgoing(app.jobs[h0]);assert flow.step==2 and 'number' not in app.jobs[h0]['outgoing']
+                wait(lambda:not flow.outgoing_list_tree.exists(pending_key));idle()
+                assert app.jobs[pending_key]['receipt_done'] and app.jobs[pending_key]['outgoing_list_hidden'] and app.jobs[pending_key]['number']=='581'
+                flow.start_outgoing(app.jobs[pending_key]);assert flow.step==2 and 'number' not in app.jobs[pending_key]['outgoing']
                 pending={**deepcopy(jobs[1]),"hash":"missing","files":[{"hash":"missing","path":str(downloads/"gone.pdf")}],"state":"확인 필요"}
                 app.render(pending);assert not app.tree.exists("missing")
                 assert not errors,errors
@@ -298,9 +301,10 @@ def run():
                 editor.storage_mode.set('direct');editor.change_storage_mode();editor.vars['save_folder'].set(str(direct));editor.open_registered()
                 wait(lambda:open_hwp.call_args.args[0]['outgoing']['save_folder']==str(direct));idle()
                 assert writes==written and not app.jobs[new_key]['outgoing'].get('folder_plan')
-                flow.outgoing_home();flow.outgoing_list_tree.selection_set(new_key)
-                with patch('workflow_ui.messagebox.askyesno',return_value=True):flow.restart_outgoing(hide=True)
-                wait(lambda:not flow.outgoing_list_tree.exists(new_key));idle()
+                flow.outgoing_home();assert not flow.outgoing_list_tree.exists(new_key)
+                flow.history_home();assert flow.history_tree.exists(new_key)
+                flow.history_tree.selection_set(new_key);flow.start_outgoing_selected()
+                assert flow.step==3 and flow.current==new_key and writes==written
                 assert not app.jobs[new_key].get('receipt_done')
                 # Mail's combined ZIP chooses an inner scanned PDF, not the container.
                 flow.receipt_home();writer=PdfWriter();writer.add_blank_page(width=300,height=400)

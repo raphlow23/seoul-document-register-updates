@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='수신 접수 저장 위치 화면 개선'
-RELEASE_BODY='저장 위치와 생성 예정 폴더를 왼쪽에서 함께 확인하고, 오른쪽에서 위치별 제목과 내부 폴더를 설정할 수 있습니다. 기존 폴더 이름은 다섯 줄로 표시하며 목록과 설정을 각각 스크롤할 수 있습니다. 상단 메뉴와 단계 표시의 여백을 줄였습니다.'
+RELEASE_TITLE='발신 작성 목록에서 완료 공문 자동 정리'
+RELEASE_BODY='발신대장과 직인날인대장 등록이 끝난 공문은 처리 이력에서 확인할 수 있습니다. 발신 작성에는 수신 접수 후 발신할 수 있는 문서와 발신 진행 중인 문서를 표시합니다. 기존에 완료한 공문에도 적용됩니다.'
 _release_id = None
 
 
