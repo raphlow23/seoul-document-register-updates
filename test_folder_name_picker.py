@@ -45,12 +45,11 @@ class FolderNamePickerTests(unittest.TestCase):
             with self.subTest(size=size):
                 root.geometry(size)
                 root.update()
-                self.assertGreaterEqual(canvas.winfo_height(),9*line,[
-                    (str(w),w.winfo_geometry(),w.winfo_ismapped()) for w in
-                    (root,outer,flow.content,dialog.win,canvas.master.master.master,canvas.master.master,canvas)])
+                self.assertGreaterEqual(canvas.winfo_height(),9*line)
                 self.assertGreaterEqual(dialog.tree.winfo_height(),3*38)
                 self.assertGreaterEqual(dialog.preview.winfo_height(),3*line+8)
                 self.assertGreaterEqual(dialog.examples.winfo_height(),5*line)
+                self.assertGreaterEqual(canvas.winfo_rooty()+canvas.winfo_height()-dialog.examples.winfo_rooty(),3*line)
                 canvas.yview_moveto(1)
                 root.update_idletasks()
                 picker=dialog.name_picker

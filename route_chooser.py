@@ -163,8 +163,8 @@ class RouteChooser:
         self.tree.bind("<ButtonRelease-1>", self.click)
         self.tree.bind('<<TreeviewSelect>>',lambda _:(self.focus_folder(self.tree.selection()[0]),self.redraw_preview()) if self.tree.selection() and self.tree.selection()[0] in self.records else None)
         if not self.embedded:ttk.Label(right, text="체크된 각 위치 안에 새 공문 폴더를 만듭니다.\n원본 첨부파일은 다운로드 폴더에 남습니다.", wraplength=380).pack(anchor="w", pady=4)
-        ttk.Label(right, text="기존 폴더 이름 예시", font=("맑은 고딕",11,"bold")).pack(anchor="w")
-        example_area=ttk.Frame(right);example_area.pack(fill='x',pady=(3,6))
+        ttk.Label(right, text="기존 폴더 이름 예시", font=("맑은 고딕",11,"bold")).pack(before=options,anchor="w")
+        example_area=ttk.Frame(right);example_area.pack(before=options,fill='x',pady=(3,6))
         self.examples = tk.Listbox(example_area, height=5, font=("맑은 고딕",10))
         example_scroll=ttk.Scrollbar(example_area,command=self.examples.yview)
         self.examples.configure(yscrollcommand=example_scroll.set)
@@ -420,13 +420,14 @@ class RouteChooser:
                 name = self.year_folders.get(relative,self.job['date'][:4]) if self.storage_modes.get(relative)=='year' else folder_name(self.templates.get(relative,""),self.folder_titles.get(relative,self.job['title']),self.job["date"],ordinal)
             except (ValueError,TypeError,KeyError) as error:
                 name = "이름 형식을 선택해 주세요: " + str(error)
+            if lines:lines.append("")
             lines.append(relative+"\n  └ "+name)
             children=child_folders(self.agency.get(),self.child_sets.get(relative,CHILD_KINDS),self.child_orders.get(relative))
             lines.extend("       └ "+child for child in children.values())
             lines.append("       첨부 저장: "+(children.get("incoming") or children.get('relief') or "상위 공문 폴더"))
         self.preview.configure(state="normal")
         self.preview.delete("1.0","end")
-        self.preview.insert("1.0","\n\n".join(lines) or "체크한 저장 위치가 여기에 표시됩니다.")
+        self.preview.insert("1.0","\n".join(lines) or "체크한 저장 위치가 여기에 표시됩니다.")
         self.preview.configure(state="disabled")
 
     def apply(self, execute):
