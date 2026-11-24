@@ -733,7 +733,9 @@ class SimpleOutgoing(OutgoingEditor):
         self.source=tk.Text(self.win);self.source.insert("1.0",job.get("text",""))
         self.style_label.set(item["label"])
         if style_id or not self.vars["template_id"].get():self.choose_style(True)
-        elif not self.body.get("1.0","end").strip():self.use_template_body(True)
+        else:
+            self.apply_form_fields(item,item['id'])
+            if not self.body.get("1.0","end").strip():self.use_template_body(True)
         if not Path(self.vars['save_folder'].get()).is_absolute():
             planned=self.folder_plan or {}
             self.vars['save_folder'].set((planned.get('save_path') or planned.get('base')) if self.folder_mode=='case' and planned.get('base') else hwp_docs.destination(app.config,item))
@@ -842,7 +844,6 @@ class SimpleOutgoing(OutgoingEditor):
         self.folder_plan=None;self.folder_mode='direct'
 
     def choose_style(self,event=None):
-        previous=self.vars['template_id'].get()
         item=next(x for x in self.styles if x['label']==self.style_label.get())
         self.reuse_receipt_case=self.can_reuse_receipt(item)
         reuse=self.reuse_receipt_case
@@ -851,21 +852,18 @@ class SimpleOutgoing(OutgoingEditor):
         finally:
             if reuse:self.changing_folder=False
         if reuse:self.use_receipt_location()
-        from outgoing_preferences import title_for_choice
-        title=title_for_choice(self.app.config,self.vars['template_id'].get(),previous,self.out)
-        if title is not None:self.vars['title'].set(title);self.same.set(False)
 
     def save_default_title(self):
         if not self.app.workflow.available():return
         from outgoing_preferences import save_default_title
-        save_default_title(self.app.config,self.vars['template_id'].get(),self.vars['title'].get())
+        save_default_title(self.app.config,hwp_docs.style(self.vars['template_id'].get()),self.vars['title'].get())
         self.app.persist_config();self.app.commands.put(('config',self.app.config.copy()))
         self.status.set('이 양식의 기본 제목을 저장했습니다. 다음 새 발신 작성부터 사용합니다.')
 
     def load_default_title(self):
-        if self.out.get('sheet_attempted'):return
+        if self.out.get('sheet_attempted') or self.out.get('complete'):return
         from outgoing_preferences import default_title
-        title=default_title(self.app.config,self.vars['template_id'].get())
+        title=default_title(self.app.config,hwp_docs.style(self.vars['template_id'].get()))
         if not title:return messagebox.showinfo('기본 제목','아직 저장한 기본 제목이 없습니다. 제목을 입력하고 기본 제목 저장을 누르세요.',parent=self.app.root)
         self.same.set(False);self.vars['title'].set(title)
 

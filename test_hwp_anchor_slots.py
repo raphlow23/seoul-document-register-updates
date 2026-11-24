@@ -14,7 +14,7 @@ from hwp_anchor_slots import occurrences
 
 
 class AnchorSlotTests(unittest.TestCase):
-    def fixture(self,base):
+    def fixture(self,base,extra_lines=()):
         import pythoncom
         from win32com import storagecon
         def record(tag,payload):return struct.pack('<I',tag|(len(payload)<<20))+payload
@@ -23,6 +23,7 @@ class AnchorSlotTests(unittest.TestCase):
         header=bytearray(256);header[:17]=b'HWP Document File';struct.pack_into('<I',header,36,1)
         styles=b''.join(record(26,struct.pack('<H',len(name))+name.encode('utf-16-le')) for name in ['Style'+str(i) for i in range(10)])
         lines=['수신 기초센터장','제목 시험 문서 제목','본문 다른 기관 (2026. 00. 00.) 참조','서울센터 2026-000','시행 (2026. 00. 00.)']
+        lines.extend(extra_lines)
         section=b''.join(record(66,b'\0'*8+struct.pack('<H',4)+b'\x03\0')+record(67,(line+'\r').encode('utf-16-le'))+record(68,struct.pack('<II',0,7)) for line in lines)
         path=base/'fixture.hwp';pythoncom.CoInitialize();storage=body=stream=None
         try:
@@ -50,6 +51,20 @@ class AnchorSlotTests(unittest.TestCase):
             self.assertIn(item['old_date'].rstrip(),after);self.assertEqual(source.read_bytes(),original)
             self.assertEqual(len(verify(source,copy)),10)
             with patch.object(docs,'template_root',return_value=copy.parent):docs.check_template(item['id'])
+
+    def test_repeated_heading_keeps_readable_draft_default_after_edit(self):
+        from core import extract
+        from outgoing_preferences import default_title
+        with tempfile.TemporaryDirectory() as temp:
+            base=Path(temp);source=self.fixture(base,['참고: 시험 문서 제목'])
+            settings={**library.suggestions(extract(source)),'label':'시험','folder':str(base),'_occurrences':{'date':1,'title':0}}
+            with patch.object(docs,'catalog',return_value=[]):
+                item=library.add(source,settings,base/'forms')
+            self.assertIn('{{S',item['title_fragments'][0])
+            self.assertEqual(default_title({},item),'시험 문서 제목')
+            settings.update(title=item['title_fragments'][0].strip(),date=item['old_date'].strip(),_edit_existing=True)
+            edited=library.add(base/'forms'/item['file'],settings,base/'forms',replace_id=item['id'])
+            self.assertEqual(default_title({},edited),'시험 문서 제목')
 
     def test_ambiguous_date_does_not_register_or_modify_source(self):
         from core import extract

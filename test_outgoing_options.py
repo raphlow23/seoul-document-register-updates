@@ -102,6 +102,36 @@ class OutgoingOptionTests(unittest.TestCase):
         next(x for x in footer.winfo_children() if x.winfo_class()=='TButton' and x.cget('text')=='기본 설정 저장').invoke()
         self.assertEqual(self.config['outgoing_default_titles']['one'],'설정에서 고친 제목')
 
+    def test_saved_hwp_wording_fills_new_and_previously_empty_drafts(self):
+        self.config['outgoing_default_titles'].clear()
+        self.items[0].update(title_fragments=['기술지원 업무 안내'],receiver='시험센터장',default_receiver='')
+        job=create(self.config,self.store)
+        for style in ('one',None):
+            editor=self.editor(job,style)
+            saved=editor.current()
+            self.assertEqual((saved['title'],saved['receiver']),('기술지원 업무 안내','시험센터장'))
+            job['outgoing']={**saved,'title':'','receiver':''}
+            editor.win.destroy()
+        job['outgoing'].update(title='개별 제목',receiver='개별 수신처')
+        editor=self.editor(job,None)
+        self.assertEqual((editor.current()['title'],editor.current()['receiver']),('개별 제목','개별 수신처'))
+        editor.win.destroy()
+        job['outgoing'].update(title='',receiver='',sheet_attempted=True)
+        editor=self.editor(job,None)
+        self.assertEqual((editor.current()['title'],editor.current()['receiver']),('',''))
+
+    def test_tokens_stay_blank_and_received_title_is_preserved(self):
+        self.config['outgoing_default_titles'].clear()
+        self.items[0].update(title_fragments=['{{제목}}'],receiver='{{S1}}',default_receiver='')
+        editor=self.editor()
+        self.assertEqual((editor.current()['title'],editor.current()['receiver']),('',''))
+        editor.win.destroy()
+        self.items[0].update(title_fragments=['양식 제목'],source_receiver='시험센터장')
+        job=create(self.config,self.store);job.pop('standalone_outgoing')
+        job.update(receipt_done=True,title='접수한 제목');job['outgoing']['title_same']=True
+        editor=self.editor(job)
+        self.assertEqual((editor.current()['title'],editor.current()['receiver']),('접수한 제목','시험센터장'))
+
     def test_direct_mode_detaches_created_plan_without_deleting_existing_folder_or_number(self):
         old=self.base/'old case';old.mkdir();(old/'existing.txt').write_text('keep')
         job=create(self.config,self.store);job['outgoing'].update(number='12',document_number='서울센터2026-012',complete=True,folder_plan={'created':True,'folder_name':'old case','base':str(self.base),'save_path':str(old)})

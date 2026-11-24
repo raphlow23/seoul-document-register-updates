@@ -102,6 +102,7 @@ def add(source,settings,storage=None,replace_id=None):
     raw=source.read_bytes()
     if len(raw)>100*1024*1024:raise ValueError("양식 파일이 변경되었습니다. 다시 선택하세요.")
     anchors={key:str(settings.get(key,"")).strip() for key in TOKENS}
+    selected_text=anchors.copy()
     original_number=anchors['number'];original_hash=hashlib.sha256(raw).hexdigest()
     if settings.get('_source_sha256') and settings['_source_sha256']!=original_hash:raise ValueError('미리보기 이후 원본 HWP가 변경되었습니다. 파일을 다시 선택해 주세요.')
     if any(value and docs._compact(text).count(docs._compact(value))>1 for value in anchors.values()):
@@ -146,6 +147,14 @@ def add(source,settings,storage=None,replace_id=None):
           "date_pattern":"({year2:02d}. {month}. {day})","number_pattern":number_pattern(original_number),
           "original_sha256":original_hash,"source_sha256":hashlib.sha256(raw).hexdigest()}
     if previous and previous.get('role'):item['role']=previous['role']
+    # A repeated phrase is replaced by an internal slot in the installed HWP.
+    # Keep its readable wording for new drafts and subsequent edits of that copy.
+    for field in ('title','receiver'):
+        value=selected_text[field]
+        if settings.get('_edit_existing') and previous and value and value.startswith('{{S'):
+            prior_anchor=(previous.get('title_fragments') or [''])[0] if field=='title' else previous.get('receiver','')
+            if value==prior_anchor.strip():value=previous.get('source_'+field,'')
+        if value and value!=anchors[field] and '{{' not in value:item['source_'+field]=value
     if previous and settings.get('_edit_existing'):
         fragments=previous.get('title_fragments',[])
         if len(fragments)>1 and anchors['title']==fragments[0] and all(docs._compact(text).count(docs._compact(fragment))==1 for fragment in fragments):item['title_fragments']=fragments.copy()

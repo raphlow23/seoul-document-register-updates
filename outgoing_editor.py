@@ -21,9 +21,9 @@ def folder_settings_dialog(app,parent,on_save=None):
     from modern_ui import ScrollablePanel
     area=ScrollablePanel(win);area.pack(fill='both',expand=True);box=area.body
     box.columnconfigure(1,weight=1)
-    fields={};title_fields={}
+    fields={};title_fields={};initial_titles={}
     def reload(_=None):
-        previous={k:v.get() for k,v in fields.items()};previous_titles={k:v.get() for k,v in title_fields.items()};fields.clear();title_fields.clear()
+        previous={k:v.get() for k,v in fields.items()};previous_titles={k:v.get() for k,v in title_fields.items() if v.get()!=initial_titles[k]};fields.clear();title_fields.clear()
         for widget in box.winfo_children():widget.destroy()
         for index,item in enumerate(hwp_docs.catalog()):
             row=index*2
@@ -52,7 +52,8 @@ def folder_settings_dialog(app,parent,on_save=None):
             for col,label,command in ((2,'폴더 선택',choose),(3,'HWP 연결',connect),(4,'이름 변경',change_name),(5,'삭제',remove)):
                 ttk.Button(box,text=label,command=command).grid(row=row,column=col,padx=3,pady=5)
             from outgoing_preferences import default_title
-            title_fields[key]=tk.StringVar(value=previous_titles.get(key,default_title(app.config,key)))
+            initial_titles[key]=default_title(app.config,item)
+            title_fields[key]=tk.StringVar(value=previous_titles.get(key,initial_titles[key]))
             ttk.Label(box,text='기본 발신 제목').grid(row=row+1,column=0,sticky='w',padx=8,pady=(0,12))
             ttk.Entry(box,textvariable=title_fields[key]).grid(row=row+1,column=1,columnspan=5,sticky='ew',padx=8,pady=(0,12))
     reload();win.template_fields=fields;win.template_title_fields=title_fields;win.template_panel=area
@@ -62,7 +63,10 @@ def folder_settings_dialog(app,parent,on_save=None):
     def save():
         app.config["outgoing_folders"]={k:v.get().strip() for k,v in fields.items()}
         from outgoing_preferences import save_default_title
-        for key,var in title_fields.items():save_default_title(app.config,key,var.get())
+        for item in hwp_docs.catalog():
+            key=item['id']
+            if key in title_fields and title_fields[key].get()!=initial_titles[key]:
+                save_default_title(app.config,item,title_fields[key].get())
         app.persist_config();app.commands.put(("config",app.config.copy()))
         if on_save:on_save()
         close()
@@ -211,7 +215,9 @@ class OutgoingEditor:
         if not self.vars["template_id"].get():
             initial=hwp_docs.suggested_style(job,self.out["ledger_type"])
             self.style_label.set(initial["label"]);self.choose_style()
-        elif not self.body.get("1.0","end").strip():self.use_template_body(True)
+        else:
+            self.apply_form_fields(hwp_docs.style(self.vars['template_id'].get()),self.vars['template_id'].get())
+            if not self.body.get("1.0","end").strip():self.use_template_body(True)
         actions=ttk.Frame(outer);actions.pack(fill="x")
         ttk.Button(actions,text="원본 폼 HWP 저장·열기",command=lambda:self.export(False)).pack(side="left")
         ttk.Button(actions,text="별도 HWPX 저장",command=self.export_hwpx).pack(side="left",padx=6)
@@ -303,16 +309,33 @@ class OutgoingEditor:
         if not self.out.get("sheet_attempted"):
             self.family.set(next(k for k,v in FAMILY_LABELS.items() if v==item["family"]))
             self.ledger_defaults()
-        from ledger_layout import default_values
-        configured_receiver=default_values(self.app.config,"outgoing",item["family"])["receiver"]
-        if not self.vars["receiver"].get() or (not configured_receiver and _ is not None and self.vars["receiver"].get() in [x.get("default_receiver",x["receiver"]) for x in self.styles]):
-            self.vars["receiver"].set(item.get("default_receiver",item["receiver"]))
+        self.apply_form_fields(item,previous)
         if item["family"]!="공문" and self.vars["method"].get()=="문서24":self.vars["method"].set("Email")
         cached=self.bodies_by_style.get(item["id"])
         if cached:
             self.body.delete("1.0","end");self.body.insert("1.0",cached["body"]);self.keep_body.set(cached["keep"])
         elif previous or not current:
             self.body.delete("1.0","end");self.use_template_body(True)
+
+    def apply_form_fields(self,item,previous):
+        if self.out.get('sheet_attempted') or self.out.get('complete'):return
+        from outgoing_preferences import default_title,template_text
+        from ledger_layout import default_values
+        config=self.app.config
+        old=next((x for x in self.styles if x['id']==previous),None)
+        switching=previous!=item['id']
+        current_title=self.vars['title'].get().strip()
+        title=default_title(config,item)
+        explicit_title=config.get('outgoing_default_titles',{}).get(item['id'])
+        was_default=old is not None and current_title==default_title(config,old)
+        if switching and was_default and not title and not self.job.get('standalone_outgoing'):
+            self.vars['title'].set(self.job['title']);self.same.set(True)
+        elif not current_title or switching and (was_default or self.same.get() and explicit_title):
+            self.vars['title'].set(title);self.same.set(False)
+        receiver=self.vars['receiver'].get().strip()
+        ledger_receiver=default_values(config,'outgoing',item['family'])['receiver']
+        if not receiver or switching and old and receiver==(old.get('default_receiver') or template_text(old,'receiver')):
+            self.vars['receiver'].set(ledger_receiver or item.get('default_receiver') or template_text(item,'receiver'))
 
     def use_template_body(self,force=False):
         if force:self.keep_body.set(True)

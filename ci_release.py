@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='발신 작성 목록에서 완료 공문 자동 정리'
-RELEASE_BODY='발신대장과 직인날인대장 등록이 끝난 공문은 처리 이력에서 확인할 수 있습니다. 발신 작성에는 수신 접수 후 발신할 수 있는 문서와 발신 진행 중인 문서를 표시합니다. 기존에 완료한 공문에도 적용됩니다.'
+RELEASE_TITLE='저장한 HWP 양식의 발신 제목·수신처 불러오기'
+RELEASE_BODY='새 발신에서 HWP 양식을 고르면 양식에 지정한 제목과 수신처 문구를 불러옵니다. 이미 저장한 양식의 문구도 사용하며 양식별 기본 제목과 대장 기본값을 반영합니다. 등록 전 초안의 빈칸은 다시 열 때 채우고 직접 수정한 내용은 보존합니다.'
 _release_id = None
 
 
