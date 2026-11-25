@@ -1111,9 +1111,18 @@ def main():
         from updater import apply_plan
         apply_plan(sys.argv[2],test_restart=True)
         return
-    if len(sys.argv)==2 and sys.argv[1]=="--test-workflow":
+    if len(sys.argv) in (2,3) and sys.argv[1]=="--test-workflow":
         from workflow_smoke import run
-        run()
+        if len(sys.argv)==2:run()
+        else:
+            import faulthandler,traceback
+            with Path(sys.argv[2]).open("w",encoding="utf-8") as log:
+                faulthandler.dump_traceback_later(70,file=log)
+                try:run()
+                except Exception:
+                    traceback.print_exc(file=log)
+                    raise SystemExit(1)
+                finally:faulthandler.cancel_dump_traceback_later()
         return
     if len(sys.argv)==3 and sys.argv[1]=="--test-browser-startup":
         from browser_launch_check import check

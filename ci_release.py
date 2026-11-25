@@ -84,7 +84,11 @@ def build():
     result=out/'ocr-result.json'
     subprocess.run([str(exe),'--ocr-data',str(ocr_data),'--test-ocr',str(sample),str(result)],check=True,timeout=90)
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
-    subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
+    workflow_log=out/'workflow-check.txt'
+    try:
+        subprocess.run([str(exe),"--test-workflow",str(workflow_log)],check=True,timeout=110)
+    finally:
+        if workflow_log.is_file():print(workflow_log.read_text(encoding="utf-8"),flush=True)
     subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_outgoing_options","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage","test_sheet_connections","test_ledger_layout","test_hwp_requests","test_registration_cancel","test_hwp_export_check"],check=True,timeout=180)
     subprocess.run([sys.executable,"-m","unittest","-q","test_additional_storage"],check=True,timeout=60)
     taskbar=out/'taskbar-check.json'

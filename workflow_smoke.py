@@ -141,7 +141,7 @@ def run():
                 wait(lambda:bool(app.jobs[h0].get("additional_saves")));idle()
                 for f in files:
                     target=destination/Path(f["path"]).name
-                    assert digest(target)==f["hash"] and str(target) in flow.storage_view[2].get("1.0","end")
+                    assert digest(target)==f["hash"] and str(target.resolve()) in flow.storage_view[2].get("1.0","end")
                 assert writes==["receipt"] and app.jobs[h0]["number"]=="581"
                 # Read-only navigation helper; actual destructive Back is verified in rollback_smoke.
                 with patch.object(app,'settings',side_effect=AssertionError('Back must never open settings')),patch('file_rollback.has_files',return_value=False):
