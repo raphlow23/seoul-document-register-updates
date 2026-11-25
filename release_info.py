@@ -1,4 +1,5 @@
 VERSION = "2.12.0"
+# Refresh saved paths after a result view has been opened.
 # Back cancellation archives the latest saved current HWP before removing generated files.
 # Build downloads authenticate to GitHub to avoid shared-runner API rate limits.
 PRODUCT = "SeoulDocumentRegister"
