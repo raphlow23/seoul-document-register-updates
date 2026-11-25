@@ -1,11 +1,11 @@
 {
   "manifest": {
     "product": "SeoulDocumentRegister",
-    "version": "2.11.4",
-    "filename": "SeoulDocumentRegister-2.11.4.exe",
-    "size": 55552404,
-    "sha256": "47137b42536be560fd1bb2fa0bff2320a7868ef7b172d3092b0b7695ca918d45",
-    "download_base": "https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.11.4",
+    "version": "2.12.0",
+    "filename": "SeoulDocumentRegister-2.12.0.exe",
+    "size": 55574703,
+    "sha256": "45502d32ce9b385239ee414e4d8bca373ae5394a0582febc2c099bb1640f5295",
+    "download_base": "https://github.com/raphlow23/seoul-document-register-updates/releases/download/v2.12.0",
     "components": {
       "spacing_model": {
         "filename": "SpacingModel-0.20.0.zip",
@@ -13,18 +13,18 @@
         "sha256": "f1cc042d0ea315d34170049ee770eacaf13c0f3e7c1b6117a38c9fbc51bfb4ce"
       },
       "ocr_runtime": {
-        "filename": "OCRRuntime-35bee3de3857000a.zip",
-        "size": 51667357,
-        "sha256": "81b77a780a2a7779c1b83438cd417ae34d41ec15ada492279aabe236f6ab8c50",
-        "runtime_id": "35bee3de3857000a5d89d06f5d703919876d196829385d8479cd0acf0c47e126"
+        "filename": "OCRRuntime-42ff51eccaaa5eed.zip",
+        "size": 51666955,
+        "sha256": "fc3ece49b285b0e5c72da95a82d82507e5a833d3018c8c5f1a8f0c4526db3f4b",
+        "runtime_id": "42ff51eccaaa5eede4504ffd24ddaf9565ef5f422a862671452002c5527e38d0"
       }
     }
   },
   "assets": [
     {
-      "name": "SeoulDocumentRegister-2.11.4.exe",
-      "size": 55552404,
-      "sha256": "47137b42536be560fd1bb2fa0bff2320a7868ef7b172d3092b0b7695ca918d45"
+      "name": "SeoulDocumentRegister-2.12.0.exe",
+      "size": 55574703,
+      "sha256": "45502d32ce9b385239ee414e4d8bca373ae5394a0582febc2c099bb1640f5295"
     },
     {
       "name": "SpacingModel-0.20.0.zip",
@@ -33,13 +33,13 @@
     },
     {
       "name": "ThirdPartyNotices.zip",
-      "size": 9648312,
-      "sha256": "23bb2d46c140d33be00e56a8bd6c121c24830e9a06dce99a548c8af7df1209ae"
+      "size": 9648720,
+      "sha256": "8b806408a7e4967cfa9124fc7db6538fddabbd958724eb8a6d4ca032e99e2bcf"
     },
     {
-      "name": "OCRRuntime-35bee3de3857000a.zip",
-      "size": 51667357,
-      "sha256": "81b77a780a2a7779c1b83438cd417ae34d41ec15ada492279aabe236f6ab8c50"
+      "name": "OCRRuntime-42ff51eccaaa5eed.zip",
+      "size": 51666955,
+      "sha256": "fc3ece49b285b0e5c72da95a82d82507e5a833d3018c8c5f1a8f0c4526db3f4b"
     }
   ]
 }
