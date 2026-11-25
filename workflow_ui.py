@@ -201,7 +201,8 @@ class WorkflowShell:
         if received and not standalone and outgoing_status=="완료" and not out.get('enabled'):
             outgoing_status="수신 접수 · 발신 가능"
         self.row(self.outgoing_list_tree,key,listed and not alias and not outgoing_finished and not job.get('outgoing_list_hidden'),(*vals[:3],outgoing_status))
-        if self.step==4 and self.current==key:self.refresh_storage(job)
+        if getattr(self,"storage_view",None) and self.step==4 and self.current==key:
+            self.refresh_storage(job)
 
     def restart_outgoing(self,hide=False):
         if not self.available():return
