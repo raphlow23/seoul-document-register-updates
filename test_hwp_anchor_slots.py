@@ -116,11 +116,25 @@ class AnchorSlotTests(unittest.TestCase):
         def walk(parent):
             for child in parent.winfo_children():
                 yield child;yield from walk(child)
+        buttons={w.cget('text'):w for w in walk(win) if isinstance(w,ttk.Button)}
+        self.assertFalse(buttons['양식 추가'].winfo_manager())
+        buttons['다음: 자동 입력 위치 확인'].invoke();root.update()
+        self.assertTrue(buttons['양식 추가'].winfo_manager())
+        self.assertFalse(any(isinstance(w,ttk.Radiobutton) for w in walk(win)))
         combos=[w for w in walk(win) if isinstance(w,ttk.Combobox) and len(w.cget('values'))==2]
         self.assertEqual(len(combos),1)
         self.assertEqual(combos[0].current(),-1)
         self.assertIn('본문 참조',combos[0].cget('values')[1])
-        combos[0].current(1)
+        preview=next(w for w in walk(win) if isinstance(w,tk.Text))
+        word='(2026. 00. 00.)';offset=text.rindex(word)
+        preview.tag_add('sel',f'1.0 + {offset} chars',f'1.0 + {offset+len(word)} chars')
+        buttons['시행일로 지정'].invoke();root.update()
+        self.assertEqual(combos[0].current(),1)
+        self.assertEqual(win.template_values['number'].get(),'서울센터 2026-000')
+        buttons['이전: 양식 기본 정보'].invoke();root.update()
+        self.assertFalse(buttons['양식 추가'].winfo_manager())
+        buttons['다음: 자동 입력 위치 확인'].invoke();root.update()
+        self.assertEqual(combos[0].current(),1)
         with patch.object(library,'add',return_value={'id':'user_test','label':'시험'}) as added:
             button=next(w for w in walk(win) if isinstance(w,ttk.Button) and w.cget('text')=='양식 추가');button.invoke()
         self.assertEqual(added.call_args.args[1]['_occurrences']['date'],1)

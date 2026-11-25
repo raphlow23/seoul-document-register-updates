@@ -47,6 +47,7 @@ def validate(plan,out):
 
 
 def prepare(job,config,store):
+    from storage_result import make_directory
     out=job["outgoing"];plan=out.get("folder_plan")
     if not plan or out.get('folder_mode')=='direct':return Path(out["save_folder"])
     base,children,title=validate(plan,out)
@@ -77,7 +78,7 @@ def prepare(job,config,store):
         for name in children.values():
             child=(folder/name).resolve()
             if child.parent!=folder:raise ValueError("내부폴더 경로가 공문폴더 밖을 가리킵니다.")
-            child.mkdir(exist_ok=True)
+            make_directory(job,"outgoing",child)
         save=folder/children[plan["save_in"]] if plan["save_in"]!="root" else folder
         plan.update(created=True,path=str(folder),save_path=str(save))
         from file_rollback import track_root

@@ -93,7 +93,7 @@ class CheckboxTree(ttk.Treeview):
 
 class ScrollablePanel(ttk.Frame):
     """Keep settings reachable while the final folder preview stays visible."""
-    def __init__(self,parent):
+    def __init__(self,parent,*,bind_after_idle=True):
         super().__init__(parent)
         self.canvas=tk.Canvas(self,background=WHITE,highlightthickness=0,borderwidth=0,height=200)
         scrollbar=ttk.Scrollbar(self,command=self.canvas.yview)
@@ -103,7 +103,7 @@ class ScrollablePanel(ttk.Frame):
         self.body.bind('<Configure>',lambda _ :self.canvas.configure(scrollregion=self.canvas.bbox('all')))
         self.canvas.bind('<Configure>',lambda e:self.canvas.itemconfigure(self.window,width=e.width))
         self.canvas.bind('<MouseWheel>',self.wheel)
-        self.after_idle(self.bind_children)
+        if bind_after_idle:self.after_idle(self.bind_children)
 
     def bind_children(self):
         def visit(widget):

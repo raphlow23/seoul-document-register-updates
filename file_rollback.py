@@ -39,6 +39,8 @@ def track_file(job,path,hash_,scope):
 def has_files(job,scope):
     scopes={'receipt','outgoing'} if scope=='receipt' else {'outgoing'}
     return bool(job.get('rollback_pending') or any(r['scope'] in scopes for r in job.get('storage_roots',[])) or
+                (job.get('additional_save_pending') or {}).get('scope') in scopes or
+                any(r['scope'] in scopes for r in job.get('additional_saves',[])) or
                 any(f['scope'] in scopes for f in job.get('file_artifacts',[])) or
                 (scope=='receipt' and (job.get('files_started') or job.get('destinations'))) or
                 job.get('outgoing',{}).get('hwp_path') or (job.get('outgoing',{}).get('folder_plan') or {}).get('created'))
@@ -111,6 +113,8 @@ def plan(job,config,scope,allow_edited_hwp=False):
     roots,dirs,markers=_roots(job,config,scope)
     scopes={'receipt','outgoing'} if scope=='receipt' else {'outgoing'}
     allowed={checked(f['path']):f['sha256'] for f in job.get('file_artifacts',[]) if f['scope'] in scopes}
+    from additional_storage import rollback_entries
+    extra_roots,extra_markers,partial=rollback_entries(job,scopes)
     # Legacy receipt copies are provable only inside a case folder carrying this job's marker.
     from core import digest
     sources={Path(f['path']).name:f['hash'] for f in storage_files(job)}
@@ -123,10 +127,16 @@ def plan(job,config,scope,allow_edited_hwp=False):
         elif file.exists() and file not in allowed:raise ValueError('생성 기록이 없는 기존 공용 파일은 보호합니다: '+str(file))
     # Recover an interrupted copy in an owned folder even before destinations were persisted.
     for root in roots:
-        for base,_,names in os.walk(root,followlinks=False):
+        for base,children,names in os.walk(root,followlinks=False):
+            children[:]=[name for name in children if Path(base)/name not in extra_roots]
             for name in names:
                 file=checked(Path(base)/name)
                 if scope=='receipt' and name in sources and file not in markers:allowed.setdefault(file,sources[name])
+    roots.extend(extra_roots)
+    roots=[p for p in dict.fromkeys(roots) if not any(p!=q and p.is_relative_to(q) for q in roots)]
+    markers.update(extra_markers)
+    dirs.update(extra_roots)
+    allowed.update(partial)
     for marker in markers:allowed[marker]=digest(marker)
     out=job.get('outgoing',{});edited_files=[]
     if out.get('hwp_path'):
@@ -224,6 +234,10 @@ def execute(job,config,store,scope,allow_edited_hwp=False):
         scopes={'receipt','outgoing'} if scope=='receipt' else {'outgoing'}
         job['storage_roots']=[r for r in job.get('storage_roots',[]) if r['scope'] not in scopes]
         job['file_artifacts']=[f for f in job.get('file_artifacts',[]) if f['scope'] not in scopes]
+        for key in ('additional_saves','created_directories'):
+            if key in job:job[key]=[r for r in job[key] if r['scope'] not in scopes]
+        if (job.get('additional_save_pending') or {}).get('scope') in scopes:
+            job.pop('additional_save_pending',None)
         if scope=='receipt':
             from core import digest
             for file in storage_files(job):

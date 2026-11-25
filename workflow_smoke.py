@@ -79,7 +79,10 @@ def run():
             writes.append("outgoing" if job.get("receipt_done") else "receipt")
             if not job.get("receipt_done"):
                 assert not job.get("outgoing",{}).get("enabled"), "Receipt must not prematurely register outgoing"
-                job.update(receipt_done=True,number="581",destinations=[str(shared/"0.중앙센터 공문"/"005. 확정 제목")])
+                from core import copy_files
+                example=shared/"0.중앙센터 공문"/"005. 확정 제목"
+                example.mkdir()
+                job.update(receipt_done=True,number="581",destinations=copy_files(job,example,subfolders=["."]))
             else:
                 out=job["outgoing"];assert out["ledger_type"]=="처리지침"
                 out.update(number="12",document_number="처리지침2026-012",complete=True,sheet_attempted=True)
@@ -123,6 +126,23 @@ def run():
                 wait(lambda:flow.step==4);idle()
                 assert writes==["receipt"] and app.jobs[h0]["number"]=="581"
                 assert not app.tree.exists(h0) and flow.history_tree.exists(h0)
+                destination=base/"사본 저장";destination.mkdir()
+                assert flow.storage_view[4].instate(["!disabled"]), "추가 저장 비활성"
+                root.deiconify()
+                with patch("storage_result.filedialog.askdirectory",return_value=str(destination)):
+                    flow.storage_view[4].invoke()
+                dialog=next(widget for widget in root.winfo_children() if isinstance(widget,tk.Toplevel) and widget.title()=="다른 위치에도 저장")
+                def save_button(widget):
+                    for child in widget.winfo_children():
+                        if isinstance(child,ttk.Button) and child.cget("text")=="이 위치에 사본 저장":return child
+                        found=save_button(child)
+                        if found:return found
+                save_button(dialog).invoke()
+                wait(lambda:bool(app.jobs[h0].get("additional_saves")));idle()
+                for f in files:
+                    target=destination/Path(f["path"]).name
+                    assert digest(target)==f["hash"] and str(target) in flow.storage_view[2].get("1.0","end")
+                assert writes==["receipt"] and app.jobs[h0]["number"]=="581"
                 # Read-only navigation helper; actual destructive Back is verified in rollback_smoke.
                 with patch.object(app,'settings',side_effect=AssertionError('Back must never open settings')),patch('file_rollback.has_files',return_value=False):
                     flow._navigate_back(app.jobs[h0]);assert flow.section=='receipt' and flow.step==3

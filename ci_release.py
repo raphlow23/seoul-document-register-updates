@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='저장한 HWP 양식의 발신 제목·수신처 불러오기'
-RELEASE_BODY='새 발신에서 HWP 양식을 고르면 양식에 지정한 제목과 수신처 문구를 불러옵니다. 이미 저장한 양식의 문구도 사용하며 양식별 기본 제목과 대장 기본값을 반영합니다. 등록 전 초안의 빈칸은 다시 열 때 채우고 직접 수정한 내용은 보존합니다.'
+RELEASE_TITLE='단계별 수신·발신 작성과 다른 위치에 사본 저장'
+RELEASE_BODY='상단에서 현재 단계와 앞서 입력한 내용을 확인할 수 있습니다. 접수·발신 완료 화면에는 만든 폴더와 저장한 파일의 경로가 표시됩니다. 다른 위치에도 저장을 누르면 같은 번호로 파일만 복사하거나 새 폴더를 만들어 사본을 보관할 수 있습니다.'
 _release_id = None
 
 
@@ -86,6 +86,7 @@ def build():
     assert '2026' in json.loads(result.read_text(encoding='utf-8'))['text']
     subprocess.run([str(exe),"--test-workflow"],check=True,timeout=90)
     subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_outgoing_options","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage","test_sheet_connections","test_ledger_layout","test_hwp_requests","test_registration_cancel","test_hwp_export_check"],check=True,timeout=180)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_additional_storage"],check=True,timeout=60)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:

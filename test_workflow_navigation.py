@@ -24,6 +24,37 @@ class NavigationTests(unittest.TestCase):
         shell=self.shell('receipt',3,{'hash':'fixture'})
         shell.back();shell.title_step.assert_called_once()
 
+    def test_numbered_steps_review_completed_work_without_undo(self):
+        job={'hash':'fixture','receipt_done':True,'outgoing':{'sheet_attempted':True,'number':'32'}}
+        for section,expected in [('receipt','receipt_review'),('outgoing','outgoing_review')]:
+            shell=self.shell(section,4,job)
+            shell.pending_open='fixture'
+            shell.review_step(2)
+            getattr(shell,expected).assert_called_once_with(job)
+            self.assertIsNone(shell.pending_open)
+            shell.review_step(3)
+            getattr(shell,'resume_receipt' if section=='receipt' else 'outgoing_form').assert_called_once_with(job)
+            shell.app.send.assert_not_called()
+
+    def test_future_and_pending_steps_cannot_change_the_current_document(self):
+        shell=self.shell('receipt',2,{'hash':'fixture'})
+        shell.review_step(3)
+        shell.pending_back={'hash':'fixture'}
+        shell.review_step(1)
+        shell.receipt_home.assert_not_called()
+        shell.resume_receipt.assert_not_called()
+
+    def test_saved_result_distinguishes_planned_actual_and_additional_paths(self):
+        from storage_result import result_text,saved_paths
+        job={'outgoing':{'number':'32','save_folder':'planned'},'destinations':['source.pdf'],
+             'created_directories':[{'scope':'receipt','path':'case'}],
+             'additional_saves':[{'scope':'receipt','folder':'extra','files':['extra/copy.pdf']}]}
+        self.assertFalse(saved_paths(job,'outgoing'))
+        self.assertEqual(result_text(job,'outgoing'),'')
+        for value in ('case','source.pdf','extra/copy.pdf'):self.assertIn(value,result_text(job,'receipt'))
+        job['outgoing'].update(hwp_path='32.hwp',hwp_saved_number='32')
+        self.assertIn('32.hwp',result_text(job,'outgoing'))
+
     def test_receipt_cancels_registration_and_files_after_writes_started(self):
         for marker in ('files_started','sheet_attempted'):
             job={'hash':'fixture',marker:True,'number':'581','title':'기존 제목'}

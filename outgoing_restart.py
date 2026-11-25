@@ -6,14 +6,28 @@ from outgoing import defaults
 
 def restart(job,config,store,hide=False,expected_id=None):
     if job.get('registration_cancel_pending'):raise ValueError('시작한 등록 취소를 이전 단계 버튼으로 먼저 완료하세요.')
+    if job.get('rollback_pending'):raise ValueError('진행 중인 파일 되돌리기를 먼저 완료하세요.')
     if not (job.get('standalone_outgoing') or job.get('receipt_done') or job.get('state')=='완료'):
         raise ValueError('수신 접수가 끝난 문서에서 발신을 다시 시작할 수 있습니다.')
     previous=job.get('outgoing',{})
     if expected_id is not None and previous.get('id')!=expected_id:
         raise ValueError('선택한 발신 진행이 변경되었습니다. 목록에서 다시 선택해 주세요.')
     result=deepcopy(job)
-    if previous:
-        result.setdefault('outgoing_attempts',[]).append({'cancelled_at':datetime.now(timezone.utc).isoformat(),'action':'hide' if hide else 'restart','outgoing':deepcopy(previous)})
+    retired={}
+    for key in ('storage_roots','file_artifacts','created_directories','additional_saves'):
+        entries=result.get(key,[])
+        outgoing_entries=[entry for entry in entries if entry['scope']=='outgoing']
+        if outgoing_entries:
+            retired[key]=outgoing_entries
+            result[key]=[entry for entry in entries if entry['scope']!='outgoing']
+    pending=result.get('additional_save_pending')
+    if pending and pending['scope']=='outgoing':
+        from additional_storage import discard_unpublished_stages
+        discard_unpublished_stages(pending)
+        retired['additional_save_pending']=result.pop('additional_save_pending')
+    if previous or retired:
+        retired.update(cancelled_at=datetime.now(timezone.utc).isoformat(),action='hide' if hide else 'restart',outgoing=deepcopy(previous))
+        result.setdefault('outgoing_attempts',[]).append(retired)
     result.pop('outgoing',None)
     # A new transaction ID prevents recovery from adopting the cancelled outgoing/stamp rows.
     result['outgoing']=defaults(result,config)

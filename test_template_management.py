@@ -41,6 +41,7 @@ class TemplateManagementTests(unittest.TestCase):
                 path=Path(opened.call_args.args[0]);self.assertNotEqual(path,external)
                 self.assertIn('HWP-양식수정',str(path));self.assertEqual(external.read_bytes(),b'external original')
                 win.template_values['label'].set('수정한 기본 양식');path.write_bytes(b'edited HWP bytes')
+                controls['다음: 자동 입력 위치 확인'].invoke();root.update()
                 controls['수정 내용 저장'].invoke();saved.assert_not_called()
                 self.assertEqual(win.template_values['label'].get(),'수정한 기본 양식')
                 controls['수정 내용 저장'].invoke();saved.assert_called_once()

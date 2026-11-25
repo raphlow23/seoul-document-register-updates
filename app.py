@@ -222,6 +222,19 @@ class Worker(threading.Thread):
                             result=clean(data["text"],self.config,data["start"],data["attachments"],data["spacing"])
                             self.emit("ocr_clean_result",{**data,**result})
                         except Exception as error:self.emit("ocr_clean_result",{**data,"error":str(error)})
+                    elif cmd == "additional_save":
+                        from additional_storage import save_additional
+                        job=self.store.get(data["hash"])
+                        if not job or data["scope"] not in ("receipt","outgoing"):
+                            raise ValueError("추가 저장할 공문을 다시 선택하세요.")
+                        owner=job.get("outgoing",{}) if data["scope"]=="outgoing" else job
+                        if owner.get("id")!=data.get("expected_id") or job.get("registration_cancel_pending"):
+                            raise ValueError("공문의 등록 상태가 바뀌었습니다. 저장 결과를 다시 확인하세요.")
+                        try:
+                            copy=save_additional(job,data["scope"],data["base"],data["folder_name"],self.store)
+                        finally:
+                            self.emit("job",self.store.get(data["hash"]))
+                        self.emit("status",f"사본 {len(copy['files'])}개를 저장했습니다. {copy['folder'] or data['base']}")
                     elif cmd == "draft_export":
                         if data['hash'] in self.cancelled_exports:continue
                         self.emit('status','한글 양식을 열고 HWP를 저장하는 중입니다. 한글 접근 확인창이 뜨면 접근 허용을 누르세요.')
@@ -910,7 +923,10 @@ class App:
         content = f"등록번호: {job.get('number', '')}\n상태: {job['state']}\n{job['reason']}\n\n첨부파일\n"
         if job.get('standalone_outgoing'):content=f"발신번호: {job.get('outgoing',{}).get('document_number') or job.get('outgoing',{}).get('number','')}\n상태: {job['state']}\n{job['reason']}\n\n수신 없이 새로 작성한 발신 공문\n"
         content += "\n".join(f["path"] for f in job["files"])
-        content += "\n\n저장 위치\n" + "\n".join(job.get("destinations", []))
+        from storage_result import result_text
+        for scope,label in (("receipt","수신 저장 결과"),("outgoing","발신 저장 결과")):
+            result=result_text(job,scope)
+            if result:content+="\n\n"+label+"\n"+result
         if job.get('rollback_history'):
             content+='\n\n되돌린 파일 복구 보관 위치\n'+'\n'.join(m['backup'] for m in job['rollback_history'][-1]['moves'])
         if job.get("routing"):

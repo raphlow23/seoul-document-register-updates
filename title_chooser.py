@@ -45,12 +45,15 @@ class TitleChooser:
             ttk.Label(outer, text="제목 후보를 클릭하거나, PDF에서 원하는 글자 영역을 드래그해 읽을 수 있습니다. 여러 첨부는 한 공문으로 묶습니다.").pack(anchor="w", pady=(3, 10))
         bar = ttk.Frame(outer)
         bar.pack(fill="x")
+        ttk.Label(bar,text="제목을 읽을 첨부파일").pack(side="left",padx=(0,6))
         self.file_var = tk.StringVar(value=f"1. {Path(self.files[0]['path']).name}")
         self.file_box = ttk.Combobox(bar, textvariable=self.file_var, values=[f"{i+1}. {Path(f['path']).name}" for i,f in enumerate(self.files)], state="readonly", width=30)
         self.file_box.pack(side="left", fill="x", expand=True)
         self.file_box.bind("<<ComboboxSelected>>", self.change_file)
-        ttk.Button(bar, text="이전 쪽", command=lambda: self.turn_page(-1)).pack(side="left", padx=4)
-        ttk.Button(bar, text="다음 쪽", command=lambda: self.turn_page(1)).pack(side="left")
+        self.previous_page=ttk.Button(bar,text="이전 쪽",command=lambda:self.turn_page(-1),state="disabled")
+        self.next_page=ttk.Button(bar,text="다음 쪽",command=lambda:self.turn_page(1),state="disabled")
+        self.previous_page.pack(side="left",padx=(8,3))
+        self.next_page.pack(side="left")
         self.page_label = tk.StringVar(value="1쪽")
         ttk.Label(bar, textvariable=self.page_label).pack(side="left", padx=7)
         panes = ttk.PanedWindow(outer, orient="horizontal")
@@ -58,11 +61,12 @@ class TitleChooser:
         left, right = ttk.Frame(panes), ttk.Frame(panes, padding=(12, 0, 0, 0))
         panes.add(left, weight=1)
         panes.add(right, weight=1)
-        tools = ttk.Frame(left)
-        tools.pack(fill="x", pady=(0, 5))
-        ttk.Button(tools, text="확대 +", command=lambda: self.change_zoom(1.25)).pack(side="left")
-        ttk.Button(tools, text="축소 −", command=lambda: self.change_zoom(0.8)).pack(side="left", padx=3)
-        ttk.Button(tools, text="90° 회전", command=self.rotate).pack(side="left")
+        tools = ttk.Frame(bar)
+        tools.pack(side="right")
+        self.image_tools=[]
+        for label,command in (("확대",lambda:self.change_zoom(1.25)),("축소",lambda:self.change_zoom(0.8)),("90° 회전",self.rotate)):
+            button=ttk.Button(tools,text=label,command=command,state="disabled")
+            button.pack(side="left",padx=(3,0));self.image_tools.append(button)
         area = ttk.Frame(left)
         area.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(area, bg="#e6eaf0", highlightthickness=0, width=500)
@@ -82,24 +86,27 @@ class TitleChooser:
         cropbar.pack(fill="x", pady=(6, 0))
         self.crop_mode = tk.StringVar(value="제목으로 바꾸기")
         ttk.Combobox(cropbar, textvariable=self.crop_mode, values=["제목으로 바꾸기", "뒤에 이어붙이기", "괄호로 붙이기"], state="readonly", width=18).pack(side="left")
-        ttk.Button(cropbar, text="드래그한 영역 글자 읽기", command=self.read_region).pack(side="left", padx=6)
+        self.crop_button=ttk.Button(cropbar,text="선택 영역 읽어 제목에 넣기",command=self.read_region,state="disabled")
+        self.crop_button.pack(side="left",padx=6)
         right_top=ttk.Frame(right);right_top.pack(fill='x',pady=(0,1))
-        ttk.Label(right_top,text="최종 수신접수 제목",font=("맑은 고딕",11,"bold")).pack(side='left')
-        ttk.Button(right_top,text='본문 크게',command=self.expand_body).pack(side='right')
-        ttk.Button(right_top,text='선택 → 제목',command=self.use_selection).pack(side='right',padx=3)
+        ttk.Label(right_top,text="수신대장 제목",font=("맑은 고딕",11,"bold")).pack(side='left')
         title_area=ttk.Frame(right);title_area.pack(fill="x")
         self.title=tk.Text(title_area,height=2,width=42,wrap="word",font=("맑은 고딕",11),padx=6,pady=4)
         title_scroll=ttk.Scrollbar(title_area,command=self.title.yview);self.title.configure(yscrollcommand=title_scroll.set)
         self.title.pack(side="left",fill="x",expand=True);title_scroll.pack(side="right",fill="y")
-        self.options_frame=ttk.Frame(bar);self.options_frame.pack(side='left',padx=(8,0))
-        ttk.Label(self.options_frame,text="추천 제목").pack(side="left",padx=(0,5))
+        self.options_frame=ttk.Frame(right_top);self.options_frame.pack(side='left',fill='x',expand=True,padx=(6,0))
+        ttk.Label(self.options_frame,text="후보").pack(side="left",padx=(0,3))
         self.choice=tk.IntVar(value=-1);self.title_options=[]
-        self.option_box=ttk.Combobox(self.options_frame,state="readonly",width=14)
+        self.option_box=ttk.Combobox(self.options_frame,state="readonly",width=9)
         self.option_box.pack(side="left",fill="x",expand=True)
         self.option_box.bind("<<ComboboxSelected>>",self.choose_option)
         self.remember=tk.BooleanVar(value=False)
-        self.remember_button=ttk.Checkbutton(self.options_frame,text="형식 기억",variable=self.remember)
+        self.remember_button=ttk.Checkbutton(self.options_frame,text="기관별 형식 기억",variable=self.remember)
         self.remember_button.pack(side="right",padx=(5,0))
+        body_tools=ttk.Frame(right);body_tools.pack(fill="x",pady=(2,0))
+        ttk.Label(body_tools,text="첨부 본문",font=("맑은 고딕",10,"bold")).pack(side="left")
+        ttk.Button(body_tools,text="선택 문장을 제목으로",command=self.use_selection).pack(side="right")
+        ttk.Button(body_tools,text="크게 보기",command=self.expand_body).pack(side="right",padx=3)
         self.body_area=ttk.Frame(right);self.body_area.pack(fill="both",expand=True)
         self.body=tk.Text(self.body_area,height=12,width=42,wrap="word",font=("맑은 고딕",11),padx=8,pady=6,exportselection=False)
         body_scroll=ttk.Scrollbar(self.body_area,command=self.body.yview);self.body.configure(yscrollcommand=body_scroll.set)
@@ -108,11 +115,11 @@ class TitleChooser:
         footer = ttk.Frame(outer)
         footer.pack(fill="x")
         self.status = tk.StringVar(value="첨부파일의 OCR 본문과 미리보기를 준비합니다.")
-        ttk.Label(footer, textvariable=self.status, wraplength=900).pack(side="left", fill="x", expand=True)
         if self.embedded:
-            ttk.Button(footer, text="이전: 첨부파일", command=app.workflow.receipt_home).pack(side="left", padx=6)
-        self.apply_button = ttk.Button(footer, text="다음: 저장 위치" if self.embedded else "이 제목 사용", command=self.apply, state="disabled")
+            ttk.Button(footer, text="← 첨부파일 선택", command=app.workflow.receipt_home).pack(side="left",padx=(0,6))
+        self.apply_button = ttk.Button(footer, text="제목 확정 → 저장 위치" if self.embedded else "이 제목 사용", command=self.apply, state="disabled",style="Accent.TButton")
         self.apply_button.pack(side="right")
+        ttk.Label(footer, textvariable=self.status, wraplength=900).pack(side="left", fill="x", expand=True)
         if self.embedded:
             footer.pack_configure(side="bottom",before=panes,pady=(6,0))
             for widget in footer.winfo_children():
@@ -153,6 +160,7 @@ class TitleChooser:
         self.request = uuid.uuid4().hex
         self.loaded = False
         self.apply_button.configure(state="disabled")
+        self.update_preview_actions()
         self.app.busy = True
         self.app.commands.put((command, {"owner": self.owner, "request": self.request, **payload}))
 
@@ -186,6 +194,7 @@ class TitleChooser:
                 self.remember.set(False)
                 self.remember_button.configure(state="disabled")
             self.status.set(f"선택 영역 OCR {payload['confidence']:.1f}점 · 사업명·지번은 원본과 대조해 주세요.")
+            self.update_preview_actions()
             return
         if self.image is not None: self.image.close()
         self.image = payload.get("image")
@@ -229,6 +238,7 @@ class TitleChooser:
         from PIL import Image, ImageTk
         self.canvas.delete("all")
         self.selection = None
+        self.update_preview_actions()
         if self.image is None: return
         self.scale = min(1.0, max(0.2, (self.canvas.winfo_width()-12)/self.image.width)) * self.zoom
         preview = self.image.resize((max(1, round(self.image.width*self.scale)), max(1, round(self.image.height*self.scale))), Image.Resampling.LANCZOS)
@@ -264,6 +274,14 @@ class TitleChooser:
 
     def drag_end(self, event):
         self.drag_motion(event)
+        self.update_preview_actions()
+
+    def update_preview_actions(self):
+        show_image=self.loaded and self.image is not None
+        for button in self.image_tools:button.configure(state="normal" if show_image else "disabled")
+        self.crop_button.configure(state="normal" if show_image and self.selection else "disabled")
+        self.previous_page.configure(state="normal" if self.loaded and self.page>0 else "disabled")
+        self.next_page.configure(state="normal" if self.loaded and self.page+1<self.page_count else "disabled")
 
     def read_region(self):
         if not self.loaded or self.image is None or not self.selection: return

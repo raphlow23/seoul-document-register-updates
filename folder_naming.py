@@ -312,6 +312,7 @@ def preflight(job, root):
 
 def copy_to_subfolders(job, root, on_progress=None):
     from core import copy_files
+    from storage_result import make_directory
     preflight(job, root)
     plan_folders(job,root)
     results = []
@@ -322,7 +323,7 @@ def copy_to_subfolders(job, root, on_progress=None):
         if target.get('storage_mode')=='year':
             # A shared year folder is never owned by a single receipt. Track only new files.
             destination(root,str(Path(target['relative'])/name))
-            folder.mkdir(exist_ok=True)
+            make_directory(job,"receipt",folder)
             job['files_started']=True
             if on_progress:on_progress()
             copied=copy_files(job,parent,subfolders=[name],on_progress=on_progress)
@@ -348,7 +349,7 @@ def copy_to_subfolders(job, root, on_progress=None):
         track_root(job,folder,'receipt')
         if on_progress: on_progress()
         children=receipt_children(job['routing'],target)
-        for child in children.values():(folder/child).mkdir(exist_ok=True)
+        for child in children.values():make_directory(job,"receipt",folder/child)
         # Incoming attachments belong to the source-letter folder when it is selected.
         incoming=children.get("incoming") or children.get('relief')
         relative=str(Path(name)/incoming) if incoming else name
