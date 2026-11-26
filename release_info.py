@@ -1,4 +1,5 @@
 VERSION = "2.12.2"
+# Build verification uses a deterministic preview in the guided workflow fixture.
 # Shared menu surfaces include settings, folder and template dialogs.
 # Verify reported paths across Windows short and long temporary directory names.
 # Back cancellation archives the latest saved current HWP before removing generated files.

@@ -93,7 +93,8 @@ def run():
                 idle();app.tree.selection_set([h0,h1])
                 flow.start_receipt();title=app.title_dialog
                 assert flow.step==2 and title.embedded
-                # Deliver a synthetic preview before the OCR timer. Never open a business document.
+                # The fixture supplies the preview. A delayed OCR callback would clear it during layout checks.
+                title.win.after_cancel(title.initial_after)
                 title.deliver({"owner":title.owner,"request":title.request,"kind":"prepare","text":"제목 확정 제목", "image":Image.new("RGB",(500,700),"white"),"options":[{"mode":"header","label":"제목란","title":"확정 제목"}]})
                 check_actions()
                 assert title.body.winfo_height()>=80, f'OCR body collapsed: body={title.body.winfo_height()}, right={title.body.master.master.winfo_height()}, title={title.title.winfo_height()}, root={root.winfo_height()}'
