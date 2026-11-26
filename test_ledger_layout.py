@@ -74,6 +74,30 @@ class LayoutTests(unittest.TestCase):
         record['sheet_connection']={'spreadsheet_id':'owned-fixture','tab':owner.tab,'layout':layout}
         return owner,grid,job,physical
 
+    def test_agency_spelling_in_each_connected_ledger(self):
+        for scope,family,col in [('receipt','공문',4),('outgoing','공문',8),('outgoing','업무연락',5),('outgoing','처리지침',5),('stamp','공문',7)]:
+            with self.subTest(scope=scope,family=family):
+                ledger,grid,job,physical=self.fixture(scope,family)
+                grid.rows[4][physical[col]]='중앙센터'
+                field='issuer' if scope=='receipt' else 'receiver'
+                original=job if scope=='receipt' else job['outgoing']
+                original[field]='중앙편의증진센터'
+                prior=deepcopy(grid.rows[:5])
+                row,_=ledger.register(job,self.store)
+                self.assertEqual(grid.rows[row-1][physical[col]],'중앙센터')
+                self.assertEqual(original[field],'중앙편의증진센터')
+                self.assertEqual(grid.rows[:5],prior)
+
+    def test_only_previous_matching_agencies_supply_spelling(self):
+        from ledger_layout import ledger_agency
+        rows=[['1','중앙센터'],['2','서초구청'],['3','중앙편의증진센터'],['4','서울시청'],['','서초구청장']]
+        used=[1,2,3,4,5]
+        self.assertEqual(ledger_agency('중앙장애인편의증진기술지원센터장',rows,used,1),'중앙센터')
+        self.assertEqual(ledger_agency('중앙편의증진센터',[],[],1),'중앙센터')
+        self.assertEqual(ledger_agency('서초 구청장',rows,used,1),'서초구청')
+        self.assertEqual(ledger_agency('강남구청장',rows,used,1),'강남구청장')
+        self.assertEqual(ledger_agency('중앙센터, 서울시청',rows,used,1),'중앙센터, 서울시청')
+
     def test_all_ledgers_reordered_beyond_k_keep_formulas_dates_and_unmapped_cells(self):
         for scope,family,shift in [('receipt','공문',0),('outgoing','공문',52),('outgoing','업무연락',0),('outgoing','처리지침',4),('stamp','업무연락',0)]:
             with self.subTest(scope=scope,family=family):

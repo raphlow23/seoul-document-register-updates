@@ -35,19 +35,19 @@ class WorkflowShell:
         self.continue_outgoing=tk.BooleanVar(value=False)
         header=ttk.Frame(outer,style='App.TFrame');header.pack(fill="x")
         ttk.Label(header,text="서울센터 공문 업무",font=("맑은 고딕",22,"bold"),style='App.TLabel').pack(side="left")
-        ttk.Button(header,text="설정 · 연결",command=app.settings).pack(side="right")
+        ttk.Button(header,text="설정 · 연결",command=app.settings,style="Header.TButton").pack(side="right")
         nav=ttk.Frame(header,style='App.TFrame');nav.pack(side="left",padx=12)
         self.nav={}
         for key,label,fn in (("receipt","수신 접수",self.receipt_home),("outgoing","발신 작성",self.outgoing_home),("history","처리 이력",self.history_home)):
             button=ttk.Button(nav,text=label,command=fn);button.pack(side="left",padx=(0,8));self.nav[key]=button
         app.watching=tk.BooleanVar(value=True)
-        self.step_bar=ttk.Frame(outer,style='Card.TFrame',padding=(6,2))
-        self.step_caption=ttk.Label(self.step_bar,foreground="#1c5295",font=("맑은 고딕",10,"bold"))
+        self.step_bar=ttk.Frame(outer,style='App.TFrame',padding=(0,2))
+        self.step_caption=ttk.Label(self.step_bar,style='App.TLabel',foreground="#1c5295",font=("맑은 고딕",10,"bold"))
         self.step_caption.pack(side='left',padx=(6,12))
         self.step_buttons=[]
         for number in range(1,5):
-            button=ttk.Button(self.step_bar,command=lambda n=number:self.review_step(n))
-            button.pack(side='left',fill='x',expand=True,padx=2)
+            button=ttk.Button(self.step_bar,style='Header.TButton',command=lambda n=number:self.review_step(n))
+            button.pack(side='left',fill='x',expand=True,padx=(4,0))
             self.step_buttons.append(button)
         self.content=ttk.Frame(outer,style='Card.TFrame',padding=(12,8))
         self.pages={key:ttk.Frame(self.content) for key in ("queue","title","route","receipt_result","outgoing_list","outgoing_types","outgoing_form","outgoing_result","history")}
@@ -96,8 +96,8 @@ class WorkflowShell:
             self.step_caption.configure(text=f"현재 {step} / 4단계")
             for i,(button,label) in enumerate(zip(self.step_buttons,labels),1):
                 button.configure(text=f"{i}. {label}",state='normal' if i<step else 'disabled',
-                                 style='NavSelected.TButton' if i==step else 'TButton')
-        for key,button in self.nav.items():button.configure(state="disabled" if key==section else "normal",style='NavSelected.TButton' if key==section else 'TButton')
+                                 style='Header.NavSelected.TButton' if i==step else 'Header.TButton')
+        for key,button in self.nav.items():button.configure(state="disabled" if key==section else "normal",style='Header.NavSelected.TButton' if key==section else 'Header.TButton')
         self.draft_active=page in ("title","route","outgoing_types","outgoing_form")
 
     def review_step(self,number):

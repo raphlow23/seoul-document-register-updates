@@ -10,10 +10,12 @@ def apply_theme(root):
     style=ttk.Style(root)
     if getattr(root,'_modern_theme_assets',None):style.theme_use('seoul-modern');return style
     assets={}
-    def picture(name,fill,border=LINE,kind='box',checked=False,size=(40,40)):
-        scale=3;w,h=size;im=Image.new('RGBA',(w*scale,h*scale));draw=ImageDraw.Draw(im)
+    def picture(name,fill,border=LINE,kind='box',checked=False,size=(40,40),surface=None):
+        scale=3;w,h=size;im=Image.new('RGBA',(w*scale,h*scale),surface);draw=ImageDraw.Draw(im)
         rect=(scale,scale,(w-1)*scale,(h-1)*scale)
-        if kind=='radio':
+        if kind=='arrow':
+            draw.line([(2*scale,4*scale),(7*scale,9*scale),(12*scale,4*scale)],fill=fill,width=2*scale)
+        elif kind=='radio':
             draw.ellipse(rect,fill=fill,outline=border,width=scale)
             if checked:draw.ellipse((7*scale,7*scale,(w-7)*scale,(h-7)*scale),fill=BLUE)
         else:
@@ -23,8 +25,16 @@ def apply_theme(root):
         if kind in ('check','radio'):
             padded=Image.new('RGBA',(w+6,h));padded.paste(im,(0,0));im.close();im=padded
         photo=ImageTk.PhotoImage(im,master=root);im.close();assets[name]=photo;return photo
-    for name,fill,border in (('button',WHITE,LINE),('hover','#EFF5FF','#9DBBF5'),('pressed','#E2ECFF','#7EA5EE'),('disabled','#F1F4F8','#E3E9F2'),('accent',BLUE,BLUE),('accent_hover','#1D4ED8','#1D4ED8'),('accent_pressed','#1E40AF','#1E40AF'),('entry',WHITE,LINE),('focus',WHITE,'#6695F0'),('card',WHITE,LINE),('drop','#F0F6FF','#C8DAFA')):
+    for name,fill,border in (('button',WHITE,LINE),('hover','#EFF5FF','#9DBBF5'),('pressed','#E2ECFF','#7EA5EE'),('disabled','#F1F4F8','#E3E9F2'),('accent',BLUE,BLUE),('accent_hover','#1D4ED8','#1D4ED8'),('accent_pressed','#1E40AF','#1E40AF')):
+        picture(name,fill,border,surface=WHITE)
+        picture('header_'+name,fill,border,surface=BG)
+    for name,fill,border in (('entry',WHITE,LINE),('focus',WHITE,'#6695F0'),('drop','#F0F6FF','#C8DAFA')):
         picture(name,fill,border)
+    picture('card',WHITE,LINE,surface=BG)
+    picture('tab',WHITE,LINE,size=(32,30),surface=WHITE)
+    picture('tab_selected','#E8F0FF','#94B7FA',size=(32,30),surface=WHITE)
+    picture('tab_focus','#E8F0FF',BLUE,size=(32,30),surface=WHITE)
+    picture('arrow',MUTED,kind='arrow',size=(15,13))
     for name,fill,border,checked in (('check_off',WHITE,'#A6B6CC',False),('check_on',BLUE,BLUE,True),('check_disabled','#F2F5FA','#D0DAE7',False),('check_disabled_on','#9CB8EC','#9CB8EC',True)):
         picture(name,fill,border,kind='check',checked=checked,size=(22,22))
     picture('radio_off',WHITE,'#A6B6CC',kind='radio',size=(22,22));picture('radio_on',WHITE,BLUE,kind='radio',checked=True,size=(22,22))
@@ -34,16 +44,21 @@ def apply_theme(root):
     def element(name,default,*states,border=11):
         style.element_create(name,'image',assets[default],*((*state,assets[photo]) for *state,photo in states),border=border,sticky='nswe')
     element('Modern.Button','button',('disabled','disabled'),('pressed','pressed'),('active','hover'),('focus','hover'))
-    element('Modern.Accent','accent',('disabled','disabled'),('pressed','accent_pressed'),('active','accent_hover'))
+    element('Modern.Accent','accent',('disabled','disabled'),('pressed','accent_pressed'),('active','accent_hover'),('focus','accent_hover'))
     element('Modern.Selected','accent')
+    element('Modern.Header','header_button',('disabled','header_disabled'),('pressed','header_pressed'),('active','header_hover'),('focus','header_hover'))
+    element('Modern.HeaderSelected','header_accent')
+    element('Modern.Tab','tab',('disabled','disabled'),('selected','focus','tab_focus'),('selected','tab_selected'),('active','tab_focus'),('focus','tab_focus'))
+    style.element_create('Modern.downarrow','image',assets['arrow'],sticky='e')
     element('Modern.Entry','entry',('disabled','disabled'),('focus','focus'))
     element('Modern.Card','card');element('Modern.Drop','drop')
     element('Modern.Check','check_off',('disabled','selected','check_disabled_on'),('disabled','check_disabled'),('selected','check_on'),border=0)
     element('Modern.Radio','radio_off',('selected','radio_on'),border=0)
-    for name,border in (('TButton','Modern.Button'),('Accent.TButton','Modern.Accent'),('NavSelected.TButton','Modern.Selected')):
+    for name,border in (('TButton','Modern.Button'),('Accent.TButton','Modern.Accent'),('NavSelected.TButton','Modern.Selected'),('Header.TButton','Modern.Header'),('Header.NavSelected.TButton','Modern.HeaderSelected')):
         style.layout(name,[(border,{'sticky':'nswe','children':[('Button.padding',{'sticky':'nswe','children':[('Button.label',{'sticky':'nswe'})]})]})])
     style.layout('TEntry',[('Modern.Entry',{'sticky':'nswe','children':[('Entry.padding',{'sticky':'nswe','children':[('Entry.textarea',{'sticky':'nswe'})]})]})])
-    style.layout('TCombobox',[('Modern.Entry',{'sticky':'nswe','children':[('Combobox.downarrow',{'side':'right','sticky':'ns'}),('Combobox.padding',{'sticky':'nswe','children':[('Combobox.textarea',{'sticky':'nswe'})]})]})])
+    style.layout('TCombobox',[('Modern.Entry',{'sticky':'nswe','children':[('Modern.downarrow',{'side':'right','sticky':'e'}),('Combobox.padding',{'sticky':'nswe','children':[('Combobox.textarea',{'sticky':'nswe'})]})]})])
+    style.layout('TNotebook.Tab',[('Modern.Tab',{'sticky':'nswe','children':[('Notebook.padding',{'sticky':'nswe','children':[('Notebook.label',{'sticky':'nswe'})]})]})])
     for name,indicator,base in (('TCheckbutton','Modern.Check','Checkbutton'),('TRadiobutton','Modern.Radio','Radiobutton')):
         style.layout(name,[(base+'.padding',{'sticky':'nswe','children':[(indicator,{'side':'left','sticky':''}),(base+'.label',{'side':'left','sticky':'w'})]})])
     style.layout('Card.TFrame',[('Modern.Card',{'sticky':'nswe'})])
@@ -58,6 +73,12 @@ def apply_theme(root):
     style.map('Accent.TButton',foreground=[('disabled','#94A1B3'),('!disabled',WHITE)])
     style.configure('NavSelected.TButton',foreground=WHITE,font=('맑은 고딕',10,'bold'))
     style.map('NavSelected.TButton',foreground=[('disabled',WHITE),('!disabled',WHITE)])
+    for name in ('Header.TButton','Header.NavSelected.TButton'):
+        style.configure(name,background=BG)
+        style.map(name,background=[('disabled',BG),('!disabled',BG)])
+    style.configure('TNotebook',background=WHITE,borderwidth=0,tabmargins=0)
+    style.configure('TNotebook.Tab',padding=(7,1),expand=0)
+    style.map('TNotebook.Tab',expand=[('selected',0)],foreground=[('disabled',MUTED),('selected','#194C9A')])
     style.configure('TEntry',padding=(9,3),fieldbackground=WHITE,foreground=INK,insertcolor=INK)
     style.configure('TCombobox',padding=(9,3),arrowsize=16,fieldbackground=WHITE,foreground=INK,background=WHITE,arrowcolor=MUTED,bordercolor=WHITE,lightcolor=WHITE,darkcolor=WHITE)
     style.map('TCombobox',fieldbackground=[('readonly',WHITE)],selectbackground=[('readonly',WHITE)],selectforeground=[('readonly',INK)])

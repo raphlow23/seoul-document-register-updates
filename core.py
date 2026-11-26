@@ -532,7 +532,9 @@ class Sheets:
             store.put(job)
             note = getattr(self, "notes", {}).get(row, "")
             marker = (note + "\n" if note else "") + "\n".join(markers)
-            reqs = registration_requests(prop["sheetId"], row, job, prev, marker, candidate)
+            from ledger_layout import ledger_agency
+            entry={**job,"issuer":ledger_agency(job["issuer"],rows,populated,4)}
+            reqs = registration_requests(prop["sheetId"], row, entry, prev, marker, candidate)
             try:
                 self.request("POST", ":batchUpdate", json={"requests": reqs})
             except RejectedWrite:

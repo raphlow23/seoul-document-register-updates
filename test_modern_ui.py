@@ -29,6 +29,16 @@ class ModernUiTests(unittest.TestCase):
             tree.destroy()
             if parent is not self.root:parent.destroy()
 
+    def test_rounded_tabs_and_header_buttons_use_one_outer_element(self):
+        style=ttk.Style(self.root)
+        for name,element in [('TNotebook.Tab','Modern.Tab'),('Header.TButton','Modern.Header'),
+                             ('Header.NavSelected.TButton','Modern.HeaderSelected'),('Accent.TButton','Modern.Accent')]:
+            self.assertEqual([part for part,_ in style.layout(name)],[element])
+        tabs=ttk.Notebook(self.root)
+        for name in ('발신 내용','저장 위치'):tabs.add(ttk.Frame(tabs),text=name)
+        tabs.select(1)
+        self.assertEqual(tabs.index('current'),1)
+
     def test_long_settings_panel_remains_scrollable(self):
         panel=ScrollablePanel(self.root);panel.pack()
         for i in range(20):ttk.Label(panel.body,text='설정 '+str(i)).pack()

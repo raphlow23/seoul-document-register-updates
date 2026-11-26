@@ -14,6 +14,33 @@ LABELS={'serial':'연번','date':'일자','prefix':'번호 앞 문구','number':
         'document_number':'문서번호','department':'신청부서','applicant':'신청자','person':'날인자'}
 DATE_FORMATS=('YYYY-MM-DD','YYYY.MM.DD','YYYY. MM. DD.')
 
+CENTRAL_NAMES={'중앙센터','중앙편의증진센터','중앙편의증진기술지원센터','중앙장애인편의증진센터',
+               '중앙장애인편의증진기술지원센터','장애인편의증진기술지원중앙센터'}
+
+
+def agency_key(name):
+    compact=''.join(name.split())
+    central=compact.removeprefix('한국지체장애인협회').removesuffix('장')
+    if central in CENTRAL_NAMES:return '중앙센터'
+    if compact in ('서울시청','서울특별시청','서울특별시장','서울특별시장(장애인자립지원과장)'):return '서울시청'
+    if compact.endswith(('구청장','센터장')):return compact[:-1]
+    return compact
+
+
+def ledger_agency(entered,rows,populated,column):
+    """Use this ledger's spelling for the same agency in preceding completed rows."""
+    if not entered or not entered.strip():return entered
+    key=agency_key(entered)
+    for number in reversed(populated):
+        row=rows[number-1]
+        if len(row)<=column or not str(row[0]).strip().isdigit() or not isinstance(row[column],str):continue
+        previous=row[column].strip()
+        if agency_key(previous)!=key:continue
+        # Do not perpetuate a template's long name that an earlier version wrote.
+        if key in ('중앙센터','서울시청') and previous!=key:continue
+        return previous
+    return key if key in ('중앙센터','서울시청') else entered
+
 
 def schema(scope,family):
     if scope=='receipt':return ('serial','date','prefix','number','issuer','title','recipient','method')

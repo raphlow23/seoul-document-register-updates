@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='단계별 수신·발신 작성과 다른 위치에 사본 저장'
-RELEASE_BODY='상단에서 현재 단계와 앞서 입력한 내용을 확인할 수 있습니다. 접수·발신 완료 화면에는 만든 폴더와 저장한 파일의 경로가 표시됩니다. 다른 위치에도 저장을 누르면 같은 번호로 파일만 복사하거나 새 폴더를 만들어 사본을 보관할 수 있습니다.'
+RELEASE_TITLE='대장 기관명 표기와 둥근 버튼·탭'
+RELEASE_BODY='수신·발신·직인 대장에 등록할 때 앞선 행에서 같은 기관의 표기를 확인합니다. 중앙편의증진센터는 중앙센터로 기록합니다. 상단 메뉴와 단계 버튼, 탭과 선택 상자의 모서리를 통일했습니다.'
 _release_id = None
 
 

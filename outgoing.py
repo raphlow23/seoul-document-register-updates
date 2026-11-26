@@ -205,7 +205,9 @@ class OutgoingSheets(Sheets):
             out["sheet_attempted"]=True
             store.put(job)
             try:
-                self.request("POST",":batchUpdate",json={"requests":requests(prop["sheetId"],row,out,previous,(note+"\n" if note else "")+marker,candidate,self.compact)})
+                from ledger_layout import ledger_agency
+                entry={**out,"receiver":ledger_agency(out["receiver"],rows,populated,5 if self.compact else 8)}
+                self.request("POST",":batchUpdate",json={"requests":requests(prop["sheetId"],row,entry,previous,(note+"\n" if note else "")+marker,candidate,self.compact)})
             except RejectedWrite:
                 out["sheet_attempted"]=False
                 store.put(job)

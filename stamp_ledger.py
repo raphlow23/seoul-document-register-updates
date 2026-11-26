@@ -83,7 +83,9 @@ class StampSheets(Sheets):
             stamp["sheet_attempted"]=True
             store.put(job)
             try:
-                self.request("POST",":batchUpdate",json={"requests":requests(prop["sheetId"],row,out,previous,(old+"\n" if old else "")+marker,candidate)})
+                from ledger_layout import ledger_agency
+                entry={**out,"receiver":ledger_agency(out["receiver"],rows,occupied,7)}
+                self.request("POST",":batchUpdate",json={"requests":requests(prop["sheetId"],row,entry,previous,(old+"\n" if old else "")+marker,candidate)})
             except RejectedWrite:
                 stamp["sheet_attempted"]=False
                 store.put(job)
