@@ -259,7 +259,7 @@ def run():
                 from child_folder_editor import ChildFolderEditor
                 child_results=[]
                 children=ChildFolderEditor(root,'중앙센터 공문',['incoming','outgoing','reply'],['incoming','reply'],lambda order,selected:child_results.append((order,selected)))
-                with patch('child_folder_editor.simpledialog.askstring',return_value='검토자료'):children.add()
+                with patch('child_folder_editor.ask_text',return_value='검토자료'):children.add()
                 children.move(-1);children.move(-1);children.move(-1);children.apply()
                 assert child_results[0][0][0]=='custom:검토자료' and 'outgoing' not in child_results[0][1]
                 # Ignore pre-existing ZIPs; only a ZIP saved after watching appears.

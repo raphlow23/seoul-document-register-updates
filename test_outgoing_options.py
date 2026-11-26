@@ -96,7 +96,7 @@ class OutgoingOptionTests(unittest.TestCase):
         win.template_title_fields['one'].set('설정에서 고친 제목')
         body=win.template_panel.body
         button=next(x for x in body.winfo_children() if x.winfo_class()=='TButton' and x.cget('text')=='이름 변경')
-        with patch('outgoing_editor.simpledialog.askstring',return_value=None):button.invoke()
+        with patch('outgoing_editor.ask_text',return_value=None):button.invoke()
         self.assertEqual(win.template_title_fields['one'].get(),'설정에서 고친 제목')
         footer=next(x for x in win.winfo_children() if x.winfo_class()=='TFrame')
         next(x for x in footer.winfo_children() if x.winfo_class()=='TButton' and x.cget('text')=='기본 설정 저장').invoke()

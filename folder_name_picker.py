@@ -2,7 +2,8 @@
 import re
 import string
 import tkinter as tk
-from tkinter import ttk,simpledialog
+from modern_ui import ask_text
+from tkinter import ttk
 from folder_naming import TEMPLATES,folder_name,infer_template,sequence_from_names
 
 
@@ -45,7 +46,7 @@ class ActualNamePicker(ttk.Frame):
         if self.value.get() in self.options:self.template.set(self.options[self.value.get()])
 
     def edit(self):
-        name=simpledialog.askstring('폴더 이름 수정','실제 폴더 이름을 수정하세요. 번호·날짜는 저장 위치의 다음 순번과 해당 날짜로 계산합니다.',initialvalue=self.value.get(),parent=self.winfo_toplevel())
+        name=ask_text('폴더 이름 수정','실제 폴더 이름을 수정하세요. 번호·날짜는 저장 위치의 다음 순번과 해당 날짜로 계산합니다.',initialvalue=self.value.get(),parent=self.winfo_toplevel())
         if not name or not name.strip():return
         template,title=split_name(name.strip())
         self.title.set(title);self.template.set(template);self.refresh()

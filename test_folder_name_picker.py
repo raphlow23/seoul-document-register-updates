@@ -106,7 +106,7 @@ class FolderNamePickerTests(unittest.TestCase):
     def test_manual_edit_uses_real_name_without_template_tokens(self):
         record=describe_directory(self.folder);template=tk.StringVar(value='{number:03d}. {title}');title=tk.StringVar(value='새 제목')
         picker=ActualNamePicker(self.root,template,title,lambda:record,lambda:'2026-11-03');picker.refresh()
-        with patch('folder_name_picker.simpledialog.askstring',return_value='[005] 수정 제목'):picker.edit()
+        with patch('folder_name_picker.ask_text',return_value='[005] 수정 제목'):picker.edit()
         self.assertEqual(title.get(),'수정 제목');self.assertNotIn('{',picker.value.get())
         self.assertEqual(split_name('처리지침006. 26.11.03. 새 지침')[1],'새 지침')
 

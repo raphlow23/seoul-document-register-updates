@@ -1,6 +1,6 @@
 """One native ttk theme with rounded controls, clear focus states and image checkboxes."""
 import tkinter as tk
-from tkinter import ttk
+from tkinter import simpledialog,ttk
 from PIL import Image,ImageDraw,ImageTk
 
 BG='#F3F6FB';WHITE='#FFFFFF';INK='#18283F';MUTED='#65758C';BLUE='#2563EB';LINE='#DAE3EF'
@@ -29,7 +29,7 @@ def apply_theme(root):
         picture(name,fill,border,surface=WHITE)
         picture('header_'+name,fill,border,surface=BG)
     for name,fill,border in (('entry',WHITE,LINE),('focus',WHITE,'#6695F0'),('drop','#F0F6FF','#C8DAFA')):
-        picture(name,fill,border)
+        picture(name,fill,border,surface=WHITE)
     picture('card',WHITE,LINE,surface=BG)
     picture('tab',WHITE,LINE,size=(32,30),surface=WHITE)
     picture('tab_selected','#E8F0FF','#94B7FA',size=(32,30),surface=WHITE)
@@ -38,6 +38,10 @@ def apply_theme(root):
     for name,fill,border,checked in (('check_off',WHITE,'#A6B6CC',False),('check_on',BLUE,BLUE,True),('check_disabled','#F2F5FA','#D0DAE7',False),('check_disabled_on','#9CB8EC','#9CB8EC',True)):
         picture(name,fill,border,kind='check',checked=checked,size=(22,22))
     picture('radio_off',WHITE,'#A6B6CC',kind='radio',size=(22,22));picture('radio_on',WHITE,BLUE,kind='radio',checked=True,size=(22,22))
+    for kind in ('check','radio'):
+        for checked in (False,True):
+            fill = BLUE if kind=='check' and checked else '#EFF5FF'
+            picture(f'{kind}_focus_{checked}',fill,BLUE,kind=kind,checked=checked,size=(22,22))
     root._modern_theme_assets=assets
     if 'seoul-modern' not in style.theme_names():style.theme_create('seoul-modern',parent='clam')
     style.theme_use('seoul-modern')
@@ -52,8 +56,11 @@ def apply_theme(root):
     style.element_create('Modern.downarrow','image',assets['arrow'],sticky='e')
     element('Modern.Entry','entry',('disabled','disabled'),('focus','focus'))
     element('Modern.Card','card');element('Modern.Drop','drop')
-    element('Modern.Check','check_off',('disabled','selected','check_disabled_on'),('disabled','check_disabled'),('selected','check_on'),border=0)
-    element('Modern.Radio','radio_off',('selected','radio_on'),border=0)
+    element('Modern.Check','check_off',('disabled','selected','check_disabled_on'),('disabled','check_disabled'),('selected','focus','check_focus_True'),('focus','check_focus_False'),('selected','check_on'),border=0)
+    element('Modern.Radio','radio_off',('selected','focus','radio_focus_True'),('focus','radio_focus_False'),('selected','radio_on'),border=0)
+    style.element_create('Modern.Group','image',assets['entry'],border=11,padding=1,sticky='nswe')
+    for name in ('TNotebook','TLabelframe'):
+        style.layout(name,[('Modern.Group',{'sticky':'nswe'})])
     for name,border in (('TButton','Modern.Button'),('Accent.TButton','Modern.Accent'),('NavSelected.TButton','Modern.Selected'),('Header.TButton','Modern.Header'),('Header.NavSelected.TButton','Modern.HeaderSelected')):
         style.layout(name,[(border,{'sticky':'nswe','children':[('Button.padding',{'sticky':'nswe','children':[('Button.label',{'sticky':'nswe'})]})]})])
     style.layout('TEntry',[('Modern.Entry',{'sticky':'nswe','children':[('Entry.padding',{'sticky':'nswe','children':[('Entry.textarea',{'sticky':'nswe'})]})]})])
@@ -85,6 +92,8 @@ def apply_theme(root):
     style.configure('TCheckbutton',padding=(0,5,8,5),background=WHITE,foreground=INK)
     style.configure('TRadiobutton',padding=(0,5,8,5),background=WHITE,foreground=INK)
     style.map('TCheckbutton',foreground=[('disabled','#94A1B3')]);style.map('TRadiobutton',foreground=[('disabled','#94A1B3')])
+    for name in ('TButton','TNotebook.Tab','TEntry','TCombobox','TCheckbutton','TRadiobutton'):
+        style.map(name,background=[('disabled',WHITE),('!disabled',WHITE)])
     style.configure('Treeview',background=WHITE,fieldbackground=WHITE,foreground=INK,rowheight=38,borderwidth=0,relief='flat',font=font)
     style.map('Treeview',background=[('selected','#E8F0FF')],foreground=[('selected','#1747A6')])
     style.configure('Treeview.Heading',background='#F4F7FC',foreground=MUTED,font=('맑은 고딕',10,'bold'),padding=(10,11),borderwidth=0,relief='flat')
@@ -96,8 +105,45 @@ def apply_theme(root):
     style.configure('Horizontal.TScrollbar',background='#C7D4E7',troughcolor='#F2F5FA',borderwidth=0,arrowsize=12)
     for pattern,value in (('*Text.background',WHITE),('*Text.foreground',INK),('*Text.relief','flat'),('*Text.borderWidth',0),('*Text.highlightThickness',1),('*Text.highlightBackground',LINE),('*Text.highlightColor','#6695F0'),('*Text.selectBackground','#DCE9FF'),('*Text.selectForeground',INK),('*Listbox.background',WHITE),('*Listbox.foreground',INK),('*Listbox.relief','flat'),('*Listbox.borderWidth',0),('*Listbox.highlightThickness',1),('*Listbox.highlightBackground',LINE),('*Listbox.selectBackground','#E8F0FF'),('*Listbox.selectForeground','#1747A6'),('*TCombobox*Listbox.background',WHITE),('*TCombobox*Listbox.foreground',INK)):
         root.option_add(pattern,value)
+    root.option_add('*Toplevel.background',WHITE)
     root.configure(background=BG)
     return style
+
+
+class _TextPrompt(simpledialog.Dialog):
+    def __init__(self,parent,title,prompt,initial):
+        self.prompt=prompt
+        self.initial=initial
+        super().__init__(parent,title)
+
+    def body(self,master):
+        self.configure(background=WHITE)
+        master.configure(background=WHITE)
+        ttk.Label(master,text=self.prompt,wraplength=440).pack(anchor='w',padx=10,pady=6)
+        self.entry=ttk.Entry(master,width=44)
+        self.entry.pack(fill='x',padx=10,pady=4)
+        self.entry.insert(0,self.initial)
+        self.entry.selection_range(0,'end')
+        return self.entry
+
+    def buttonbox(self):
+        bar=ttk.Frame(self,padding=(14,6))
+        bar.pack(fill='x')
+        ttk.Button(bar,text='확인',style='Accent.TButton',command=self.ok).pack(side='right')
+        ttk.Button(bar,text='취소',command=self.cancel).pack(side='right',padx=5)
+        self.bind('<Return>',self.ok)
+        self.bind('<Escape>',self.cancel)
+
+    def apply(self):
+        self.result=self.entry.get()
+
+
+def ask_text(title,prompt,*,parent,initialvalue=''):
+    previous=parent.grab_current()
+    try:
+        return _TextPrompt(parent,title,prompt,initialvalue).result
+    finally:
+        if previous is not None and previous.winfo_exists():previous.grab_set()
 
 
 class CheckboxTree(ttk.Treeview):

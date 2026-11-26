@@ -16,7 +16,7 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
 RELEASE_TITLE='대장 기관명 표기와 둥근 버튼·탭'
-RELEASE_BODY='수신·발신·직인 대장에 등록할 때 앞선 행에서 같은 기관의 표기를 확인합니다. 중앙편의증진센터는 중앙센터로 기록합니다. 상단 메뉴와 단계 버튼, 탭과 선택 상자의 모서리를 통일했습니다.'
+RELEASE_BODY='수신·발신·직인 대장에 등록할 때 앞선 행에서 같은 기관의 표기를 확인합니다. 중앙편의증진센터는 중앙센터로 기록합니다. 수신 접수, 발신 작성, 처리 이력, 설정과 양식 관리의 버튼·탭·입력란에 둥근 모서리를 적용했습니다. 폴더·양식 이름을 바꾸는 창도 같은 모양으로 표시합니다.'
 _release_id = None
 
 

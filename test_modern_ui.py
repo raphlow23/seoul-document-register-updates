@@ -1,7 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 import unittest
-from modern_ui import apply_theme,CheckboxTree,ScrollablePanel
+from modern_ui import BG,WHITE,apply_theme,ask_text,CheckboxTree,ScrollablePanel
 
 
 class ModernUiTests(unittest.TestCase):
@@ -45,3 +45,27 @@ class ModernUiTests(unittest.TestCase):
         self.root.update_idletasks()
         self.assertGreater(panel.body.winfo_reqheight(),panel.canvas.winfo_height())
         panel.canvas.yview_moveto(1);self.assertGreater(panel.canvas.yview()[0],0)
+
+    def test_corners_use_their_menu_surface_in_all_states(self):
+        style=ttk.Style(self.root)
+        for name in ('TNotebook','TLabelframe'):
+            self.assertEqual(style.layout(name)[0][0],'Modern.Group')
+        for name in ('TButton','Accent.TButton','Header.TButton','Header.NavSelected.TButton',
+                     'TCheckbutton','TRadiobutton','TNotebook.Tab','TEntry','TCombobox'):
+            for state in ('active','pressed','focus','disabled','selected'):
+                self.assertEqual(style.lookup(name,'background',(state,)),BG if name.startswith('Header.') else WHITE)
+
+    def test_rename_prompt_uses_themed_buttons_and_restores_parent_grab(self):
+        editor=tk.Toplevel(self.root)
+        editor.update()
+        editor.grab_set()
+        def accept():
+            dialog=editor.winfo_children()[0]
+            dialog.entry.delete(0,'end')
+            dialog.entry.insert(0,'새 양식')
+            buttons=dialog.winfo_children()[-1].winfo_children()
+            self.assertTrue(all(isinstance(b,ttk.Button) for b in buttons))
+            buttons[0].invoke()
+        editor.after(100,accept)
+        self.assertEqual(ask_text('이름 변경','양식 이름',parent=editor,initialvalue='기본 양식'),'새 양식')
+        self.assertEqual(editor.grab_current(),editor)

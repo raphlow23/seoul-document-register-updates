@@ -122,7 +122,7 @@ class TemplateManagementTests(unittest.TestCase):
             win.template_title_fields['1'].set('수정 중인 기본 제목')
             body=win.template_panel.body
             button=next(x for x in body.winfo_children() if x.winfo_class()=='TButton' and x.cget('text')=='이름 변경')
-            with patch('outgoing_editor.simpledialog.askstring',return_value='새 표시 이름'):button.invoke()
+            with patch('outgoing_editor.ask_text',return_value='새 표시 이름'):button.invoke()
             self.assertEqual(docs.style('1')['label'],'새 표시 이름');self.assertEqual(win.template_fields['1'].get(),str(self.base/'unsaved folder'))
             self.assertEqual(win.template_title_fields['1'].get(),'수정 중인 기본 제목')
             root.update()

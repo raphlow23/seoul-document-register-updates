@@ -1,6 +1,7 @@
 """Keep default child folders, append custom names and arrange their order."""
 import tkinter as tk
-from tkinter import ttk,simpledialog,messagebox
+from modern_ui import ask_text
+from tkinter import ttk,messagebox
 from folder_naming import child_folders,safe_component
 
 
@@ -50,7 +51,7 @@ class ChildFolderEditor:
         self.refresh(key)
 
     def add(self):
-        name=simpledialog.askstring('폴더 추가','추가할 내부 폴더 이름을 입력하세요.',parent=self.win)
+        name=ask_text('폴더 추가','추가할 내부 폴더 이름을 입력하세요.',parent=self.win)
         if not name or not name.strip():return
         try:name=safe_component(name)
         except ValueError as error:return messagebox.showinfo('폴더 이름',str(error),parent=self.win)

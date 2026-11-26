@@ -2,7 +2,8 @@
 from datetime import date
 from pathlib import Path
 import tkinter as tk
-from tkinter import ttk,filedialog,messagebox,simpledialog
+from modern_ui import ask_text
+from tkinter import ttk,filedialog,messagebox
 import uuid
 
 from outgoing import defaults,METHODS
@@ -34,7 +35,7 @@ def folder_settings_dialog(app,parent,on_save=None):
                 path=filedialog.askdirectory(parent=win)
                 if path:fields[key].set(path)
             def change_name(item=item):
-                label=simpledialog.askstring('양식 이름 변경','프로그램에 표시할 양식 이름',initialvalue=item['label'],parent=win)
+                label=ask_text('양식 이름 변경','프로그램에 표시할 양식 이름',initialvalue=item['label'],parent=win)
                 if label is None:return
                 try:
                     from template_library import rename

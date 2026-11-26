@@ -20,7 +20,7 @@ class ChildFolderTests(unittest.TestCase):
 
     def test_defaults_are_protected_custom_folder_can_be_added_reordered_and_renumbered(self):
         saved=Mock();dialog=ChildFolderEditor(self.root,'중앙센터 공문',['incoming','outgoing','reply'],['incoming','reply'],saved)
-        with patch('child_folder_editor.simpledialog.askstring',return_value='검토자료'):dialog.add()
+        with patch('child_folder_editor.ask_text',return_value='검토자료'):dialog.add()
         dialog.move(-1);dialog.move(-1);dialog.move(-1)
         names=child_folders('중앙센터 공문',[k for k in dialog.order if k in dialog.selected],dialog.order)
         self.assertEqual(list(names.values()),['1.검토자료','2.중앙공문','3.중앙회신'])

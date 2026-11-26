@@ -1,4 +1,5 @@
 VERSION = "2.12.1"
+# Shared menu surfaces include settings, folder and template dialogs.
 # Verify reported paths across Windows short and long temporary directory names.
 # Back cancellation archives the latest saved current HWP before removing generated files.
 # Build downloads authenticate to GitHub to avoid shared-runner API rate limits.
