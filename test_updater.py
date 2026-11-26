@@ -181,7 +181,9 @@ class UpdateTests(unittest.TestCase):
         resumed.join(timeout=5)
         self.assertIn(str(old), resumed.seen)
         self.assertNotIn(str(new), resumed.seen)
-        self.assertFalse((self.data / "watch-resume.json").exists())
+        checkpoint = json.loads((self.data / "watch-resume.json").read_text(encoding="utf-8"))
+        self.assertTrue(checkpoint["persistent"])
+        self.assertNotIn(str(new), checkpoint["seen"])
 
     def test_new_only_resume_preserves_zips_downloaded_during_future_update_gaps(self):
         from queue_visibility import resume_downloads

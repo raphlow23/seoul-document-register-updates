@@ -175,7 +175,7 @@ class RouteChooser:
         self.tree.pack(side="left",fill="both", expand=True);scroll.pack(side="right",fill="y")
         self.tree.bind("<ButtonRelease-1>", self.click)
         self.tree.bind('<<TreeviewSelect>>',lambda _:(self.focus_folder(self.tree.selection()[0]),self.redraw_preview()) if self.tree.selection() and self.tree.selection()[0] in self.records else None)
-        if not self.embedded:ttk.Label(right, text="체크된 각 위치 안에 새 공문 폴더를 만듭니다.\n원본 첨부파일은 다운로드 폴더에 남습니다.", wraplength=380).pack(anchor="w", pady=4)
+        if not self.embedded:ttk.Label(right, text="저장할 위치를 체크하세요. 접수 완료 화면에서 필요한 사본을 확인한 뒤 다운로드 원본을 보관할 수 있습니다.", wraplength=380).pack(anchor="w", pady=4)
         ttk.Label(right, text="기존 폴더 이름 · 선택하면 형식 적용", font=("맑은 고딕",11,"bold")).pack(before=options,anchor="w")
         example_area=ttk.Frame(right);example_area.pack(before=options,fill='x',pady=(3,6))
         self.examples = tk.Listbox(example_area, height=5, font=("맑은 고딕",10))

@@ -30,6 +30,9 @@ def track_root(job,path,scope):
 
 def track_file(job,path,hash_,scope):
     value={'path':str(Path(path).resolve()),'sha256':hash_,'scope':scope}
+    if scope=='receipt' and job.get('receipt_originals'):
+        from receipt_originals import signature
+        value['identity']=signature(path)
     files=job.setdefault('file_artifacts',[])
     old=next((f for f in files if f['path']==value['path']),None)
     if old and old!=value:raise ValueError('저장 파일 생성 기록이 다릅니다.')
@@ -42,7 +45,7 @@ def has_files(job,scope):
                 (job.get('additional_save_pending') or {}).get('scope') in scopes or
                 any(r['scope'] in scopes for r in job.get('additional_saves',[])) or
                 any(f['scope'] in scopes for f in job.get('file_artifacts',[])) or
-                (scope=='receipt' and (job.get('files_started') or job.get('destinations'))) or
+                (scope=='receipt' and (job.get('files_started') or job.get('destinations') or job.get('receipt_originals'))) or
                 job.get('outgoing',{}).get('hwp_path') or (job.get('outgoing',{}).get('folder_plan') or {}).get('created'))
 
 
@@ -76,7 +79,15 @@ def _roots(job,config,scope):
             if kind=='receipt':
                 target=next((t for t in setting.get('targets',[]) if t.get('folder_name') and checked(Path(config['root'])/t['relative']/t['folder_name'])==path),{})
                 setting={**setting,'children':target.get('children',setting.get('children',[])),'child_order':target.get('child_order')}
-            if setting.get('agency'):
+            if kind=='receipt' and job.get('receipt_originals'):
+                from attachment_files import file_identity
+                for entry in job.get('created_directories',[]):
+                    child=checked(entry['path'])
+                    if entry['scope']=='receipt' and child.is_relative_to(path) and io_path(child).exists():
+                        if file_identity(child)[:2]!=entry.get('identity'):
+                            raise ValueError(f'교체된 내부 폴더를 보존합니다: {child}')
+                        allowed_dirs.add(child)
+            elif setting.get('agency'):
                 allowed_dirs.update(path/name for name in child_folders(setting['agency'],setting.get('children',[]),setting.get('child_order')).values())
         if not matched:raise ValueError('프로그램이 만든 공문폴더임을 확인하지 못했습니다: '+str(path))
         if path not in roots:roots.append(path)
@@ -118,7 +129,11 @@ def plan(job,config,scope,allow_edited_hwp=False):
     # Legacy receipt copies are provable only inside a case folder carrying this job's marker.
     from core import digest
     sources={Path(f['path']).name:f['hash'] for f in storage_files(job)}
-    for path in job.get('destinations',[]) if scope=='receipt' else []:
+    audited = scope=='receipt' and bool(job.get('receipt_originals'))
+    if audited:
+        from receipt_originals import pending_artifacts
+        partial.update(pending_artifacts(job['receipt_originals'].get('pending_copy')))
+    for path in job.get('destinations',[]) if scope=='receipt' and not audited else []:
         file=checked(path)
         if file in {checked(p) for p in job.get('receipt_shared_files',[])} and file not in allowed:continue
         if any(file.is_relative_to(root) for root in roots):
@@ -131,7 +146,7 @@ def plan(job,config,scope,allow_edited_hwp=False):
             children[:]=[name for name in children if Path(base)/name not in extra_roots]
             for name in names:
                 file=checked(Path(base)/name)
-                if scope=='receipt' and name in sources and file not in markers:allowed.setdefault(file,sources[name])
+                if scope=='receipt' and not audited and name in sources and file not in markers:allowed.setdefault(file,sources[name])
     roots.extend(extra_roots)
     roots=[p for p in dict.fromkeys(roots) if not any(p!=q and p.is_relative_to(q) for q in roots)]
     markers.update(extra_markers)
@@ -148,7 +163,7 @@ def plan(job,config,scope,allow_edited_hwp=False):
             hwp_available(hwp)
             current=digest(hwp)
             allowed[hwp]=created
-            if allow_edited_hwp and current!=created and hwp.suffix.lower()=='.hwp':
+            if allow_edited_hwp and not audited and current!=created and hwp.suffix.lower()=='.hwp':
                 # This exact path is the current generated output, not a received
                 # attachment or an untracked file. Preserve its latest saved bytes.
                 allowed[hwp]=current
@@ -198,6 +213,10 @@ def execute(job,config,store,scope,allow_edited_hwp=False):
         from program_storage import temporary_root,copy_verified,remove_verified,subset
         store.put(job)
         refreshed=store.get(job['hash']);job.clear();job.update(refreshed)
+        if scope=='receipt' and job.get('receipt_originals'):
+            from receipt_originals import transfer,check_rollback_copies
+            transfer(job,config,store,restore=True)
+            check_rollback_copies(job,store)
         transaction=job.get('rollback_pending')
         if transaction and transaction['scope']!=scope:raise ValueError('시작한 파일 되돌리기를 먼저 마쳐 주세요.')
         if transaction:
@@ -208,6 +227,9 @@ def execute(job,config,store,scope,allow_edited_hwp=False):
             store.put(job)
         if not transaction:
             transaction=plan(job,config,scope,allow_edited_hwp=allow_edited_hwp);job['rollback_pending']=transaction;store.put(job)
+        if scope=='receipt' and job.get('receipt_originals'):
+            job['receipt_originals']['created_copies']=[deepcopy(f) for f in job.get('file_artifacts',[]) if f['scope']=='receipt']
+            store.put(job)
         if not re.fullmatch(r'[0-9a-f]{32}',transaction['id']):raise ValueError('되돌리기 작업 ID가 올바르지 않습니다.')
         for edited in transaction.get('edited_files',[]):
             path=checked(edited['path'])
@@ -225,12 +247,24 @@ def execute(job,config,store,scope,allow_edited_hwp=False):
             if not io_path(source).exists() and not io_path(backup).exists():raise ValueError('되돌릴 파일이 없습니다: '+str(source))
             if io_path(source).exists() and not subset(inventory(source),move['inventory']):raise ValueError('원본 파일이 변경되어 중단합니다: '+str(source))
             if io_path(backup).exists() and not subset(inventory(backup),move['inventory']):raise ValueError('보관 파일이 변경되어 중단합니다: '+str(backup))
+        identities={a['path']:a['identity'] for a in job.get('file_artifacts',[])
+                    if scope=='receipt' and a['scope']=='receipt' and a.get('identity')}
         for move in transaction['moves']:
             source,backup=checked(move['source']),checked(move['backup'])
             copy_verified(source,backup,move['inventory'])
             move['copied']=True;store.put(job)
-            remove_verified(source,move['inventory'])
+            if identities:remove_verified(source,move['inventory'],identities)
+            else:remove_verified(source,move['inventory'])
             move['done']=True;store.put(job)
+        if scope=='receipt' and job.get('receipt_originals'):
+            from attachment_files import file_identity
+            for entry in reversed(job.get('created_directories',[])):
+                folder=checked(entry['path'])
+                if entry['scope']=='receipt' and entry.get('identity') and io_path(folder).is_dir():
+                    if file_identity(folder)[:2]==entry['identity'] and not any(io_path(folder).iterdir()):
+                        io_path(folder).rmdir()
+                    else:
+                        transaction.setdefault('preserved_folders',[]).append(str(folder))
         scopes={'receipt','outgoing'} if scope=='receipt' else {'outgoing'}
         job['storage_roots']=[r for r in job.get('storage_roots',[]) if r['scope'] not in scopes]
         job['file_artifacts']=[f for f in job.get('file_artifacts',[]) if f['scope'] not in scopes]
@@ -239,6 +273,8 @@ def execute(job,config,store,scope,allow_edited_hwp=False):
         if (job.get('additional_save_pending') or {}).get('scope') in scopes:
             job.pop('additional_save_pending',None)
         if scope=='receipt':
+            if job.get('receipt_originals'):
+                job.setdefault('receipt_originals_history',[]).append(job.pop('receipt_originals'))
             from core import digest
             for file in storage_files(job):
                 original=Path(file['path'])
@@ -262,6 +298,8 @@ def execute(job,config,store,scope,allow_edited_hwp=False):
         job.setdefault('rollback_history',[]).append(deepcopy(transaction));job['rollback_history']=job['rollback_history'][-20:]
         job.pop('rollback_pending',None)
         job['reason']='파일·폴더 저장 취소 · 구글시트 등록과 번호 유지'
+        if transaction.get('preserved_folders'):
+            job['reason']+=' · 다른 내용이 있어 보존한 폴더: '+', '.join(transaction['preserved_folders'])
         from core import attachment_aliases
         store.put_many([job,*attachment_aliases(job,store,'묶음 처리 완료' if job.get('receipt_done') else '묶음에 포함')])
         from program_storage import clean_copy_parts

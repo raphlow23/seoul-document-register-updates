@@ -8,7 +8,7 @@ from file_rollback import has_files,execute
 def load_sources(paths,job,store,progress=None):
     from core import ingest
     from zip_intake import unpack,discard_extraction,NoDocuments
-    from attachment_files import ZIP_DOCUMENTS
+    from attachment_files import ZIP_DOCUMENTS,intake_file
     sources=[]
     for path in paths:
         path=Path(path)
@@ -23,7 +23,7 @@ def load_sources(paths,job,store,progress=None):
         if not documents:
             discard_extraction(files,cache)
             raise NoDocuments('ZIP 안에 문서·도면·오피스 첨부파일이 없습니다.')
-        sources.append({'hash':hash_,'archive_hash':hash_,'source_archive':str(path),'archive_files':[{'path':str(path),'hash':hash_}],'files':[{'path':str(file),'hash':digest(file)} for file in documents],'state':'확인 필요','_zip_cache':str(cache),'_zip_paths':[str(file) for file in files]})
+        sources.append({'hash':hash_,'archive_hash':hash_,'source_archive':str(path),'archive_files':[intake_file(path,hash_)],'files':[{'path':str(file),'hash':digest(file)} for file in documents],'state':'확인 필요','_zip_cache':str(cache),'_zip_paths':[str(file) for file in files]})
     return sources
 
 

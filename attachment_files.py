@@ -31,6 +31,16 @@ def document_kind(path):
     return suffix
 
 
+def file_identity(path):
+    from fs_paths import io_path
+    info = io_path(path).stat()
+    return [info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns]
+
+
+def intake_file(path,checksum):
+    return {'path':str(path),'hash':checksum,'intake_identity':file_identity(path)}
+
+
 def title_priority(file):
     try:kind=document_kind(file['path'])
     except OSError:kind=Path(file['path']).suffix.lower()

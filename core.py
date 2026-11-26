@@ -210,7 +210,7 @@ class Store:
 
 def ingest(path, store, progress=None):
     path = Path(path)
-    from attachment_files import eligible
+    from attachment_files import eligible,intake_file
     if not eligible(path):raise ValueError('문서·ZIP 첨부파일만 추가할 수 있습니다. 이미지와 기타 파일은 제외합니다.')
     hash_ = digest(path)
     old = store.intake(hash_)
@@ -222,7 +222,7 @@ def ingest(path, store, progress=None):
         changed=False
         for file in old.get("files",[]):
             if file.get("hash")==hash_ and not Path(file["path"]).is_file():
-                file["path"]=str(path);changed=True
+                file.update(intake_file(path,hash_));changed=True
         if old.get("source_archive") and path.suffix.lower()==".zip" and not Path(old["source_archive"]).is_file():
             old["source_archive"]=str(path);changed=True
         if changed:store.put(old)
@@ -231,7 +231,7 @@ def ingest(path, store, progress=None):
         from zip_intake import ingest_zip
         return ingest_zip(path,store,hash_,progress)
     text, metadata, info = inspect_document(path,progress)
-    job = {"hash": hash_, "id": uuid.uuid4().hex, "files": [{"path": str(path), "hash": hash_}],
+    job = {"hash": hash_, "id": uuid.uuid4().hex, "files": [intake_file(path,hash_)],
            "text": text, "text_file_hash":hash_, "ocr": metadata, "state": "확인 필요", "number": "", "destinations": [], "receipt_type":"공문", **info}
     store.put(job)
     return job, True
@@ -303,7 +303,23 @@ def copy_files(job, root, subfolders=None,on_progress=None):
                 raise ValueError(f"원본이 없거나 내용이 바뀌었습니다: {source.name}")
             target = folder / source.name
             key=str(target).casefold()
-            if (io_path(target).exists() and digest(target) != f["hash"]) or (key in reserved and reserved[key]!=f["hash"]):
+            journal=job.get('receipt_originals')
+            if journal:
+                # A shared/year folder may also be used by receipts on another PC.
+                # Give each receipt its own copy and remember its name before writing.
+                names=journal.setdefault('names',{}).setdefault(str(folder),{})
+                if str(source) in names:
+                    name=names[str(source)]
+                    if Path(name).name!=name:raise ValueError('저장할 사본 이름을 확인하세요.')
+                    target=folder/name
+                else:
+                    if io_path(target).exists() or key in reserved:
+                        target=folder/f"{source.stem}_{f['hash'][:12]}{source.suffix}"
+                    if io_path(target).exists() or str(target).casefold() in reserved:
+                        target=folder/f"{source.stem}_{uuid.uuid4().hex[:12]}{source.suffix}"
+                    names[str(source)]=target.name
+                    if on_progress:on_progress()
+            elif (io_path(target).exists() and digest(target) != f["hash"]) or (key in reserved and reserved[key]!=f["hash"]):
                 target = folder / f"{source.stem}_{f['hash'][:12]}{source.suffix}"
             key=str(target).casefold()
             if key in reserved and reserved[key]!=f["hash"]:
@@ -312,6 +328,17 @@ def copy_files(job, root, subfolders=None,on_progress=None):
             planned.append((source, target, f["hash"]))
     results = []
     for source, target, hash_ in planned:
+        journal=job.get('receipt_originals')
+        if journal:
+            from receipt_originals import staged_primary,record_copy
+            if str(target.resolve()) in journal['copies']:
+                if not io_path(target).is_file() or digest(target)!=hash_:
+                    raise ValueError(f'이전에 저장한 사본이 변경되었습니다: {target}')
+                record_copy(job,target,hash_,True)
+            else:
+                staged_primary(job,source,target,hash_,on_progress or (lambda:None))
+            results.append(str(target))
+            continue
         if io_path(target).exists():
             if digest(target) != hash_:
                 raise ValueError(f"같은 이름의 다른 파일이 있습니다: {target}")
@@ -625,6 +652,8 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
         store.put(job)
         return job
     if job.get('receipt_done') and job.get('files_rolled_back'):
+        from receipt_originals import prepare
+        prepare(job,config,store)
         from folder_naming import copy_to_subfolders
         job['destinations']=copy_to_subfolders(job,config['root'],on_progress=lambda:store.put(job))
         job['files_rolled_back']=False
@@ -656,6 +685,8 @@ def _process(job, config, store, sheets_factory=Sheets, outgoing_factory=None, s
         raise ValueError("분류를 선택해 주세요.")
     if not job.get("issuer"):
         job["issuer"] = (job.get('routing',{}).get('relief',{}).get('district') or '서울시청') if job['category']=='완화공문' else "서울시청" if job["category"] == "서울시청 공문" else "기초센터" if job["category"] == "기초센터 공문" else "중앙센터"
+    from receipt_originals import prepare
+    prepare(job,config,store)
     if job.get("routing"):
         from folder_naming import plan_folders, copy_to_subfolders
         plan_folders(job, config["root"])

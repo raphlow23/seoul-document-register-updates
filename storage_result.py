@@ -6,6 +6,9 @@ import tkinter as tk
 
 def note_directory(job, scope, directory):
     record = {"scope": scope, "path": str(directory)}
+    if scope=='receipt' and job.get('receipt_originals'):
+        from attachment_files import file_identity
+        record['identity']=file_identity(directory)[:2]
     directories = job.setdefault("created_directories", [])
     if record not in directories:
         directories.append(record)
@@ -53,6 +56,10 @@ def result_text(job, scope):
     if pending.get("scope") == scope and pending.get("items"):
         parent = Path(pending["items"][0]["target"]).parent
         groups.append(f"추가 저장 진행 위치\n{parent}\n중단된 경우 같은 위치와 폴더 이름을 선택해 이어서 저장하세요.")
+    journal=job.get('receipt_originals') if scope=='receipt' else None
+    if journal and journal['state'] in ('moving','archived','restoring'):
+        groups.append('원본 위치 → 복구용 보관 위치\n'+'\n'.join(
+            entry['original']+' → '+entry['backup'] for entry in journal['entries']))
     return "\n\n".join(groups)
 
 

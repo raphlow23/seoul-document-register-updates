@@ -1,4 +1,4 @@
-VERSION = "2.12.1"
+VERSION = "2.12.2"
 # Shared menu surfaces include settings, folder and template dialogs.
 # Verify reported paths across Windows short and long temporary directory names.
 # Back cancellation archives the latest saved current HWP before removing generated files.

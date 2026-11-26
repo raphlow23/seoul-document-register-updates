@@ -104,7 +104,7 @@ def ingest_zip(path,store,hash_,progress=None,persist=True):
     from core import digest,inspect_document,attachment_aliases
     cache=Path(store.db.execute("PRAGMA database_list").fetchone()[2]).parent/"archive-cache"
     paths=unpack(path,cache,progress)
-    from attachment_files import ZIP_DOCUMENTS,title_priority
+    from attachment_files import ZIP_DOCUMENTS,title_priority,intake_file
     documents=[p for p in paths if p.suffix.lower() in ZIP_DOCUMENTS]
     if not documents:
         discard_extraction(paths,cache)
@@ -117,7 +117,7 @@ def ingest_zip(path,store,hash_,progress=None,persist=True):
     text,metadata,info=inspect_document(primary['path'],progress)
     job={"text":text,"ocr":metadata,"number":"","destinations":[],"receipt_type":"공문",**info}
     job.update(hash=hash_,id=uuid.uuid4().hex,files=files,archive_hash=hash_,source_archive=str(path),
-               archive_files=[{'path':str(path),'hash':hash_}],
+               archive_files=[intake_file(path,hash_)],
                text_file_hash=primary["hash"],state="확인 필요",ready=False,
                reason=f"ZIP 첨부 {len(files)}개 · 제목 출처 파일과 저장 위치를 선택해 주세요.")
     job.pop("parent",None)

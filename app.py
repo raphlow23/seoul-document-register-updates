@@ -33,6 +33,7 @@ class Worker(threading.Thread):
         super().__init__(daemon=True)
         self.commands, self.events, self.config, self.dbpath = commands, events, config.copy(), dbpath
         self.watch, self.seen, self.pending = False, {}, {}
+        self.watch_state = Path(dbpath).parent / "watch-resume.json"
         self.source_visibility={};self.last_list_sync=0
         self.working = threading.Event()
         self.active_command=None;self.active_document=None
@@ -67,39 +68,22 @@ class Worker(threading.Thread):
                         if preferences:self.emit("folder_preferences",preferences)
                         if self.watch and previous_downloads!=updated.get("downloads"):
                             self.seen=self.files();self.pending={}
+                            self.save_watch_state(True)
                     elif cmd == "watch":
-                        self.watch = bool(data)
-                        self.seen = self.files() if self.watch else {}
-                        resume = Path(self.dbpath).parent / "watch-resume.json"
-                        if resume.is_file():
-                            try:
-                                saved = json.loads(resume.read_text(encoding="utf-8"))
-                                if self.watch and saved.get("downloads") == self.config["downloads"] and time.time() - saved.get("time", 0) < 600:
-                                    self.seen = resume_downloads(saved,self.seen)
-                            finally:
-                                resume.unlink(missing_ok=True)
+                        if data:
+                            self.restore_watch_state()
+                            self.save_watch_state(True)
+                        else:
+                            self.watch_state.unlink(missing_ok=True)
+                            self.seen = {}
                         self.pending = {}
-                        self.emit("status", "다운로드 감시 중 · 감시 시작 이후 새로 저장되는 파일만 확인합니다." if self.watch else "다운로드 감시 중지")
+                        self.watch = bool(data)
+                        self.emit("status", "다운로드 감시 중 · 지난 실행 이후 새로 받거나 변경된 파일을 확인합니다." if self.watch else "다운로드 감시 중지")
                     elif cmd == "startup_baseline":
-                        resume = Path(self.dbpath).parent / "watch-resume.json"
-                        saved = {}
-                        if resume.exists():
-                            try:
-                                saved = json.loads(resume.read_text(encoding="utf-8"))
-                            except ValueError:
-                                pass
-                        valid = saved.get("downloads") == self.config["downloads"] and time.time() - saved.get("time", 0) < 600
-                        inventory=self.files()
-                        self.seen = resume_downloads(saved,inventory) if valid else inventory
-                        resume.write_text(json.dumps({"watch": saved.get("watch", True) if valid else True,
-                                                      "downloads": self.config["downloads"], "time": time.time(), "seen": self.seen,"zip_new_only":True}, ensure_ascii=False), encoding="utf-8")
+                        self.restore_watch_state()
+                        self.save_watch_state(True)
                     elif cmd == "prepare_update":
-                        resume = Path(self.dbpath).parent / "watch-resume.json"
-                        restart_watch = self.watch
-                        if data.get("_startup") and resume.exists():
-                            restart_watch = json.loads(resume.read_text(encoding="utf-8")).get("watch", True)
-                        resume.write_text(json.dumps({"watch": restart_watch, "downloads": self.config["downloads"],
-                                                      "time": time.time(), "seen": self.seen,"zip_new_only":True}, ensure_ascii=False), encoding="utf-8")
+                        self.save_watch_state(self.watch or bool(data.get("_startup")))
                         self.watch = False
                         self.emit("update_quiesced", data)
                     elif cmd == "add":
@@ -183,7 +167,9 @@ class Worker(threading.Thread):
                         from file_rollback import execute
                         job=self.store.get(data['hash'])
                         if not job:raise ValueError('되돌릴 문서 이력을 찾지 못했습니다.')
-                        result=execute(job,self.config,self.store,data['scope'])
+                        originals=job.get('receipt_originals') if data['scope']=='receipt' else None
+                        try:result=execute(job,self.config,self.store,data['scope'])
+                        finally:self.sync_original_moves(originals)
                         self.emit('job',result)
                         self.emit('file_rollback_done',{**data,'job':result})
                     elif cmd == "outgoing_save":
@@ -222,6 +208,18 @@ class Worker(threading.Thread):
                             result=clean(data["text"],self.config,data["start"],data["attachments"],data["spacing"])
                             self.emit("ocr_clean_result",{**data,**result})
                         except Exception as error:self.emit("ocr_clean_result",{**data,"error":str(error)})
+                    elif cmd == "receipt_archive_originals":
+                        from receipt_originals import transfer
+                        from core import registration_lock
+                        with registration_lock(self.config['root']):
+                            job=self.store.get(data['hash'])
+                            if not job or job.get('id')!=data.get('expected_id') or not job.get('receipt_originals'):
+                                raise ValueError('원본을 보관할 접수 건을 다시 확인하세요.')
+                            try:transfer(job,self.config,self.store)
+                            finally:
+                                self.sync_original_moves(job.get('receipt_originals'))
+                                self.emit('job',self.store.get(data['hash']))
+                        self.emit('status','모든 사본 확인 완료 · 다운로드 원본을 복구용으로 보관했습니다.')
                     elif cmd == "additional_save":
                         from additional_storage import save_additional
                         job=self.store.get(data["hash"])
@@ -278,9 +276,11 @@ class Worker(threading.Thread):
                         job=self.store.get(data['hash'])
                         if not job:raise ValueError('취소할 공문을 찾지 못했습니다.')
                         self.emit('status','등록 내용과 생성 파일·폴더를 취소하는 중입니다. 다른 문서의 번호와 서식은 유지합니다.')
+                        originals=job.get('receipt_originals') if data['scope']=='receipt' else None
                         try:result=cancel(job,self.config,self.store,data['scope'])
                         except Exception:
                             self.emit('job',self.store.get(data['hash']));raise
+                        finally:self.sync_original_moves(originals)
                         self.emit('job',result);self.emit('registration_cancelled',data)
                     elif cmd == "title_prepare":
                         from title_document import prepare
@@ -429,6 +429,48 @@ class Worker(threading.Thread):
             self.source_visibility[job["hash"]]=hidden
             if hidden!=previous:self.emit("job",job)
 
+    def restore_watch_state(self):
+        inventory = self.files()
+        self.seen = inventory
+        try:
+            saved = json.loads(self.watch_state.read_text(encoding="utf-8"))
+            if not isinstance(saved, dict) or saved.get("downloads") != self.config["downloads"]:
+                return
+            # Old versions only checkpointed a short handoff during updates.
+            if saved.get("persistent") is not True and time.time() - saved.get("time", 0) >= 600:
+                return
+            entries = saved.get("seen")
+            if isinstance(entries, dict) and all(
+                isinstance(sig, list) and len(sig) == 2 and all(isinstance(v, int) for v in sig)
+                for sig in entries.values()
+            ):
+                self.seen = resume_downloads(saved, inventory)
+        except (FileNotFoundError, ValueError, TypeError):
+            return
+
+    def sync_original_moves(self,journal):
+        if not self.watch or not journal or Path(journal['watched'])!=Path(self.config['downloads']):
+            return
+        from attachment_files import file_identity
+        for entry in journal['entries']:
+            path=entry['original']
+            try:identity=file_identity(path)
+            except FileNotFoundError:
+                self.seen.pop(path,None)
+                self.pending.pop(path,None)
+                continue
+            if identity==entry['identity']:
+                self.seen[path]=tuple(identity[2:])
+                self.pending.pop(path,None)
+        self.save_watch_state(True)
+
+    def save_watch_state(self, enabled):
+        from program_storage import save_json
+        save_json(self.watch_state, {
+            "downloads": self.config["downloads"], "time": time.time(), "watch": enabled,
+            "persistent": True, "zip_new_only": True, "seen": self.seen,
+        })
+
     def files(self):
         folder = Path(self.config["downloads"])
         if not folder.is_dir():
@@ -445,8 +487,11 @@ class Worker(threading.Thread):
 
     def scan(self):
         now = self.files()
+        changed = False
         for path in list(self.seen):
-            if path not in now:self.seen.pop(path,None)
+            if path not in now:
+                self.seen.pop(path)
+                changed = True
         for path, sig in now.items():
             if self.seen.get(path) == sig:
                 self.pending.pop(path, None)
@@ -463,10 +508,14 @@ class Worker(threading.Thread):
                     continue
                 self.add(path)
                 self.seen[path] = sig
+                changed = True
                 self.pending.pop(path, None)
         for path in list(self.pending):
             if path not in now:
                 self.pending.pop(path, None)
+
+        if changed:
+            self.save_watch_state(True)
 
     def add(self, path):
         self.emit("status", "첨부파일 확인 중: " + Path(path).name)

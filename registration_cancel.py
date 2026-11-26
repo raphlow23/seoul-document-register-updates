@@ -85,6 +85,9 @@ def reset(job,scope):
         job['state']='확인 필요'
     else:job['state']='발신 작성 중' if job.get('standalone_outgoing') else '완료'
     job['reason']='등록 내용과 생성 파일·폴더를 취소했습니다. 다음 등록은 시트의 최신 번호를 확인합니다.'
+    history=job.get('rollback_history',[])
+    if scope=='receipt' and history and history[-1].get('preserved_folders'):
+        job['reason']+=' 다른 내용이 있어 보존한 폴더: '+', '.join(history[-1]['preserved_folders'])
     edits=job.get('last_rollback_edited_files',[])
     if edits:
         job.setdefault('edited_hwp_backups',[]).extend(deepcopy(edits))
@@ -100,7 +103,9 @@ def execute(job,config,store,scope,factory=None):
     if not pending:
         job.pop('last_rollback_edited_files',None)
         from file_rollback import has_files,plan
-        if has_files(job,scope):plan(job,config,scope,allow_edited_hwp=True)  # Preserve owned edited HWP; protect unrelated files before touching ledgers.
+        # A journalled receipt restores the original before verifying its copies in rollback().
+        if has_files(job,scope) and not (scope=='receipt' and job.get('receipt_originals')):
+            plan(job,config,scope,allow_edited_hwp=True)
         targets=[]
         scopes=['stamp','outgoing']+(['receipt'] if scope=='receipt' and not job.get('standalone_outgoing') else [])
         for kind in scopes:

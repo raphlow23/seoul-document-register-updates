@@ -529,6 +529,10 @@ class WorkflowShell:
         choose=ttk.Button(prompt,text="다른 위치에도 저장",command=lambda:choose_additional(self.app,self.app.jobs[job["hash"]],scope))
         choose.pack(side="left",padx=8)
         def decline():
+            current=self.app.jobs[job['hash']]
+            if scope=='receipt' and current.get('receipt_originals'):
+                self.app.send('receipt_archive_originals',{'hash':current['hash'],'expected_id':current['id']})
+                return
             question.configure(text="선택한 위치에 저장했습니다.")
             finish.pack_forget()
         finish=ttk.Button(prompt,text="아니요",command=decline)
@@ -551,6 +555,14 @@ class WorkflowShell:
         question.configure(text=("사본 저장 완료 · 한 곳 더 저장할까요?" if copies else "다른 위치에도 저장할까요?") if files else "파일을 저장하면 다른 위치에도 복사할 수 있습니다.")
         choose.configure(state="normal" if files else "disabled")
         finish.configure(state="normal" if files else "disabled")
+        journal=job.get('receipt_originals') if scope=='receipt' else None
+        if journal:
+            state=journal['state']
+            done=state=='archived'
+            question.configure(text='원본 보관 완료' if done else '필요한 사본을 모두 저장했나요?')
+            finish.configure(text='원본 보관 완료' if done else '저장 확인 · 원본 보관',
+                             state='disabled' if done or state=='restoring' or job.get('additional_save_pending') else 'normal')
+            choose.configure(state='normal' if state=='ready' else 'disabled')
 
     def completed(self,job):
         self.focus(job["hash"])

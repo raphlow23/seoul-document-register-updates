@@ -58,7 +58,7 @@ def copy_verified(source,target,expected):
     if inventory(target)!=expected:raise ValueError('보관된 파일 구성이 원본과 다릅니다. 원본은 유지합니다.')
 
 
-def remove_verified(path,expected):
+def remove_verified(path,expected,identities=None):
     from file_rollback import checked,inventory
     from core import digest
     validate_inventory(expected);path=checked(path)
@@ -67,6 +67,10 @@ def remove_verified(path,expected):
     if not subset(current,expected):raise ValueError('추가·수정된 파일을 보호하여 자동 정리를 중단합니다: '+str(path))
     for relative,hash_ in current['files'].items():
         file=checked(path/relative if current['dirs'] else path)
+        if identities and str(file) in identities:
+            from receipt_originals import change_verified_file
+            change_verified_file({'identity':identities[str(file)],'sha256':hash_},file,None)
+            continue
         if digest(file)!=hash_:raise ValueError('정리 중 변경된 파일을 보호합니다: '+str(file))
         io_path(file).unlink()
     for relative in sorted(current['dirs'],key=lambda x:len(Path(x).parts),reverse=True):io_path(checked(path/relative)).rmdir()

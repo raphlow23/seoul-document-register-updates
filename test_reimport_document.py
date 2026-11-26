@@ -34,6 +34,45 @@ class ReimportTests(unittest.TestCase):
         job=self.completed();self.worker.seen=self.worker.files();self.worker.events=queue.Queue();self.worker.scan()
         self.assertFalse(self.worker.pending);self.assertTrue(self.store.get(job['hash'])['list_hidden'])
 
+    def test_closed_downloads_survive_startup_and_are_added_only_once(self):
+        self.worker.restore_watch_state()
+        self.worker.save_watch_state(True)
+        state = json.loads(self.worker.watch_state.read_text(encoding='utf-8'))
+        state['time'] -= 7*86400
+        self.worker.watch_state.write_text(json.dumps(state),encoding='utf-8')
+        bundle=self.base/'메일 붙임.zip'
+        with zipfile.ZipFile(bundle,'w') as z:z.writestr('접수.hwpx',hwpx('새 공문'))
+        sheet=self.base/'자료.xlsx'
+        sheet.write_bytes(b'table fixture')
+        (self.base/'사진.jpg').write_bytes(b'image fixture')
+        (self.base/'미완료.crdownload').write_bytes(b'partial')
+        worker=Worker(queue.Queue(),queue.Queue(),self.worker.config,self.worker.dbpath)
+        worker.store=self.store
+        worker.restore_watch_state()
+        worker.save_watch_state(True)  # automatic update check starts before scanning
+        worker.restore_watch_state()
+        worker.scan()
+        self.assertEqual(set(worker.pending),{str(bundle),str(sheet)})
+        worker.pending={p:(sig,time.monotonic()-7) for p,(sig,_) in worker.pending.items()}
+        worker.scan()
+        self.assertIsNotNone(self.store.intake(core.digest(bundle)))
+        self.assertIsNotNone(self.store.intake(core.digest(sheet)))
+        self.assertIsNone(self.store.intake(core.digest(self.path)))
+        worker.restore_watch_state()
+        worker.scan()
+        self.assertEqual(worker.pending,{})
+
+    def test_new_download_directory_starts_with_its_existing_files(self):
+        self.worker.restore_watch_state()
+        self.worker.save_watch_state(True)
+        other=self.base/'other'
+        other.mkdir()
+        path=other/'이미 있던 파일.xlsx'
+        path.write_bytes(b'old')
+        self.worker.config['downloads']=str(other)
+        self.worker.restore_watch_state()
+        self.assertEqual(self.worker.seen,self.worker.files())
+
     def test_observed_delete_then_same_signature_download_is_detected(self):
         old=self.completed();signature=self.worker.files()[str(self.path)];data=self.path.read_bytes()
         self.worker.seen=self.worker.files();self.path.unlink();self.worker.scan();self.assertNotIn(str(self.path),self.worker.seen)

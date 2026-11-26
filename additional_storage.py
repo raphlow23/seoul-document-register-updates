@@ -36,6 +36,11 @@ def _sources(job, scope):
             aliases[(suffixed, checksum)] = name
             for candidate in (name, suffixed):
                 expected.setdefault(candidate, set()).add((name, checksum))
+        journal=job.get('receipt_originals') or {}
+        for directory,names in journal.get('names',{}).items():
+            for source,name in names.items():
+                record=journal['copies'].get(str((Path(directory)/name).resolve()))
+                if record:aliases[(name.casefold(),record['sha256'])]=Path(source).name.casefold()
     files = {}
     missing = []
     for raw in paths:
@@ -93,6 +98,21 @@ def _publish(stage, target):
 
 
 def _copy_one(item, store, job):
+    audited=bool(job.get('receipt_originals') and (job.get('additional_save_pending') or {}).get('scope')=='receipt')
+    if audited:
+        from receipt_originals import pending_artifacts,signature
+        pending_artifacts(item)
+    try:
+        copy_staged(item, lambda:store.put(job))
+    except Exception:
+        stage=checked(item['stage'])
+        if audited and _same_file(stage,item.get('identity')):
+            item.update(partial_sha256=digest(stage),partial_identity=signature(stage))
+            store.put(job)
+        raise
+
+
+def copy_staged(item, checkpoint):
     target, stage = checked(item['target']), checked(item['stage'])
     identity = item.get('identity')
     if io_path(target).exists():
@@ -107,9 +127,11 @@ def _copy_one(item, store, job):
         io_path(stage).unlink()
     with io_path(stage).open('xb') as output:
         item['identity'] = _file_id(stage)
-        store.put(job)
+        checkpoint()
         with io_path(checked(item['source'])).open('rb') as source:
             shutil.copyfileobj(source, output, 1024 * 1024)
+        output.flush()
+        os.fsync(output.fileno())
     if digest(stage) != item['sha256']:
         raise ValueError(f'복사 중 원본이 변경되었습니다. {item["source"]}')
     _publish(stage, target)
@@ -133,6 +155,8 @@ def save_additional(job, scope, base, folder_name, store):
     pending = job.get('additional_save_pending')
     if job.get('rollback_pending'):
         raise ValueError('진행 중인 되돌리기를 먼저 완료하세요.')
+    if scope=='receipt' and (job.get('receipt_originals') or {}).get('state','ready')!='ready':
+        raise ValueError('원본 보관을 시작한 접수입니다. 저장 결과를 확인하세요.')
     if pending:
         if (pending['scope'], pending['folder'], [i['target'] for i in pending['items']]) != (scope, folder, files):
             raise ValueError('진행 중인 추가 저장을 같은 위치에서 마치거나 이전 단계에서 취소하세요.')
@@ -184,6 +208,10 @@ def rollback_entries(job, scopes):
         records.append(pending)
         tracked = {f['path'] for f in job.get('file_artifacts', []) if f['scope'] in scopes}
         for item in pending['items']:
+            if pending['scope']=='receipt' and job.get('receipt_originals'):
+                from receipt_originals import pending_artifacts
+                partial.update(pending_artifacts(item))
+                continue
             for field in ('stage', 'target'):
                 path = checked(item[field])
                 if _same_file(path, item.get('identity')):

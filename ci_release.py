@@ -15,8 +15,8 @@ from release_info import PRODUCT, VERSION, UPDATE_REPOSITORY, UPDATE_PUBLIC_KEY
 
 ROOT = Path(__file__).resolve().parent
 API = "https://api.github.com/repos/" + UPDATE_REPOSITORY
-RELEASE_TITLE='대장 기관명 표기와 둥근 버튼·탭'
-RELEASE_BODY='수신·발신·직인 대장에 등록할 때 앞선 행에서 같은 기관의 표기를 확인합니다. 중앙편의증진센터는 중앙센터로 기록합니다. 수신 접수, 발신 작성, 처리 이력, 설정과 양식 관리의 버튼·탭·입력란에 둥근 모서리를 적용했습니다. 폴더·양식 이름을 바꾸는 창도 같은 모양으로 표시합니다.'
+RELEASE_TITLE='종료 중 받은 파일 확인과 접수 원본 복구'
+RELEASE_BODY='프로그램을 꺼 둔 동안 새로 받은 문서도 다음 실행 때 확인합니다. 접수 완료 화면의 [저장 확인 · 원본 보관]을 누르면 사본을 검증한 뒤 다운로드 원본을 보관합니다. 접수를 취소하면 원래 위치와 이름으로 복구하고, 충돌하거나 변경된 파일은 보존합니다.'
 _release_id = None
 
 
@@ -90,7 +90,7 @@ def build():
     finally:
         if workflow_log.is_file():print(workflow_log.read_text(encoding="utf-8"),flush=True)
     subprocess.run([sys.executable,"-m","unittest","-q","test_browser_startup","test_queue_visibility","test_reimport_document","test_title_document","test_title_layout","test_browser_tabs","test_template_library","test_outgoing_folders","test_outgoing_layout","test_outgoing_options","test_release_retention","test_browser_ranges","test_file_drop","test_workflow_navigation","test_template_defaults","test_hwp_anchor_slots","test_hwp_locking","test_file_rollback","test_receipt_attachments","test_zip_intake","test_browser_sheets","test_attachment_files","test_ocr_review","test_folder_name_picker","test_updater","test_online_updates","test_child_folder_editor","test_receipt_identity","test_stamp_layout","test_receipt_locations","test_relief_intake","test_ocr_runtime","test_modern_ui","test_native_dependencies","test_relief_title_step","test_taskbar_icon","test_settings_layout","test_outgoing_restart","test_outgoing_new","test_template_management","test_program_storage","test_sheet_connections","test_ledger_layout","test_hwp_requests","test_registration_cancel","test_hwp_export_check"],check=True,timeout=180)
-    subprocess.run([sys.executable,"-m","unittest","-q","test_additional_storage"],check=True,timeout=60)
+    subprocess.run([sys.executable,"-m","unittest","-q","test_additional_storage","test_receipt_originals"],check=True,timeout=90)
     taskbar=out/'taskbar-check.json'
     taskbar_run=subprocess.run([str(exe),'--test-taskbar',str(taskbar)],timeout=90)
     if taskbar_run.returncode:
